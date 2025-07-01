@@ -32,7 +32,7 @@ class Usuario extends Authenticatable
         'id_rol',
     ];
 
-    protected $hidden = ['password_hash'];
+    protected $hidden = ['password_hash', 'remember_token'];
 
     protected $casts = [
         'activo' => 'boolean',
@@ -40,7 +40,32 @@ class Usuario extends Authenticatable
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
         'tipo_usuario' => 'string',
+        'email_verified_at' => 'datetime',
     ];
+
+    /**
+     * Get the password for the user.
+     */
+    public function getAuthPassword()
+    {
+        return $this->password_hash;
+    }
+
+    /**
+     * Get the name of the unique identifier for the user.
+     */
+    public function getAuthIdentifierName()
+    {
+        return 'id_usuario';
+    }
+
+    /**
+     * Get the unique identifier for the user.
+     */
+    public function getAuthIdentifier()
+    {
+        return $this->getAttribute($this->getAuthIdentifierName());
+    }
 
     public function persona(): BelongsTo
     {

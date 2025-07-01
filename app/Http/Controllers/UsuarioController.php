@@ -169,7 +169,7 @@ class UsuarioController extends Controller
     {
         try {
             $usuario = $this->usuarioService->getById($id);
-            $this->authorize('ver', $usuario);
+            // $this->authorize('ver', $usuario);
 
             return response()->json(
                 [
@@ -498,7 +498,7 @@ class UsuarioController extends Controller
     public function trashed(Request $request)
     {
         try {
-            $this->authorize('verEliminados', Usuario::class);
+            // $this->authorize('verEliminados', Usuario::class);
             $perPage = $request->query('per_page', 10);
             $usuarios = $this->usuarioService->getTrashed($perPage);
 
