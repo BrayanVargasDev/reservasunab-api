@@ -28,7 +28,7 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'nombre' => 'sometimes|string|max:255',
             'apellido' => 'sometimes|string|max:255',
             'tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',
-            // 'documento' => 'sometimes|string|max:20|unique:personas,numero_documento',
+            'documento' => 'sometimes|string|max:20',
             // 'rol' => 'sometimes|exists:roles,id_rol',
             'tipoUsuario' => 'sometimes|in:estudiante,administrativo,egresado,externo',
             'password' => 'sometimes|string|min:8|max:255',

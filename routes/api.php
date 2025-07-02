@@ -118,6 +118,7 @@ Route::group(['middleware' => 'auth:sanctum'], function () {
     Route::group(['prefix' => 'dreservas'], function () {
         Route::get('/', [ReservasController::class, 'index']);
         Route::post('/', [ReservasController::class, 'store']);
+        Route::get('/espacios', [ReservasController::class, 'getEspacios']);
         Route::get('/{reserva}', [ReservasController::class, 'show']);
         Route::patch('/{reserva}', [ReservasController::class, 'update']);
         Route::delete('/{reserva}', [ReservasController::class, 'destroy']);

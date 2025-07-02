@@ -6,14 +6,19 @@ use App\Exceptions\UsuarioException;
 use App\Models\Persona;
 use App\Models\Usuario;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class UsuarioService
 {
+    // Constante para tipo de documento por defecto
+    private const DEFAULT_TIPO_DOCUMENTO_ID = 1; // CC - Cédula de Ciudadanía
+
     // Constantes para campos de mapeo
     private const USUARIO_FIELDS_MAPPING = [
         'email' => 'email',
@@ -192,6 +197,8 @@ class UsuarioService
             }
         }
 
+        Log::debug($data);
+
         if (isset($data['password'])) {
             $usuario->password_hash = Hash::make($data['password']);
         }
@@ -304,7 +311,7 @@ class UsuarioService
         return strtolower("{$nombre}.{$apellido}.{$fechaNacimiento}");
     }
 
-    private function createPersonaFromData(array $data): Persona
+    private function createPersonaFromData(array $data, int $idUsuario): Persona
     {
         $personaData = [];
 
@@ -316,6 +323,14 @@ class UsuarioService
                 $personaData[$modelField] = $data[$dataKey];
             }
         }
+
+        // Si no se proporciona tipo de documento, usar Cédula de Ciudadanía como predeterminado
+        if (!isset($personaData['tipo_documento_id'])) {
+            $personaData['tipo_documento_id'] = self::DEFAULT_TIPO_DOCUMENTO_ID;
+        }
+
+        // Asignar el ID del usuario a la persona
+        $personaData['id_usuario'] = $idUsuario;
 
         return Persona::create($personaData);
     }
@@ -329,7 +344,7 @@ class UsuarioService
             }
         }
 
-        return $this->createPersonaFromData($data);
+        return $this->createPersonaFromData($data, $data['id_usuario'] ?? 0);
     }
 
     private function createUsuarioRecord(array $data, Persona $persona, bool $desdeDashboard): Usuario
@@ -352,7 +367,7 @@ class UsuarioService
             'tipo_usuario' => $data['tipoUsuario'] ?? 'externo',
             'ldap_uid' => $data['ldap_uid'] ?? null,
             'activo' => $data['activo'] ?? true,
-            'id_persona' => $persona->id_persona, // Establecer la relación correctamente
+            'id_persona' => $persona->id_persona,
         ];
 
         if (isset($data['rol'])) {
@@ -365,12 +380,9 @@ class UsuarioService
     private function handlePersonaUpdate(Usuario $usuario, array $data): void
     {
         if (!$usuario->persona && $this->hasPersonaData($data)) {
-            // Crear nueva persona y asociarla al usuario
-            $persona = $this->createPersonaFromData($data);
-            $usuario->id_persona = $persona->id_persona;
-            $usuario->save();
+            $persona = $this->createPersonaFromData($data, $usuario->id_usuario);
+            // No necesitamos hacer nada más porque la persona ya está vinculada al usuario
         } elseif ($usuario->persona) {
-            // Actualizar persona existente
             $this->updatePersonaFields($usuario->persona, $data);
         }
     }

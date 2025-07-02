@@ -76,4 +76,14 @@ class Espacio extends Model
     {
         return $this->hasMany(EspacioConfiguracion::class, 'id_espacio', 'id');
     }
+
+    public function scopeFiltros($query, $sede, $categoria, $grupo)
+    {
+        return $query->when($sede, fn($q) => $q->where('id_sede', $sede))
+            ->when($categoria, fn($q) => $q->where('id_categoria', $categoria))
+            ->when($grupo, fn($q) => $q->whereHas(
+                'categoria.grupo',
+                fn($q) => $q->whereKey($grupo)
+            ));
+    }
 }

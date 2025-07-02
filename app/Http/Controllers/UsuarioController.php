@@ -174,7 +174,7 @@ class UsuarioController extends Controller
             return response()->json(
                 [
                     'status' => 'success',
-                    'data' => $usuario,
+                    'data' => new UsuariosResource($usuario),
                     'message' => 'Usuario obtenido correctamente',
                 ],
                 200,

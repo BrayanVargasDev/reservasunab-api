@@ -32,7 +32,7 @@ class UpdateEspacioRequest extends FormRequest
             'maximoJugadores' => 'sometimes|integer|min:0',
             'permitirExternos' => 'sometimes|boolean',
             'sede' => 'sometimes|exists:sedes,id',
-            'categoria' => 'sometimes|exists:grupos,id',
+            'categoria' => 'sometimes|exists:categorias,id',
             'imagen' => 'sometimes|file|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5 MB or data URL
         ];
     }
