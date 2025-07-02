@@ -80,6 +80,7 @@ class UsuarioService
                         });
                 });
             })
+            ->where('usuarios.id_usuario', '!=', Auth::id())
             ->orderBy('usuarios.id_usuario', 'asc')
             ->paginate($perPage);
     }

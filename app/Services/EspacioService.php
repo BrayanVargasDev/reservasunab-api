@@ -16,12 +16,39 @@ class EspacioService
 
     public function getAll(int $perPage = 10, string $search = '')
     {
-
         $query = Espacio::withTrashed()
             ->with(['sede', 'categoria', 'creadoPor', 'categoria.grupo']);
 
         if ($search) {
-            $query->where('nombre', 'like', '%' . $search . '%');
+            $searchTerm = '%' . strtolower($search) . '%';
+
+            $query->where(function ($q) use ($searchTerm) {
+                $q->whereRaw('LOWER(espacios.nombre::text) LIKE ?', [$searchTerm])
+                    ->orWhereExists(function ($subQuery) use ($searchTerm) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('sedes')
+                            ->whereRaw('espacios.id_sede::text = sedes.id::text')
+                            ->whereRaw('LOWER(sedes.nombre::text) LIKE ?', [$searchTerm]);
+                    })
+                    ->orWhereExists(function ($subQuery) use ($searchTerm) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('categorias')
+                            ->whereRaw('espacios.id_categoria::text = categorias.id::text')
+                            ->whereRaw('LOWER(categorias.nombre::text) LIKE ?', [$searchTerm])
+                            ->whereNull('categorias.eliminado_en');
+                    })
+                    ->orWhereExists(function ($subQuery) use ($searchTerm) {
+                        $subQuery->select(DB::raw(1))
+                            ->from('categorias')
+                            ->join('grupos', function ($join) {
+                                $join->whereRaw('categorias.id_grupo::text = grupos.id::text')
+                                     ->whereNull('grupos.eliminado_en');
+                            })
+                            ->whereRaw('espacios.id_categoria::text = categorias.id::text')
+                            ->whereRaw('LOWER(grupos.nombre::text) LIKE ?', [$searchTerm])
+                            ->whereNull('categorias.eliminado_en');
+                    });
+            });
         }
 
         return $query->paginate($perPage);

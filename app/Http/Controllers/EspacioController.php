@@ -338,27 +338,4 @@ class EspacioController extends Controller
             );
         }
     }
-
-    private function crearThumbnail($imagen, $id_espacio, $width = 400, $height = 400)
-    {
-        $intervention = ImageManager::gd()->read($imagen->getRealPath());
-
-        $intervention->resize($width, $height, function ($constraint) {
-            $constraint->aspectRatio();
-            $constraint->upsize();
-        });
-
-        $thumbnailName = 'thumb_' . pathinfo($imagen->getClientOriginalName(), PATHINFO_FILENAME) . "_{$id_espacio}" . '.jpg';
-        $thumbnailPath = "espacios/thumbnails/{$thumbnailName}";
-        $fullPath = storage_path("app/public/{$thumbnailPath}");
-
-        $directory = dirname($fullPath);
-        if (!file_exists($directory)) {
-            mkdir($directory, 0755, true);
-        }
-
-        $intervention->toJpeg(80)->save($fullPath);
-
-        return $thumbnailPath;
-    }
 }

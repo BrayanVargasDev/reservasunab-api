@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Persona;
 use App\Models\Usuario;
 use Exception;
 use Illuminate\Http\Request;
@@ -120,7 +121,8 @@ class AuthController extends Controller
 
             $datosNombre = $this->procesarNombreCompleto($palabrasNombre);
 
-            $usuario->persona()->create([
+            $persona = Persona::create([
+                'id_usuario' => $usuario->id_usuario,
                 'primer_nombre' => explode(' ', $datosNombre['nombre'])[0] ?? '',
                 'segundo_nombre' => implode(' ', array_slice(explode(' ', $datosNombre['nombre']), 1)) ?? '',
                 'primer_apellido' => explode(' ', $datosNombre['apellido'])[0] ?? '',
