@@ -278,8 +278,9 @@ class AuthController extends Controller
                 'apellido' => $usuario->persona->apellido ?? null,
                 'tipo_usuario' => $usuario->tipo_usuario,
                 'activo' => $usuario->activo,
+                'rol' => $usuario->rol,
                 'token_expires_at' => $currentToken?->expires_at,
-                'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
+                'permisos' => $usuario->obtenerTodosLosPermisos(),
             ];
 
             if ($shouldRefreshToken) {
