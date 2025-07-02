@@ -13,7 +13,6 @@ class AuthController extends Controller
 {
     private $reglasDeValidacionDeRegistro = [
         'nombre' => 'required|string|max:255',
-        'apellido' => 'required|string|max:255',
         'celular' => 'required|string|max:10',
         'email' => 'required|string|email|max:255|unique:usuarios',
         'password' => 'required|string|min:8',
@@ -32,6 +31,52 @@ class AuthController extends Controller
         'password.required' => 'El campo contraseña es obligatorio.',
         'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
     ];
+
+    /**
+     * Procesa un nombre completo y lo separa en nombre y apellido
+     * según las reglas especificadas
+     *
+     * @param array $palabrasNombre Array con las palabras del nombre completo
+     * @return array ['nombre' => string, 'apellido' => string]
+     */
+    private function procesarNombreCompleto(array $palabrasNombre)
+    {
+        $cantidadPalabras = count($palabrasNombre);
+
+        switch ($cantidadPalabras) {
+            case 0:
+                return ['nombre' => '', 'apellido' => ''];
+            case 1:
+                return ['nombre' => $palabrasNombre[0], 'apellido' => ''];
+            case 2:
+                return [
+                    'nombre' => $palabrasNombre[0],
+                    'apellido' => $palabrasNombre[1]
+                ];
+            case 3:
+                return [
+                    'nombre' => $palabrasNombre[0],
+                    'apellido' => $palabrasNombre[1] . ' ' . $palabrasNombre[2]
+                ];
+            case 4:
+                return [
+                    'nombre' => $palabrasNombre[0] . ' ' . $palabrasNombre[1],
+                    'apellido' => $palabrasNombre[2] . ' ' . $palabrasNombre[3]
+                ];
+            case 5:
+                return [
+                    'nombre' => $palabrasNombre[0] . ' ' . $palabrasNombre[1] . ' ' . $palabrasNombre[2],
+                    'apellido' => $palabrasNombre[3] . ' ' . $palabrasNombre[4]
+                ];
+            default:
+                $nombre = implode(' ', array_slice($palabrasNombre, 0, 3));
+                $apellido = implode(' ', array_slice($palabrasNombre, -2));
+                return [
+                    'nombre' => $nombre,
+                    'apellido' => $apellido
+                ];
+        }
+    }
 
     public function registrar(Request $request)
     {
@@ -64,14 +109,25 @@ class AuthController extends Controller
                 'activo' => true,
             ]);
 
-            Log::debug($usuario);
-
             if (!$usuario) {
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Ocurrió un error al registrar el usuario.',
                 ], 409);
             }
+
+            $palabrasNombre = array_filter(explode(' ', trim($request->nombre)));
+
+            $datosNombre = $this->procesarNombreCompleto($palabrasNombre);
+
+            $usuario->persona()->create([
+                'primer_nombre' => explode(' ', $datosNombre['nombre'])[0] ?? '',
+                'segundo_nombre' => implode(' ', array_slice(explode(' ', $datosNombre['nombre']), 1)) ?? '',
+                'primer_apellido' => explode(' ', $datosNombre['apellido'])[0] ?? '',
+                'segundo_apellido' => implode(' ', array_slice(explode(' ', $datosNombre['apellido']), 1)) ?? '',
+                'celular' => $request->celular,
+            ]);
+
             DB::commit();
             return response()->json([
                 'status' => 'success',
@@ -79,8 +135,8 @@ class AuthController extends Controller
                 'data' => [
                     'id' => $usuario->id_usuario,
                     'email' => $usuario->email,
-                    'nombre' => $request->nombre,
-                    'apellido' => $request->apellido,
+                    'nombre' => $datosNombre['nombre'],
+                    'apellido' => $datosNombre['apellido'],
                     'celular' => $request->celular,
                     'tipo_usuario' => $usuario->tipo_usuario,
                     'activo' => $usuario->activo,
