@@ -15,7 +15,7 @@ return new class extends Migration
     {
         Schema::create('espacios', function (Blueprint $table) {
             $table->id();
-            $table->string('nombre', 20);
+            $table->string('nombre', 100);
             $table->string('descripcion', 255)->nullable();
             $table->boolean('agregar_jugadores')->default(false);
             $table->integer('minimo_jugadores')->nullable();
