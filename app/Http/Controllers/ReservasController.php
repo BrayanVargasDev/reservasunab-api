@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservasRequest;
 use App\Http\Requests\UpdateReservasRequest;
+use App\Http\Resources\EspacioReservaResource;
 use App\Models\Reservas;
 use App\Services\ReservaService;
 use Exception;
@@ -45,7 +46,7 @@ class ReservasController extends Controller
             return response()->json(
                 [
                     'status' => 'success',
-                    'data' => $espacios,
+                    'data' => EspacioReservaResource::collection($espacios),
                     'message' => 'Espacios obtenidos correctamente.',
                 ],
                 200,
