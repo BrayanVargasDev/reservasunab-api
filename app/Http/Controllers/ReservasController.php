@@ -69,6 +69,40 @@ class ReservasController extends Controller
         }
     }
 
+    public function getEspacioDetalles($espacioId)
+    {
+        try {
+
+            $fecha = request()->input('fecha', '');
+
+            $espacio = $this->reserva_service->getEspacioDetalles((int) $espacioId, $fecha);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $espacio,
+                    'message' => 'Detalles del espacio obtenidos correctamente.',
+                ],
+                200,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al obtener detalles del espacio', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener los detalles del espacio',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
     /**
      * Show the form for creating a new resource.
      *
