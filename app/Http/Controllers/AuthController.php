@@ -274,8 +274,8 @@ class AuthController extends Controller
             $data = [
                 'id' => $usuario->id_usuario,
                 'email' => $usuario->email,
-                'nombre' => $usuario->persona->primer_nombre,
-                'apellido' => $usuario->persona->primer_apellido,
+                'nombre' => $usuario->persona?->primer_nombre,
+                'apellido' => $usuario->persona?->primer_apellido,
                 'tipo_usuario' => $usuario->tipo_usuario,
                 'activo' => $usuario->activo,
                 'rol' => $usuario->rol,
