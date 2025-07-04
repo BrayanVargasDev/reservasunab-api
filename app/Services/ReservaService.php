@@ -105,12 +105,6 @@ class ReservaService
         $fechaConsulta = $carbon->toDateString();
         $diaSemana = $carbon->dayOfWeekIso;
 
-        Log::debug([
-            'id' => $id,
-            'fechaConsulta' => $fechaConsulta,
-            'diaSemana' => $diaSemana
-        ]);
-
         $espacio = Espacio::query()
             ->with([
                 'imagen',

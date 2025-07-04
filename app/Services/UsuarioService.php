@@ -198,8 +198,6 @@ class UsuarioService
             }
         }
 
-        Log::debug($data);
-
         if (isset($data['password'])) {
             $usuario->password_hash = Hash::make($data['password']);
         }
