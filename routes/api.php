@@ -23,7 +23,7 @@ Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
     ->where('ruta', '.*');
 // Route::post('/auth/saml/acs', [SamlAuthController::class, 'acs']);
 
-Route::group(['middleware' => 'auth:sanctum'], function () {
+Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'user']);
     Route::post('/refresh-token', [AuthController::class, 'refreshToken']);

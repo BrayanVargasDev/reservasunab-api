@@ -20,7 +20,7 @@ return [
 
     'allowed_origins' => env('APP_ENV') === 'production'
         ? explode(',', env('SANCTUM_STATEFUL_DOMAINS', ''))
-        : ['*'],
+        : ['http://localhost:3000', 'http://localhost:8100', 'http://127.0.0.1:3000', 'http://127.0.0.1:8100', 'http://localhost:8000'],
 
     'allowed_origins_patterns' => [],
 

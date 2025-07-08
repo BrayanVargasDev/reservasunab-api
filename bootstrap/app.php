@@ -23,11 +23,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'custom-auth' => \App\Http\Middleware\CustomSanctumAuth::class,
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
-
-        // Aplicar middleware de verificación de expiración a todas las rutas API autenticadas
-        $middleware->api(append: [
-            \App\Http\Middleware\VerifyTokenExpiration::class,
-        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

@@ -17,6 +17,10 @@ class VerifyTokenExpiration
      */
     public function handle(Request $request, Closure $next): Response
     {
+        if (!Auth::guard('sanctum')->check()) {
+            return $next($request);
+        }
+
         $bearerToken = $request->bearerToken();
 
         if (!$bearerToken) {
