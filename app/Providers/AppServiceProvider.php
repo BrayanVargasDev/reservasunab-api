@@ -6,7 +6,7 @@ use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 use App\Models\Usuario;
 use Illuminate\Support\Facades\Event;
-use App\Services\SamlAuthService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class AppServiceProvider extends ServiceProvider
@@ -26,18 +26,78 @@ class AppServiceProvider extends ServiceProvider
     {
         Sanctum::usePersonalAccessTokenModel(\Laravel\Sanctum\PersonalAccessToken::class);
 
+        // Registrar eventos SAML2 directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
-            Log::debug('SAML2 SignedIn event triggered', [
-                'user' => $event->auth->getSaml2User()->getUserId(),
-                'attributes' => $event->auth->getSaml2User()->getAttributes()
-            ]);
-            $samlAuthService = new SamlAuthService();
-            $samlAuthService->handleSamlSignIn($event);
+            Log::info('SAML2 SignedIn event received');
+
+            try {
+                $samlUser = $event->auth->getSaml2User();
+                $attributes = $samlUser->getAttributes();
+
+                Log::info('SAML user attributes', ['attributes' => $attributes]);
+
+                // Extraer email del usuario - ajustar según tu proveedor SAML
+                $email = null;
+                $possibleEmailFields = ['emailaddress', 'email', 'mail', 'Email', 'EmailAddress'];
+
+                foreach ($possibleEmailFields as $field) {
+                    if (isset($attributes[$field]) && !empty($attributes[$field])) {
+                        $email = is_array($attributes[$field]) ? $attributes[$field][0] : $attributes[$field];
+                        break;
+                    }
+                }
+
+                // Si no se encuentra email en atributos, usar el ID del usuario
+                if (!$email) {
+                    $email = $samlUser->getUserId();
+                }
+
+                Log::info('Extracted email from SAML', ['email' => $email]);
+
+                if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    Log::error('Invalid email from SAML user', ['email' => $email]);
+                    return;
+                }
+
+                // Buscar o crear usuario
+                $user = Usuario::where('email', $email)->first();
+
+                if (!$user) {
+                    // Crear nuevo usuario
+                    $user = Usuario::create([
+                        'email' => $email,
+                        'ldap_uid' => $samlUser->getUserId(),
+                        'tipo_usuario' => 'saml',
+                        'activo' => true,
+                        'id_rol' => 3, // Ajustar según tus roles
+                    ]);
+                    Log::info('New SAML user created', ['user_id' => $user->id_usuario, 'email' => $email]);
+                } else {
+                    // Actualizar usuario existente
+                    $user->update([
+                        'ldap_uid' => $samlUser->getUserId(),
+                        'activo' => true,
+                    ]);
+                    Log::info('Existing SAML user updated', ['user_id' => $user->id_usuario, 'email' => $email]);
+                }
+
+                // Autenticar usuario
+                Auth::login($user, true); // true para "remember me"
+                Log::info('User authenticated via SAML', ['user_id' => $user->id_usuario]);
+            } catch (\Exception $e) {
+                Log::error('Error in SAML authentication', [
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+            }
         });
 
         Event::listen(\Slides\Saml2\Events\SignedOut::class, function (\Slides\Saml2\Events\SignedOut $event) {
-            \Illuminate\Support\Facades\Auth::logout();
-            \Illuminate\Support\Facades\Log::info('Usuario desconectado via SAML2');
+            Log::info('SAML2 SignedOut event received');
+            Auth::logout();
+            session()->invalidate();
+            session()->regenerateToken();
         });
     }
 }
