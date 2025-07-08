@@ -251,9 +251,9 @@ class ReservaService
                         'disponible' => true,
                         'valor' => $franja->valor,
                         'estilos' => [
-                            'background_color' => $franja->valor > 0 ? 'success' : 'ghost',
-                            'text_color' => $franja->valor > 0 ? 'success' : 'ghost',
-                            'border_color' => $franja->valor > 0 ? 'success' : 'ghost',
+                            'background_color' => $franja->valor > 0 ? 'accent' : 'ghost',
+                            'text_color' => $franja->valor > 0 ? 'accent' : 'ghost',
+                            'border_color' => $franja->valor > 0 ? 'accent' : 'ghost',
                         ],
                         'novedad' => null
                     ];
