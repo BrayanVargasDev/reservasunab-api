@@ -6,8 +6,10 @@ use App\Exceptions\EspacioConfiguracionException;
 use App\Models\EspacioConfiguracion;
 use App\Models\Fecha;
 use App\Models\FranjaHoraria;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -35,20 +37,8 @@ class EspacioConfiguracionService
 
         $esFestivo = Fecha::where('fecha', $fecha)->exists();
 
-        if ($esFestivo) {
-            $configFestivo = EspacioConfiguracion::with('franjas_horarias')
-                ->where('id_espacio', $id_espacio)
-                ->where('dia_semana', 8)
-                ->orderBy('id', 'desc')
-                ->first();
-
-            if ($configFestivo) {
-                return $configFestivo->load('franjas_horarias');
-            }
-        }
-
-        $diaSemanaPhp = date('w', strtotime($fecha));
-        $diaSemana = $diaSemanaPhp == 0 ? 7 : $diaSemanaPhp;
+        $carbon = Carbon::parse($fecha);
+        $diaSemana = $esFestivo ? 8 : $carbon->dayOfWeekIso;
 
         $configPorDia = EspacioConfiguracion::with('franjas_horarias')
             ->where('id_espacio', $id_espacio)
@@ -57,7 +47,47 @@ class EspacioConfiguracionService
             ->first();
 
         if ($configPorDia) {
-            return $configPorDia->load('franjas_horarias');
+            try {
+                DB::beginTransaction();
+
+                $nuevaConfig = [
+                    'id_espacio' => $configPorDia->id_espacio,
+                    'minutos_uso' => $configPorDia->minutos_uso,
+                    'hora_apertura' => $configPorDia->hora_apertura,
+                    'dias_previos_apertura' => $configPorDia->dias_previos_apertura,
+                    'tiempo_cancelacion' => $configPorDia->tiempo_cancelacion,
+                    'fecha' => $fecha,
+                    'dia_semana' => null,
+                    'creado_por' => Auth::id()
+                ];
+
+                $nuevaConfiguracion = EspacioConfiguracion::create($nuevaConfig);
+
+                $franjasOriginales = $configPorDia->franjas_horarias;
+                $nuevasFranjas = [];
+
+                foreach ($franjasOriginales as $franja) {
+                    $nuevasFranjas[] = [
+                        'id_config' => $nuevaConfiguracion->id,
+                        'hora_inicio' => $franja->hora_inicio,
+                        'hora_fin' => $franja->hora_fin,
+                        'valor' => $franja->valor,
+                        'activa' => true,
+                    ];
+                }
+
+                if (!empty($nuevasFranjas)) {
+                    $nuevaConfiguracion->franjas_horarias()->createMany($nuevasFranjas);
+                }
+
+                DB::commit();
+                return $nuevaConfiguracion->load('franjas_horarias');
+            } catch (Exception $e) {
+                DB::rollBack();
+                $this->logError('Error al crear configuración basada en día de semana', $e);
+
+                return $configPorDia->load('franjas_horarias');
+            }
         }
 
         return null;
