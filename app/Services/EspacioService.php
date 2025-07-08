@@ -50,7 +50,7 @@ class EspacioService
                     });
             });
         }
-
+        $query->orderBy('espacios.id', 'asc');
         return $query->paginate($perPage);
     }
 
