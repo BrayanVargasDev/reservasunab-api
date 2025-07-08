@@ -122,28 +122,6 @@ class ReservaService
                 'sede:id,nombre',
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
-                'configuraciones' => function ($q) use ($fechaConsulta, $diaSemana) {
-                    $q->where(function ($query) use ($fechaConsulta, $diaSemana) {
-                        $query->whereDate('fecha', $fechaConsulta)
-                            ->orWhere(function ($subQuery) use ($diaSemana) {
-                                $subQuery->whereNull('fecha')
-                                    ->where('dia_semana', $diaSemana);
-                            });
-                    })
-                        ->select(
-                            'id',
-                            'id_espacio',
-                            'fecha',
-                            'dia_semana',
-                            'minutos_uso',
-                            'hora_apertura',
-                            'dias_previos_apertura'
-                        )
-                        ->with([
-                            'franjas_horarias' => fn($q) =>
-                            $q->where('eliminado_en', null)->orderBy('hora_inicio')
-                        ]);
-                },
                 'novedades' => function ($q) use ($fechaConsulta) {
                     $q->whereDate('fecha', $fechaConsulta);
                 }
@@ -154,6 +132,27 @@ class ReservaService
             return $espacio;
         }
 
+        $configuracion = $espacio->configuraciones()
+            ->whereDate('fecha', $fechaConsulta)
+            ->with([
+                'franjas_horarias' => fn($q) =>
+                $q->where('eliminado_en', null)->orderBy('hora_inicio')
+            ])
+            ->first();
+
+        if (!$configuracion) {
+            $configuracion = $espacio->configuraciones()
+                ->whereNull('fecha')
+                ->where('dia_semana', $diaSemana)
+                ->with([
+                    'franjas_horarias' => fn($q) =>
+                    $q->where('eliminado_en', null)->orderBy('hora_inicio')
+                ])
+                ->first();
+        }
+
+        $espacio->configuracion = $configuracion;
+
         $espacio->disponibilidad = $this->construirDisponibilidad($espacio, $fechaConsulta);
         return $espacio;
     }
@@ -163,7 +162,7 @@ class ReservaService
         $disponibilidad = [];
 
         // Obtener la configuración aplicable para la fecha
-        $configuracion = $espacio->configuraciones->first();
+        $configuracion = $espacio->configuracion;
 
         if (!$configuracion) {
             return $disponibilidad;
