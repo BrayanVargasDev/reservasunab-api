@@ -14,6 +14,8 @@ use App\Http\Controllers\SharedController;
 use App\Http\Controllers\TipoDocumentoController;
 use App\Http\Controllers\UsuarioController;
 use Illuminate\Support\Facades\Route;
+use Slides\Saml2\Http\Controllers\Saml2Controller;
+// use Slides\Saml2\Http\Controllers\SamlAuthController;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
 Route::post('/ingresar', [AuthController::class, 'login']);
@@ -21,7 +23,7 @@ Route::post('/registrar', [AuthController::class, 'registrar']);
 Route::get('/validate-email/{email}', [UsuarioController::class, 'validarEmailTomado']);
 Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
     ->where('ruta', '.*');
-// Route::post('/auth/saml/acs', [SamlAuthController::class, 'acs']);
+Route::post('/auth/saml/acs', [Saml2Controller::class, 'acs']);
 
 Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
