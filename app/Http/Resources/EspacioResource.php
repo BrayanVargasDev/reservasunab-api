@@ -17,7 +17,7 @@ class EspacioResource extends JsonResource
         return [
             'id' => $this->id,
             'nombre' => $this->nombre,
-            'descripcion' => $this->descripcion,
+            'sede' => $this->sede->nombre ?? null,
             'tipoEspacio' => $this->categoria->nombre ?? null,
             'estado' => !$this->eliminado_en ? 'activo' : 'inactivo',
         ];
