@@ -7,6 +7,7 @@ use Laravel\Sanctum\Sanctum;
 use App\Models\Usuario;
 use Illuminate\Support\Facades\Event;
 use App\Services\SamlAuthService;
+use Illuminate\Support\Facades\Log;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +27,10 @@ class AppServiceProvider extends ServiceProvider
         Sanctum::usePersonalAccessTokenModel(\Laravel\Sanctum\PersonalAccessToken::class);
 
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
+            Log::debug('SAML2 SignedIn event triggered', [
+                'user' => $event->auth->getSaml2User()->getUserId(),
+                'attributes' => $event->auth->getSaml2User()->getAttributes()
+            ]);
             $samlAuthService = new SamlAuthService();
             $samlAuthService->handleSamlSignIn($event);
         });
