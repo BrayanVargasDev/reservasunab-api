@@ -3,7 +3,7 @@
 return [
     'tenantModel' => \Slides\Saml2\Models\Tenant::class,
     'useRoutes' => true,
-    'routesPrefix' => '/saml',
+    'routesPrefix' => '/api/saml',
     'routesMiddleware' => ['web'],
     'retrieveParametersFromServer' => false,
     'loginRoute' => null,
