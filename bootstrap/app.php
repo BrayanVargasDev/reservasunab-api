@@ -23,6 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'custom-auth' => \App\Http\Middleware\CustomSanctumAuth::class,
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
+
+        $middleware->validateCsrfTokens(except: [
+            'api/saml/*/acs'
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
