@@ -63,17 +63,15 @@ class AppServiceProvider extends ServiceProvider
                 $user = Usuario::where('email', $email)->first();
 
                 if (!$user) {
-                    // Crear nuevo usuario
                     $user = Usuario::create([
                         'email' => $email,
                         'ldap_uid' => $samlUser->getUserId(),
                         'tipo_usuario' => 'saml',
                         'activo' => true,
-                        'id_rol' => 3, // Ajustar según tus roles
+                        // 'id_rol' => 3,
                     ]);
                     Log::info('New SAML user created', ['user_id' => $user->id_usuario, 'email' => $email]);
                 } else {
-                    // Actualizar usuario existente
                     $user->update([
                         'ldap_uid' => $samlUser->getUserId(),
                         'activo' => true,
@@ -81,7 +79,6 @@ class AppServiceProvider extends ServiceProvider
                     Log::info('Existing SAML user updated', ['user_id' => $user->id_usuario, 'email' => $email]);
                 }
 
-                // Autenticar usuario
                 Auth::login($user, true); // true para "remember me"
                 Log::info('User authenticated via SAML', ['user_id' => $user->id_usuario]);
             } catch (\Exception $e) {

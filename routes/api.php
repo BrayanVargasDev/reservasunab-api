@@ -85,6 +85,10 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
     Route::group(['prefix' => 'categorias'], function () {
         Route::get('/', [CategoriaController::class, 'index']);
         Route::get('/{categoria}', [CategoriaController::class, 'show']);
+        Route::post('/', [CategoriaController::class, 'store']);
+        Route::patch('/{categoria}', [CategoriaController::class, 'update']);
+        Route::delete('/{categoria}', [CategoriaController::class, 'destroy']);
+        Route::patch('/{categoria}/restaurar', [CategoriaController::class, 'restore']);
     });
 
     Route::group(['prefix' => 'espacios'], function () {
@@ -97,7 +101,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
             Route::get('/{tipoUsuarioConfig}', [EspacioTipoUsuarioConfigController::class, 'show']);
             Route::patch('/{tipoUsuarioConfig}', [EspacioTipoUsuarioConfigController::class, 'update']);
             Route::delete('/{tipoUsuarioConfig}', [EspacioTipoUsuarioConfigController::class, 'destroy']);
-            Route::patch('/{tipoUsuarioConfig}/restaurar', [EspacioTipoUsuarioConfigController::class, 'restore']);
+            Route::patch('/{id}/restaurar', [EspacioTipoUsuarioConfigController::class, 'restore']);
         });
 
         Route::group(['prefix' => 'configuracion-base'], function () {

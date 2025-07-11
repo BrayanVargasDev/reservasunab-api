@@ -102,4 +102,87 @@ class EspacioTipoUsuarioConfigController extends Controller
             );
         }
     }
+
+    public function destroy(EspacioTipoUsuarioConfig $tipoUsuarioConfig)
+    {
+        try {
+            // $this->authorize('eliminar', $config);
+            $this->espacio_tipo_usuario_config_service->delete($tipoUsuarioConfig->id);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'message' => 'Espacio eliminado correctamente',
+                ],
+                200,
+            );
+        } catch (EspacioTipoUsuarioConfigException $e) {
+            Log::warning('Problema al eliminar config', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'espacio_buscado_id' => $tipoUsuarioConfig->id,
+                'error_type' => $e->getErrorType(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $e->render();
+        } catch (Exception $e) {
+            Log::error('Error al eliminar config', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'espacio_buscado_id' => $tipoUsuarioConfig->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al eliminar el config',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    public function restore(string $id)
+    {
+        try {
+            // $this->authorize('restaurar', $config);
+            $config = $this->espacio_tipo_usuario_config_service->restore((int) $id);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $config,
+                    'message' => 'Espacio restaurado correctamente',
+                ],
+                200,
+            );
+        } catch (EspacioTipoUsuarioConfigException $e) {
+            Log::warning('Problema al restaurar config', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'config_buscado_id' => $id,
+                'error_type' => $e->getErrorType(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return $e->render();
+        } catch (Exception $e) {
+            Log::error('Error al restaurar config', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'config_buscado_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al restaurar el config',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }

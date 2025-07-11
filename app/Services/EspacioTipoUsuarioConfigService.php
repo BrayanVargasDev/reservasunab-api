@@ -103,6 +103,55 @@ class EspacioTipoUsuarioConfigService
         }
     }
 
+    public function delete(int $id): void
+    {
+        try {
+            DB::beginTransaction();
+            $config = $this->getById($id);
+            $config->delete();
+            DB::commit();
+        } catch (EspacioTipoUsuarioConfigException $e) {
+            DB::rollBack();
+            throw $e;
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->logError('Error al eliminar config', $e, ['id' => $id]);
+            throw new EspacioTipoUsuarioConfigException(
+                'Error al eliminar el config: ' . $e->getMessage(),
+                'delete_failed',
+                500,
+                $e,
+            );
+        }
+    }
+
+    public function restore(int $id): EspacioTipoUsuarioConfig
+    {
+        try {
+            DB::beginTransaction();
+            $config = EspacioTipoUsuarioConfig::withTrashed()->findOrFail($id);
+            $config->restore();
+            DB::commit();
+            return $config;
+        } catch (ModelNotFoundException $e) {
+            throw new EspacioTipoUsuarioConfigException(
+                "Config no encontrado con ID: {$id}",
+                'not_found',
+                404,
+                $e,
+            );
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->logError('Error al restaurar config', $e, ['id' => $id]);
+            throw new EspacioTipoUsuarioConfigException(
+                'Error al restaurar el config: ' . $e->getMessage(),
+                'restore_failed',
+                500,
+                $e,
+            );
+        }
+    }
+
     private function logError(string $message, Exception $exception, array $context = []): void
     {
         Log::error($message, array_merge($context, [

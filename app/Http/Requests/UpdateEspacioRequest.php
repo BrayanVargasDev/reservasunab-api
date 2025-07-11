@@ -31,6 +31,7 @@ class UpdateEspacioRequest extends FormRequest
             'minimoJugadores' => 'sometimes|integer|min:0',
             'maximoJugadores' => 'sometimes|integer|min:0',
             'permitirExternos' => 'sometimes|boolean',
+            'reservasSimultaneas' => 'sometimes|integer|min:1',
             'sede' => 'sometimes|exists:sedes,id',
             'categoria' => 'sometimes|exists:categorias,id',
             'imagen' => 'sometimes|nullable|file|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5 MB or data URL
@@ -60,6 +61,8 @@ class UpdateEspacioRequest extends FormRequest
             'imagen.image' => 'El archivo de imagen debe ser una imagen válida.',
             'imagen.mimes' => 'La imagen debe ser de tipo jpeg, png, jpg, gif o svg.',
             'imagen.max' => 'La imagen no puede exceder los 5 MB.',
+            'reservasSimultaneas.integer' => 'El número de reservas simultáneas debe ser un número entero.',
+            'reservasSimultaneas.min' => 'El número de reservas simultáneas debe ser al menos 1.',
         ];
     }
 

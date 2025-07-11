@@ -115,4 +115,10 @@ class SharedController extends Controller
             return response()->json(['error' => 'Error al obtener grupos'], 500);
         }
     }
+
+    public function crearGrupo() {}
+
+    public function eliminarGrupo() {}
+
+    public function actualizarGrupo() {}
 }

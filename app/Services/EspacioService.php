@@ -7,6 +7,7 @@ use App\Models\Espacio;
 use App\Models\EspacioImagen;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -42,7 +43,7 @@ class EspacioService
                             ->from('categorias')
                             ->join('grupos', function ($join) {
                                 $join->whereRaw('categorias.id_grupo::text = grupos.id::text')
-                                     ->whereNull('grupos.eliminado_en');
+                                    ->whereNull('grupos.eliminado_en');
                             })
                             ->whereRaw('espacios.id_categoria::text = categorias.id::text')
                             ->whereRaw('LOWER(grupos.nombre::text) LIKE ?', [$searchTerm])
@@ -75,8 +76,7 @@ class EspacioService
                 'permite_externos' => $data['permitirExternos'] ?? false,
                 'id_sede' => $data['sede'],
                 'id_categoria' => $data['categoria'],
-                'creado_por' => 2,
-                // 'creado_por' => auth()->id(),
+                'creado_por' => Auth::id(),
             ];
 
             $espacio = Espacio::create($espacio);
@@ -135,7 +135,9 @@ class EspacioService
                 'imagen',
                 'configuraciones',
                 'configuraciones.franjas_horarias',
-                'tipo_usuario_config',
+                'tipo_usuario_config' => function ($query) {
+                    $query->withTrashed();
+                },
                 'creadoPor:id_usuario',
             ])->findOrFail($id);
         } catch (ModelNotFoundException $e) {
@@ -235,7 +237,8 @@ class EspacioService
                 'permite_externos' => $data['permitirExternos'],
                 'id_sede' => $data['sede'] ?? $espacio->id_sede,
                 'id_categoria' => $data['categoria'] ?? $espacio->id_categoria,
-                'actualizado_por' => 2, // auth()->id(),
+                'actualizado_por' => Auth::id(),
+                'reservas_simultaneas' => $data['reservasSimultaneas'] ?? $espacio->reservas_simultaneas,
             ];
 
             $espacio->update($updateData);
