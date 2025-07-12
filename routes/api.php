@@ -5,6 +5,7 @@ use App\Http\Controllers\CategoriaController;
 use App\Http\Controllers\EspacioConfiguracionController;
 use App\Http\Controllers\EspacioController;
 use App\Http\Controllers\EspacioTipoUsuarioConfigController;
+use App\Http\Controllers\PagoController;
 use App\Http\Controllers\PantallaController;
 use App\Http\Controllers\PermisoController;
 use App\Http\Controllers\ReservasController;
@@ -129,11 +130,17 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::delete('/{reserva}', [ReservasController::class, 'destroy']);
     });
 
+    Route::group(['prefix' => 'reservas'], function () {
+        Route::post('/', [ReservasController::class, 'store']);
+    });
+
     Route::group(['prefix' => 'grupos'], function () {
         Route::get('/', [SharedController::class, 'grupos']);
         Route::get('/{grupo}', [SharedController::class, 'grupo']);
     });
 });
+
+Route::post('/ecollect', [PagoController::class, 'ecollect']);
 
 Route::post('/test', function () {
     return response()->json(['message' => 'Hello, World!']);

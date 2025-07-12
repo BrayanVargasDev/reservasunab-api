@@ -123,4 +123,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'url_pagos' => env('URL_PAGOS', 'https://test1.e-collect.com/app_express/api/'),
+    'key_pagos' => env('KEY_PAGOS', 'e-collect'),
+    'entity_code' => env('ENTITY_CODE', 10139),
 ];
