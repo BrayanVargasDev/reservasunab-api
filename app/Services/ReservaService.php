@@ -3,11 +3,20 @@
 namespace App\Services;
 
 use App\Models\Espacio;
+use App\Models\EspacioConfiguracion;
+use App\Models\FranjaHoraria;
+use App\Models\Reservas;
+use App\Traits\ManageTimezone;
 use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ReservaService
 {
+    use ManageTimezone;
 
     const MINUTOS_USO_DEFAULT = 60;
     const DIAS_PREVIOS_APERTURA_DEFAULT = 1;
@@ -160,21 +169,22 @@ class ReservaService
     private function construirDisponibilidad($espacio, string $fechaConsulta): array
     {
         $disponibilidad = [];
-
-        // Obtener la configuración aplicable para la fecha
         $configuracion = $espacio->configuracion;
 
         if (!$configuracion) {
             return $disponibilidad;
         }
 
-        // Obtener las franjas horarias de la configuración
         $franjasHorarias = $configuracion->franjas_horarias;
-
-        // Obtener las novedades del día
         $novedades = $espacio->novedades;
 
-        // Verificar que existan franjas horarias
+        $reservasExistentes = Reservas::where('id_espacio', $espacio->id)
+            ->whereDate('fecha', $fechaConsulta)
+            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+            ->whereNull('eliminado_en')
+            ->select('hora_inicio', 'hora_fin', 'estado')
+            ->get();
+
         if ($franjasHorarias->isEmpty()) {
             Log::warning('No hay franjas horarias configuradas para el espacio', [
                 'espacio_id' => $espacio->id,
@@ -183,17 +193,11 @@ class ReservaService
             return $disponibilidad;
         }
 
-        $minutosUso = $configuracion->minutos_uso ?? 60; // Valor por defecto
+        $minutosUso = $configuracion->minutos_uso ?? self::MINUTOS_USO_DEFAULT;
 
-        // Procesar cada franja horaria
         foreach ($franjasHorarias as $franja) {
             try {
                 if (!$franja->hora_inicio || !$franja->hora_fin) {
-                    Log::warning('Franja horaria con horas no válidas', [
-                        'franja_id' => $franja->id,
-                        'hora_inicio' => $franja->hora_inicio,
-                        'hora_fin' => $franja->hora_fin
-                    ]);
                     continue;
                 }
 
@@ -201,27 +205,45 @@ class ReservaService
                 $franjaFin = $this->createCarbonSafely($franja->hora_fin->format('H:i'), 'H:i');
 
                 if (!$franjaInicio || !$franjaFin) {
-                    Log::warning('Error al procesar horarios de franja', [
-                        'franja_id' => $franja->id
-                    ]);
                     continue;
                 }
 
                 $horaActual = $franjaInicio->copy();
 
-                // Generar slots dentro de la franja horaria
                 while ($horaActual->lessThan($franjaFin)) {
                     $horaInicioSlot = $horaActual->format('h:i A');
                     $horaFinSlot = $horaActual->copy()->addMinutes($minutosUso);
 
-                    // Verificar que el slot no se salga de la franja
                     if ($horaFinSlot->greaterThan($franjaFin)) {
                         break;
                     }
 
                     $horaFinSlotFormatted = $horaFinSlot->format('h:i A');
 
-                    // Buscar novedades que afecten este horario
+                    $reservaCoincidente = $reservasExistentes->first(function ($reserva) use ($horaActual, $horaFinSlot) {
+                        try {
+                            $reservaInicio = $this->createCarbonSafely($reserva->hora_inicio, 'H:i:s');
+                            $reservaFin = $this->createCarbonSafely($reserva->hora_fin, 'H:i:s');
+
+                            if (!$reservaInicio || !$reservaFin) {
+                                return false;
+                            }
+
+                            $noHayConflicto = (
+                                $horaFinSlot->lessThanOrEqualTo($reservaInicio) ||
+                                $horaActual->greaterThanOrEqualTo($reservaFin)
+                            );
+
+                            return !$noHayConflicto;
+                        } catch (Exception $e) {
+                            Log::error('Error al procesar reserva existente', [
+                                'error' => $e->getMessage(),
+                                'reserva_id' => $reserva->id ?? 'unknown'
+                            ]);
+                            return false;
+                        }
+                    });
+
                     $novedadCoincidente = $novedades->first(function ($novedad) use ($horaActual, $horaFinSlot) {
                         try {
                             if (!$novedad->hora_inicio || !$novedad->hora_fin) {
@@ -235,52 +257,65 @@ class ReservaService
                                 return false;
                             }
 
-                            return ($horaActual->greaterThanOrEqualTo($novedadInicio) && $horaActual->lessThan($novedadFin)) ||
-                                ($horaFinSlot->greaterThan($novedadInicio) && $horaFinSlot->lessThanOrEqualTo($novedadFin)) ||
-                                ($horaActual->lessThanOrEqualTo($novedadInicio) && $horaFinSlot->greaterThanOrEqualTo($novedadFin));
-                        } catch (\Exception $e) {
-                            Log::warning('Error al procesar novedad', ['error' => $e->getMessage()]);
+                            $noHaySolapamiento = (
+                                $horaFinSlot->lessThanOrEqualTo($novedadInicio) ||
+                                $horaActual->greaterThanOrEqualTo($novedadFin)
+                            );
+
+                            return !$noHaySolapamiento;
+                        } catch (Exception $e) {
+                            Log::error('Error al procesar novedad', ['error' => $e->getMessage()]);
                             return false;
                         }
                     });
 
-                    // Construir el objeto de disponibilidad
+                    $disponible = true;
+                    $estilosColor = '#00a1cf';
+                    $textColor = '#ffffff';
+
+                    if ($reservaCoincidente) {
+                        $disponible = false;
+                        $estilosColor = '#ce013f';
+                        $textColor = '#ffffff';
+                    }
+
                     $slot = [
                         'hora_inicio' => $horaInicioSlot,
                         'hora_fin' => $horaFinSlotFormatted,
-                        'disponible' => true,
+                        'disponible' => $disponible,
                         'valor' => $franja->valor,
+                        'franja_id' => $franja->id, // Agregar ID de franja para debugging
                         'estilos' => [
-                            'background_color' => $franja->valor > 0 ? 'accent' : 'ghost',
-                            'text_color' => $franja->valor > 0 ? 'accent' : 'ghost',
-                            'border_color' => $franja->valor > 0 ? 'accent' : 'ghost',
+                            'background_color' => $estilosColor,
+                            'text_color' =>  $textColor,
                         ],
-                        'novedad' => null
+                        'novedad' => null,
+                        'reserva' => $reservaCoincidente ? [
+                            'estado' => $reservaCoincidente->estado,
+                            'hora_inicio' => $this->createCarbonSafely($reservaCoincidente->hora_inicio, 'H:i:s')?->format('h:i A') ?? $reservaCoincidente->hora_inicio,
+                            'hora_fin' => $this->createCarbonSafely($reservaCoincidente->hora_fin, 'H:i:s')?->format('h:i A') ?? $reservaCoincidente->hora_fin
+                        ] : null
                     ];
 
-                    // Si hay novedad, agregarla y modificar disponibilidad
                     if ($novedadCoincidente) {
                         $slot['novedad'] = [
                             'id' => $novedadCoincidente->id,
                             'descripcion' => $novedadCoincidente->descripcion,
                             'tipo' => $novedadCoincidente->tipo,
-                            'hora_inicio' => Carbon::createFromFormat('H:i:s', $novedadCoincidente->hora_inicio)->format('h:i A'),
-                            'hora_fin' => Carbon::createFromFormat('H:i:s', $novedadCoincidente->hora_fin)->format('h:i A')
+                            'hora_inicio' => $this->createCarbonSafely($novedadCoincidente->hora_inicio, 'H:i:s')?->format('h:i A') ?? $novedadCoincidente->hora_inicio,
+                            'hora_fin' => $this->createCarbonSafely($novedadCoincidente->hora_fin, 'H:i:s')?->format('h:i A') ?? $novedadCoincidente->hora_fin
                         ];
 
-                        // Modificar estilos según el tipo de novedad
                         if ($novedadCoincidente->tipo === 'mantenimiento' || $novedadCoincidente->tipo === 'cerrado') {
                             $slot['disponible'] = false;
                             $slot['estilos'] = [
-                                'background_color' => 'error',
-                                'text_color' => 'error',
-                                'border_color' => 'error'
+                                'background_color' => '#edeef1',
+                                'text_color' => '#757f8e',
                             ];
                         } else {
                             $slot['estilos'] = [
-                                'background_color' => 'warning',
-                                'text_color' => 'warning',
-                                'border_color' => 'warning'
+                                'background_color' => '#ffc408',
+                                'text_color' => '#170f04',
                             ];
                         }
                     }
@@ -288,7 +323,7 @@ class ReservaService
                     $disponibilidad[] = $slot;
                     $horaActual->addMinutes($minutosUso);
                 }
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 Log::error('Error al procesar franja horaria', [
                     'error' => $e->getMessage(),
                     'franja_id' => $franja->id ?? null,
@@ -298,11 +333,308 @@ class ReservaService
             }
         }
 
-        // Ordenar la disponibilidad por hora de inicio
         usort($disponibilidad, function ($a, $b) {
             return strtotime($a['hora_inicio']) <=> strtotime($b['hora_inicio']);
         });
 
         return $disponibilidad;
+    }
+
+    public function iniciarReserva($data)
+    {
+        try {
+            return DB::transaction(function () use ($data) {
+                // Crear fechas directamente en la zona horaria de la aplicación
+                $fecha = Carbon::createFromFormat('Y-m-d', $data['fecha'], config('app.timezone'));
+                $horaInicio = Carbon::createFromFormat('h:i A', $data['horaInicio'], config('app.timezone'));
+                $horaFin = Carbon::createFromFormat('h:i A', $data['horaFin'], config('app.timezone'));
+
+                Log::info('Iniciando reserva con zona horaria', [
+                    'fecha_original' => $data['fecha'],
+                    'hora_inicio_original' => $data['horaInicio'],
+                    'hora_fin_original' => $data['horaFin'],
+                    'fecha_procesada' => $fecha->format('Y-m-d H:i:s T'),
+                    'hora_inicio_procesada' => $horaInicio->format('H:i:s T'),
+                    'hora_fin_procesada' => $horaFin->format('H:i:s T'),
+                    'timezone_config' => config('app.timezone')
+                ]);
+
+                // Guard: Verificar autenticación
+                $usuario = Auth::user();
+                if (!$usuario) {
+                    throw new Exception('Usuario no autenticado.');
+                }
+
+                // Guard: Verificar conflictos de reserva
+                $reservasConflicto = Reservas::where('id_espacio', $data['base']['id'])
+                    ->whereDate('fecha', $fecha)
+                    ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+                    ->whereNull('eliminado_en')
+                    ->where(function ($query) use ($horaInicio, $horaFin) {
+                        $query->where(function ($q) use ($horaInicio, $horaFin) {
+                            $q->whereTime('hora_inicio', '>=', $horaInicio->format('H:i:s'))
+                                ->whereTime('hora_inicio', '<', $horaFin->format('H:i:s'));
+                        })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                            $q->whereTime('hora_fin', '>', $horaInicio->format('H:i:s'))
+                                ->whereTime('hora_fin', '<=', $horaFin->format('H:i:s'));
+                        })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                            $q->whereTime('hora_inicio', '<=', $horaInicio->format('H:i:s'))
+                                ->whereTime('hora_fin', '>=', $horaFin->format('H:i:s'));
+                        });
+                    })
+                    ->get();
+
+                if ($reservasConflicto->isNotEmpty()) {
+                    Log::warning('Conflicto de reservas detectado', [
+                        'espacio_id' => $data['base']['id'],
+                        'fecha' => $fecha->toDateString(),
+                        'hora_solicitada_inicio' => $horaInicio->format('H:i:s'),
+                        'hora_solicitada_fin' => $horaFin->format('H:i:s'),
+                        'reservas_conflicto' => $reservasConflicto->map(function ($r) {
+                            return [
+                                'id' => $r->id,
+                                'hora_inicio' => $r->hora_inicio,
+                                'hora_fin' => $r->hora_fin,
+                                'estado' => $r->estado
+                            ];
+                        })->toArray()
+                    ]);
+                    throw new Exception('Ya existe una reserva para este espacio en el horario seleccionado.');
+                }
+
+                $configuracion = $data['base']['configuracion'];
+                $idConfiguracion = $this->obtenerIdConfiguracion($configuracion, $data['base']['id'], $fecha);
+
+                $estado = ($usuario->tipo_usuario === 'estudiante') ? 'completada' : 'inicial';
+
+                $reserva = Reservas::create([
+                    'id_usuario' => $usuario->id_usuario,
+                    'id_espacio' => $data['base']['id'],
+                    'fecha' => $fecha,
+                    'id_configuracion' => $idConfiguracion,
+                    'estado' => $estado,
+                    'hora_inicio' => $horaInicio->format('H:i:s'),
+                    'hora_fin' => $horaFin->format('H:i:s'),
+                    'check_in' => false,
+                ]);
+
+                $reserva->load([
+                    'espacio:id,nombre,id_sede',
+                    'espacio.sede:id,nombre',
+                    'usuarioReserva:id_usuario,email',
+                    'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+                ]);
+
+                $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
+                $valor = $this->obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin);
+                $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona);
+
+                $resumenReserva = [
+                    'nombre_espacio' => $reserva->espacio->nombre,
+                    'duracion' => $duracionMinutos,
+                    'sede' => $reserva->espacio->sede->nombre,
+                    'fecha' => $fecha->format('Y-m-d'),
+                    'hora_inicio' => $horaInicio->format('h:i A'),
+                    'valor' => $valor,
+                    'estado' => $estado,
+                    'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
+                    'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
+                    'agrega_jugadores' => false
+                ];
+
+                Log::info('Reserva creada exitosamente', [
+                    'reserva_id' => $reserva->id,
+                    'resumen' => $resumenReserva,
+                    'valor_calculado' => $valor,
+                    'configuracion_usada' => $idConfiguracion,
+                    'fecha_guardada_db' => $reserva->fecha
+                ]);
+
+                return $resumenReserva;
+            });
+        } catch (Throwable $th) {
+            Log::error('Error al iniciar la reserva', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'data_received' => $data,
+                'error' => $th->getMessage(),
+                'trace' => $th->getTraceAsString()
+            ]);
+            throw new Exception('Error al iniciar la reserva: ' . $th->getMessage());
+        }
+    }
+
+    private function obtenerIdConfiguracion($configuracion, $espacioId, $fecha)
+    {
+        if (!is_null($configuracion['fecha'])) {
+            return $configuracion['id'];
+        }
+
+        $configuracionExistente = EspacioConfiguracion::where('id_espacio', $espacioId)
+            ->whereDate('fecha', $fecha)
+            ->first();
+
+        if ($configuracionExistente) {
+            return $configuracionExistente->id;
+        }
+
+        return $this->copiarConfiguracion($configuracion, $fecha);
+    }
+
+    private function obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin)
+    {
+        if (isset($data['valor'])) {
+            return $data['valor'];
+        }
+
+        try {
+            $configuracionCompleta = EspacioConfiguracion::with('franjas_horarias')
+                ->find($idConfiguracion);
+
+            if (!$configuracionCompleta || $configuracionCompleta->franjas_horarias->isEmpty()) {
+                Log::warning('No se encontró configuración o franjas horarias', [
+                    'configuracion_id' => $idConfiguracion
+                ]);
+                return null;
+            }
+
+            // Convertir las horas a strings para comparación simple (sin zona horaria)
+            $horaInicioReserva = $horaInicio->format('H:i:s');
+            $horaFinReserva = $horaFin->format('H:i:s');
+
+            Log::info('Buscando franja para la reserva', [
+                'hora_inicio_reserva' => $horaInicioReserva,
+                'hora_fin_reserva' => $horaFinReserva,
+                'configuracion_id' => $idConfiguracion,
+                'total_franjas' => $configuracionCompleta->franjas_horarias->count()
+            ]);
+
+            $franjaCoincidente = $configuracionCompleta->franjas_horarias->first(function ($franja) use ($horaInicioReserva, $horaFinReserva) {
+                try {
+                    // Manejar diferentes formatos de hora que puedan venir de la base de datos
+                    $franjaInicioStr = null;
+                    $franjaFinStr = null;
+
+                    // Si hora_inicio es un objeto Carbon/DateTime
+                    if ($franja->hora_inicio instanceof \Carbon\Carbon) {
+                        $franjaInicioStr = $franja->hora_inicio->format('H:i:s');
+                    } elseif ($franja->hora_inicio instanceof \DateTime) {
+                        $franjaInicioStr = $franja->hora_inicio->format('H:i:s');
+                    } else {
+                        // Si es una cadena, intentar varios formatos
+                        $franjaInicioStr = $franja->hora_inicio;
+                    }
+
+                    if ($franja->hora_fin instanceof \Carbon\Carbon) {
+                        $franjaFinStr = $franja->hora_fin->format('H:i:s');
+                    } elseif ($franja->hora_fin instanceof \DateTime) {
+                        $franjaFinStr = $franja->hora_fin->format('H:i:s');
+                    } else {
+                        $franjaFinStr = $franja->hora_fin;
+                    }
+
+                    // Normalizar el formato de hora a H:i:s
+                    if (strlen($franjaInicioStr) === 5) { // formato H:i
+                        $franjaInicioStr .= ':00';
+                    }
+                    if (strlen($franjaFinStr) === 5) { // formato H:i
+                        $franjaFinStr .= ':00';
+                    }
+
+                    // Comparación simple de strings de tiempo
+                    $coincide = $horaInicioReserva >= $franjaInicioStr && $horaFinReserva <= $franjaFinStr;
+
+                    Log::info('Comparando franja', [
+                        'franja_id' => $franja->id,
+                        'franja_inicio' => $franjaInicioStr,
+                        'franja_fin' => $franjaFinStr,
+                        'reserva_inicio' => $horaInicioReserva,
+                        'reserva_fin' => $horaFinReserva,
+                        'coincide' => $coincide,
+                        'valor_franja' => $franja->valor
+                    ]);
+
+                    return $coincide;
+                } catch (Exception $e) {
+                    Log::warning('Error al procesar franja para valor', [
+                        'franja_id' => $franja->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
+                    ]);
+                    return false;
+                }
+            });
+
+            $valor = $franjaCoincidente ? $franjaCoincidente->valor : null;
+            
+            Log::info('Resultado de búsqueda de valor', [
+                'franja_encontrada' => $franjaCoincidente ? $franjaCoincidente->id : null,
+                'valor_obtenido' => $valor
+            ]);
+
+            return $valor;
+        } catch (Exception $e) {
+            Log::error('Error al obtener valor de franja', [
+                'configuracion_id' => $idConfiguracion,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return null;
+        }
+    }
+
+    private function construirNombreCompleto($persona)
+    {
+        return trim(
+            ($persona->primer_nombre ?? '') . ' ' .
+                ($persona->segundo_nombre ?? '') . ' ' .
+                ($persona->primer_apellido ?? '') . ' ' .
+                ($persona->segundo_apellido ?? '')
+        );
+    }
+
+    private function copiarConfiguracion($configuracionOriginal, $fecha)
+    {
+        try {
+            $nuevaConfiguracion = EspacioConfiguracion::create([
+                'id_espacio' => $configuracionOriginal['id_espacio'],
+                'fecha' => $fecha,
+                'dia_semana' => null,
+                'minutos_uso' => $configuracionOriginal['minutos_uso'],
+                'dias_previos_apertura' => $configuracionOriginal['dias_previos_apertura'],
+                'hora_apertura' => $configuracionOriginal['hora_apertura'],
+                'tiempo_cancelacion' => $configuracionOriginal['tiempo_cancelacion'],
+            ]);
+
+            $this->copiarFranjasHorarias($configuracionOriginal['franjas_horarias'], $nuevaConfiguracion->id);
+            return $nuevaConfiguracion->id;
+        } catch (Throwable $th) {
+            Log::error('Error al copiar configuración', [
+                'error' => $th->getMessage(),
+                'configuracion_original_id' => $configuracionOriginal['id'] ?? null,
+                'fecha' => $fecha->toDateString()
+            ]);
+            throw new Exception('Error al copiar configuración: ' . $th->getMessage());
+        }
+    }
+
+    private function copiarFranjasHorarias($franjasOriginales, $nuevaConfiguracionId)
+    {
+        try {
+            foreach ($franjasOriginales as $franjaOriginal) {
+                FranjaHoraria::create([
+                    'id_config' => $nuevaConfiguracionId,
+                    'hora_inicio' => $franjaOriginal['hora_inicio'],
+                    'hora_fin' => $franjaOriginal['hora_fin'],
+                    'valor' => $franjaOriginal['valor'],
+                    'activa' => $franjaOriginal['activa'],
+                ]);
+            }
+        } catch (Throwable $th) {
+            Log::error('Error al copiar franjas horarias', [
+                'error' => $th->getMessage(),
+                'nueva_configuracion_id' => $nuevaConfiguracionId
+            ]);
+            throw new Exception('Error al copiar franjas horarias: ' . $th->getMessage());
+        }
     }
 }

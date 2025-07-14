@@ -61,11 +61,11 @@ return [
     |
     | Here you may specify the default timezone for your application, which
     | will be used by the PHP date and date-time functions. The timezone
-    | is set to "UTC" by default as it is suitable for most use cases.
+    | is set to "America/Bogota" for Colombia timezone.
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'America/Bogota'),
 
     /*
     |--------------------------------------------------------------------------
@@ -126,4 +126,5 @@ return [
     'url_pagos' => env('URL_PAGOS', 'https://test1.e-collect.com/app_express/api/'),
     'key_pagos' => env('KEY_PAGOS', 'e-collect'),
     'entity_code' => env('ENTITY_CODE', 10139),
+    'service_code' => env('SERVICE_CODE', 21000),
 ];

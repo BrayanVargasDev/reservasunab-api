@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Traits\ManageTimezone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Espacio extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, ManageTimezone;
 
     protected $table = 'espacios';
     protected $primaryKey = 'id';

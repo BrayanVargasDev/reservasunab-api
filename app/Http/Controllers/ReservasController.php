@@ -110,7 +110,35 @@ class ReservasController extends Controller
 
     public function store(StoreReservasRequest $request)
     {
-        //
+        try {
+            $data = $request->validated();
+
+            $reserva = $this->reserva_service->iniciarReserva($data);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $reserva,
+                    'message' => 'Reserva creada correctamente.',
+                ],
+                201,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al crear la reserva', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al crear la reserva',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
     }
 
     /**

@@ -22,7 +22,7 @@ return new class extends Migration
             $table->integer('dias_previos_apertura');
             $table->time('hora_apertura');
             $table->integer('tiempo_cancelacion');
-            $table->foreignId('creado_por')->constrained('usuarios', 'id_usuario');
+            $table->foreignId('creado_por')->nullable()->constrained('usuarios', 'id_usuario');
             $table->foreignId('eliminado_por')->nullable()->constrained('usuarios', 'id_usuario');
             $table->timestamp('creado_en')->useCurrent();
             $table->timestamp('actualizado_en')->useCurrent()->useCurrentOnUpdate();

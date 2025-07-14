@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\ManageTimezone;
 
 class Reservas extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, ManageTimezone;
 
     protected $table = 'reservas';
     protected $primaryKey = 'id';
@@ -19,22 +20,28 @@ class Reservas extends Model
     const DELETED_AT = 'eliminado_en';
 
     protected $fillable = [
-        'id_config',
+        'id_configuracion',
         'id_espacio',
+        'id_usuario',
+        'fecha',
+        'estado',
+        'hora_inicio',
+        'hora_fin',
+        'check_in',
         'codigo',
         'valor',
-        'id_usuario_reserva',
-        'token_checkin',
-        'estado',
         'observaciones',
     ];
 
     protected $casts = [
-        'id_config' => 'integer',
+        'id_configuracion' => 'integer',
         'id_espacio' => 'integer',
         'valor' => 'float',
-        'id_usuario_reserva' => 'integer',
-        'token_checkin' => 'string',
+        'id_usuario' => 'integer',
+        'fecha' => 'datetime',
+        'hora_inicio' => 'string',
+        'hora_fin' => 'string',
+        'check_in' => 'boolean',
         'estado' => 'string',
         'observaciones' => 'string',
         'creado_en' => 'datetime',
@@ -58,6 +65,6 @@ class Reservas extends Model
 
     public function usuarioReserva()
     {
-        return $this->belongsTo(Usuario::class, 'id_usuario_reserva');
+        return $this->belongsTo(Usuario::class, 'id_usuario');
     }
 }

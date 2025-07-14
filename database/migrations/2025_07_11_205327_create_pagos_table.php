@@ -11,13 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
+
+        // de la pasarela los estados son: creado, pendiente, completado, fallido, cancelado
         Schema::create('pagos', function (Blueprint $table) {
-            $table->id();
-            $table->unsignedBigInteger('ticket_id');
-            $table->string('codigo')->unique();
-            $table->decimal('valor', 15, 2);
-            $table->string('estado');
-            $table->timestamps();
+            $table->ulid('codigo', 10)->primary();
+            $table->unsignedBigInteger('ticket_id')->nullable();
+            $table->foreignId('id_reserva')->constrained('reservas');
+            $table->decimal('valor', 15, 2)->default(0.00);
+            $table->string('estado')->default('inicial');
+            $table->string('url_ecollect')->nullable();
+            $table->timestamp('creado_en')->useCurrent();
+            $table->timestamp('actualizado_en')->useCurrent()->nullable();
+            $table->softDeletes('eliminado_en');
+        });
+
+        //Indice para el ticket_id
+        Schema::table('pagos', function (Blueprint $table) {
+            $table->index('ticket_id');
+            $table->index('estado');
+            $table->index('creado_en');
         });
     }
 
