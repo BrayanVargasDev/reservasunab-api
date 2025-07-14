@@ -60,7 +60,7 @@ class Reservas extends Model
 
     public function configuracion()
     {
-        return $this->belongsTo(EspacioConfiguracion::class, 'id_config');
+        return $this->belongsTo(EspacioConfiguracion::class, 'id_configuracion', 'id');
     }
 
     public function usuarioReserva()

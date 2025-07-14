@@ -14,7 +14,7 @@ return new class extends Migration
 
         // de la pasarela los estados son: creado, pendiente, completado, fallido, cancelado
         Schema::create('pagos', function (Blueprint $table) {
-            $table->ulid('codigo', 10)->primary();
+            $table->ulid('codigo', 26)->primary();
             $table->unsignedBigInteger('ticket_id')->nullable();
             $table->foreignId('id_reserva')->constrained('reservas');
             $table->decimal('valor', 15, 2)->default(0.00);

@@ -12,11 +12,16 @@ class Pago extends Model
     use HasFactory, SoftDeletes, HasUlids;
 
     protected $table = 'pagos';
-    protected $primaryKey = 'id_pago';
+    protected $primaryKey = 'codigo';
     public $incrementing = false;
     protected $keyType = 'ulid';
 
+    const CREATED_AT = 'creado_en';
+    const UPDATED_AT = 'actualizado_en';
+    const DELETED_AT = 'eliminado_en';
+
     protected $fillable = [
+        'id_reserva',
         'ticket_id',
         'valor',
         'estado',

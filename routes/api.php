@@ -138,6 +138,10 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/', [SharedController::class, 'grupos']);
         Route::get('/{grupo}', [SharedController::class, 'grupo']);
     });
+
+    Route::group(['prefix' => 'pagos'], function () {
+        Route::post('/reservas', [PagoController::class, 'reservas']);
+    });
 });
 
 Route::post('/ecollect', [PagoController::class, 'ecollect']);

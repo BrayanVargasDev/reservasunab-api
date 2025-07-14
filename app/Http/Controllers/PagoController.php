@@ -5,26 +5,59 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StorePagoRequest;
 use App\Http\Requests\UpdatePagoRequest;
 use App\Models\Pago;
+use App\Services\PagoService;
+use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Redis;
 
 class PagoController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
+
+    private $pago_service;
+
+    public function __construct(PagoService $pago_service)
+    {
+        $this->pago_service = $pago_service;
+    }
+
     public function index()
     {
         //
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
+    public function reservas(Request $request)
     {
-        //
+        try {
+            // $this->authorize('crearDesdeDashboard', Espacio::class);
+            $data = $request->all();
+            $pago = $this->pago_service->iniciarTransaccionDePago($data['id_reserva']);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $pago,
+                    'message' => 'Pago creado correctamente.',
+                ],
+                201,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al crear el pago.', [
+                'espacio_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' =>
+                    'Ocurrió un error al crear el el pago',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
     }
 
     /**
