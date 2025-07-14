@@ -98,6 +98,10 @@ class PagoService
 
             $responseData = $response->json();
 
+            Log::debug([
+                'response' => $responseData,
+            ]);
+
             if (isset($responseData['ReturnCode']) && $responseData['ReturnCode'] === 'FAIL_APIEXPIREDSESSION') {
                 $this->getSessionToken();
                 $data['SessionToken'] = $this->session_token;
@@ -106,10 +110,6 @@ class PagoService
             $pago->ticket_id = $responseData['TicketId'];
             $pago->url_ecollect = $responseData['eCollectUrl'];
             $pago->estado = 'pendiente';
-
-            Log::debug([
-                'pago' => $pago,
-            ]);
 
             $pago->save();
 
