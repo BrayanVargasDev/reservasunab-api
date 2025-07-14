@@ -98,14 +98,17 @@ class SharedController extends Controller
         }
     }
 
-    public function grupos()
+    public function grupos(Request $request)
     {
         try {
-            $grupos = $this->shared_service->get_grupos();
-            return response()->json([
-                'status' => 'success',
-                'data' => $grupos
-            ])->setStatusCode(200);
+            $search = $request->query('search', '');
+            $per_page = $request->query('per_page', null);
+
+            $grupos = $this->shared_service->get_grupos($per_page, $search);
+            return $per_page ? response()->json($grupos, 200) : response()->json([
+                'success' => true,
+                'data' => $grupos,
+            ], 200);
         } catch (Exception $e) {
             Log::error('Error al obtener grupos', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
@@ -116,9 +119,148 @@ class SharedController extends Controller
         }
     }
 
-    public function crearGrupo() {}
+    public function grupo($id)
+    {
+        try {
+            $grupo = $this->shared_service->obtener_grupo($id);
+            return response()->json([
+                'success' => true,
+                'data' => $grupo,
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al obtener grupo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
-    public function eliminarGrupo() {}
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener el grupo',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 
-    public function actualizarGrupo() {}
+    public function crearGrupo(Request $request)
+    {
+        $validated_data = $request->validate([
+            'nombre' => 'required|string|max:255',
+        ]);
+
+        try {
+            $grupo = $this->shared_service->create_grupo($validated_data);
+            return response()->json([
+                'success' => true,
+                'data' => $grupo,
+            ], 201);
+        } catch (Exception $e) {
+            Log::error('Error al crear grupo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al crear el grupo',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    public function actualizarGrupo(Request $request, $id)
+    {
+        $validated_data = $request->validate([
+            'nombre' => 'required|string|max:255',
+        ]);
+
+        try {
+            $grupo = $this->shared_service->actualizar_grupo($id, $validated_data);
+            return response()->json([
+                'success' => true,
+                'data' => $grupo,
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al actualizar grupo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al actualizar el grupo',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    public function eliminarGrupo($id)
+    {
+        try {
+            $grupo = $this->shared_service->eliminar_grupo($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $grupo,
+                'message' => 'Grupo eliminado correctamente',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al eliminar grupo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al eliminar el grupo',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    public function restaurarGrupo($id)
+    {
+        try {
+            $grupo = $this->shared_service->restore_grupo($id);
+            return response()->json([
+                'success' => true,
+                'data' => $grupo,
+                'message' => 'Grupo restaurado correctamente',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al restaurar grupo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al restaurar el grupo',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }
