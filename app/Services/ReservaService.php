@@ -300,11 +300,15 @@ class ReservaService
                     $ahora = Carbon::now();
                     $reservaPasada = $fechaHoraReserva->addMinutes(10)->lessThan($ahora);
 
+                    // Aplicar descuento por tipo de usuario al valor mostrado
+                    $valorConDescuento = $this->aplicarDescuentoPorTipoUsuario($franja->valor, $espacio->id);
+
                     $slot = [
                         'hora_inicio' => $horaInicioSlot,
                         'hora_fin' => $horaFinSlotFormatted,
                         'disponible' => $disponible,
-                        'valor' => $franja->valor,
+                        'valor' => $valorConDescuento,
+                        'valor_base' => $franja->valor, // Mantener el valor base para referencia
                         'franja_id' => $franja->id, // Agregar ID de franja para debugging
                         'mi_reserva' => $miReserva,
                         'reserva_pasada' => $reservaPasada,
@@ -448,7 +452,7 @@ class ReservaService
                     'fecha' => $fecha->format('Y-m-d'),
                     'hora_inicio' => $horaInicio->format('h:i A'),
                     'valor' => $valor,
-                    'estado' => $estado,
+                    'estado' => $valor > 0 ? 'inicial' : $estado,
                     'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
                     'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
                     'agrega_jugadores' => false
@@ -559,9 +563,16 @@ class ReservaService
                 }
             });
 
-            $valor = $franjaCoincidente ? $franjaCoincidente->valor : null;
+            $valorBase = $franjaCoincidente ? $franjaCoincidente->valor : null;
 
-            return $valor;
+            if ($valorBase === null) {
+                return null;
+            }
+
+            // Aplicar descuento por tipo de usuario si existe
+            $valorFinal = $this->aplicarDescuentoPorTipoUsuario($valorBase, $configuracionCompleta->id_espacio);
+
+            return $valorFinal;
         } catch (Exception $e) {
             Log::error('Error al obtener valor de franja', [
                 'configuracion_id' => $idConfiguracion,
@@ -569,6 +580,42 @@ class ReservaService
                 'trace' => $e->getTraceAsString()
             ]);
             return null;
+        }
+    }
+
+    private function aplicarDescuentoPorTipoUsuario($valorBase, $espacioId)
+    {
+        try {
+            $usuario = Auth::user();
+
+            if (!$usuario || !$usuario->tipo_usuario) {
+                return $valorBase;
+            }
+
+            $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereNull('eliminado_en')
+                ->first();
+
+            if (!$configTipoUsuario || !$configTipoUsuario->porcentaje_descuento) {
+                return $valorBase;
+            }
+
+            $porcentajeDescuento = $configTipoUsuario->porcentaje_descuento;
+            $descuento = ($valorBase * $porcentajeDescuento) / 100;
+            $valorFinal = $valorBase - $descuento;
+
+            $valorFinal = max(0, $valorFinal);
+            return $valorFinal;
+        } catch (Exception $e) {
+            Log::error('Error al aplicar descuento por tipo de usuario', [
+                'error' => $e->getMessage(),
+                'espacio_id' => $espacioId,
+                'valor_base' => $valorBase,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return $valorBase;
         }
     }
 
@@ -833,5 +880,62 @@ class ReservaService
                 ];
             })->toArray()
         ];
+    }
+
+    public function getInfoDescuentoUsuario(int $espacioId, int $usuarioId = null): array
+    {
+        try {
+            $usuario = $usuarioId ? \App\Models\Usuario::find($usuarioId) : Auth::user();
+
+            if (!$usuario || !$usuario->tipo_usuario) {
+                return [
+                    'tiene_descuento' => false,
+                    'porcentaje_descuento' => 0,
+                    'tipo_usuario' => null,
+                    'mensaje' => 'Usuario no encontrado o sin tipo de usuario'
+                ];
+            }
+
+            $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereNull('eliminado_en')
+                ->first();
+
+            if (!$configTipoUsuario) {
+                return [
+                    'tiene_descuento' => false,
+                    'porcentaje_descuento' => 0,
+                    'tipo_usuario' => $usuario->tipo_usuario,
+                    'mensaje' => "No hay configuración para usuarios tipo '{$usuario->tipo_usuario}' en este espacio"
+                ];
+            }
+
+            $porcentajeDescuento = $configTipoUsuario->porcentaje_descuento ?? 0;
+
+            return [
+                'tiene_descuento' => $porcentajeDescuento > 0,
+                'porcentaje_descuento' => $porcentajeDescuento,
+                'tipo_usuario' => $usuario->tipo_usuario,
+                'mensaje' => $porcentajeDescuento > 0
+                    ? "Descuento del {$porcentajeDescuento}% aplicable para usuarios {$usuario->tipo_usuario}"
+                    : "Sin descuento para usuarios {$usuario->tipo_usuario}",
+                'retraso_reserva' => $configTipoUsuario->retraso_reserva ?? 0
+            ];
+        } catch (Exception $e) {
+            Log::error('Error al obtener información de descuento', [
+                'error' => $e->getMessage(),
+                'espacio_id' => $espacioId,
+                'usuario_id' => $usuarioId,
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'tiene_descuento' => false,
+                'porcentaje_descuento' => 0,
+                'tipo_usuario' => null,
+                'mensaje' => 'Error al obtener información de descuento',
+                'error' => $e->getMessage()
+            ];
+        }
     }
 }
