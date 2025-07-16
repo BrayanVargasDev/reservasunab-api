@@ -12,6 +12,7 @@ use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\Uid\Ulid;
 use Throwable;
 
 class ReservaService
@@ -413,6 +414,7 @@ class ReservaService
                     'hora_inicio' => $horaInicio->format('H:i:s'),
                     'hora_fin' => $horaFin->format('H:i:s'),
                     'check_in' => false,
+                    'codigo' => Ulid::generate(),
                 ]);
 
                 $reserva->load([

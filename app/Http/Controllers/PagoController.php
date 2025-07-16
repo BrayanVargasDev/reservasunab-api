@@ -103,4 +103,35 @@ class PagoController extends Controller
             'request' => $request->all(),
         ]);
     }
+
+    public function info(Request $request)
+    {
+        try {
+            $data = $request->all();
+            $pago = $this->pago_service->get_info_pago($data['codigo']);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $pago,
+                    'message' => 'Información del pago obtenida correctamente.',
+                ],
+                200,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al obtener la información del pago.', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener la información del pago.',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }

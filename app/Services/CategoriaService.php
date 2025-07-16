@@ -11,7 +11,11 @@ class CategoriaService
 {
     public function getAll($perPage = null, $search = '')
     {
-        $query = Categoria::with(['grupo'])
+        $query = Categoria::with(['grupo' => function ($query) use ($perPage) {
+            if ($perPage) {
+                $query->withTrashed();
+            }
+        }])
             ->when($perPage, function ($query) {
                 $query->withTrashed();
             })

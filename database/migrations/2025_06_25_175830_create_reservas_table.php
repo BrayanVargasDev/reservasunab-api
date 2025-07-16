@@ -23,7 +23,7 @@ return new class extends Migration
             $table->time('hora_inicio');
             $table->time('hora_fin');
             $table->boolean('check_in')->default(false);
-
+            $table->ulid('codigo')->unique();
             $table->timestamp('creado_en')->useCurrent();
             $table->timestamp('actualizado_en')->useCurrent()->nullable();
             $table->softDeletes('eliminado_en');

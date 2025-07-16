@@ -145,6 +145,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
 
     Route::group(['prefix' => 'pagos'], function () {
         Route::post('/reservas', [PagoController::class, 'reservas']);
+        Route::get('/info', [PagoController::class, 'info']);
     });
 });
 
