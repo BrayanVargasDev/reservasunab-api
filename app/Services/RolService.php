@@ -24,9 +24,9 @@ class RolService
     {
         $cacheKey = self::CACHE_KEY_PREFIX . 'all';
 
-        return Cache::remember($cacheKey, self::CACHE_TTL, function () {
+        // return Cache::remember($cacheKey, self::CACHE_TTL, function () {
             return Rol::orderBy('id_rol')->get();
-        });
+        // });
     }
 
     public function getAllWithPermisos(int $perPage = 10)
