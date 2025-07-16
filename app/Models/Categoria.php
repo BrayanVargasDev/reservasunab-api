@@ -21,9 +21,17 @@ class Categoria extends Model
         'nombre',
         'id_grupo',
         'creado_por',
+        'reservas_estudiante',
+        'reservas_administrativo',
+        'reservas_egresado',
+        'reservas_externo',
     ];
 
     protected $casts = [
+        'reservas_estudiante' => 'integer',
+        'reservas_administrativo' => 'integer',
+        'reservas_egresado' => 'integer',
+        'reservas_externo' => 'integer',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',

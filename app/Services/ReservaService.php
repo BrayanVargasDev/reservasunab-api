@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Espacio;
 use App\Models\EspacioConfiguracion;
+use App\Models\EspacioTipoUsuarioConfig;
 use App\Models\FranjaHoraria;
 use App\Models\Reservas;
 use App\Traits\ManageTimezone;
@@ -133,6 +134,7 @@ class ReservaService
                 'sede:id,nombre',
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
+                'tipo_usuario_config',
                 'novedades' => function ($q) use ($fechaConsulta) {
                     $q->whereDate('fecha', $fechaConsulta);
                 }
@@ -184,7 +186,7 @@ class ReservaService
             ->whereDate('fecha', $fechaConsulta)
             ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
             ->whereNull('eliminado_en')
-            ->select('hora_inicio', 'hora_fin', 'estado')
+            ->select('hora_inicio', 'hora_fin', 'estado', 'id_usuario')
             ->get();
 
         if ($franjasHorarias->isEmpty()) {
@@ -272,14 +274,21 @@ class ReservaService
                     });
 
                     $disponible = true;
-                    $estilosColor = '#00a1cf';
-                    $textColor = '#ffffff';
+                    $usuarioActual = Auth::user();
+                    $fechaHoraReserva = null;
+                    $reservaPasada = false;
 
                     if ($reservaCoincidente) {
                         $disponible = false;
-                        $estilosColor = '#ce013f';
-                        $textColor = '#ffffff';
                     }
+
+                    $fechaHoraReserva = Carbon::createFromFormat(
+                        'Y-m-d H:i:s',
+                        $fechaConsulta . ' ' . Carbon::createFromFormat('h:i A', $horaInicioSlot)->format('H:i:s'),
+                        config('app.timezone')
+                    );
+                    $ahora = Carbon::now();
+                    $reservaPasada = $fechaHoraReserva->addMinutes(10)->lessThan($ahora);
 
                     $slot = [
                         'hora_inicio' => $horaInicioSlot,
@@ -287,39 +296,16 @@ class ReservaService
                         'disponible' => $disponible,
                         'valor' => $franja->valor,
                         'franja_id' => $franja->id, // Agregar ID de franja para debugging
-                        'estilos' => [
-                            'background_color' => $estilosColor,
-                            'text_color' =>  $textColor,
-                        ],
-                        'novedad' => null,
-                        'reserva' => $reservaCoincidente ? [
-                            'estado' => $reservaCoincidente->estado,
-                            'hora_inicio' => $this->createCarbonSafely($reservaCoincidente->hora_inicio, 'H:i:s')?->format('h:i A') ?? $reservaCoincidente->hora_inicio,
-                            'hora_fin' => $this->createCarbonSafely($reservaCoincidente->hora_fin, 'H:i:s')?->format('h:i A') ?? $reservaCoincidente->hora_fin
-                        ] : null
+                        'mi_reserva' => $reservaCoincidente ? ($usuarioActual && $reservaCoincidente->id_usuario === $usuarioActual->id_usuario) : false,
+                        'reserva_pasada' => $reservaPasada,
+                        'novedad' => false,
+                        'reservada' => $reservaCoincidente ? true : false,
                     ];
 
                     if ($novedadCoincidente) {
-                        $slot['novedad'] = [
-                            'id' => $novedadCoincidente->id,
-                            'descripcion' => $novedadCoincidente->descripcion,
-                            'tipo' => $novedadCoincidente->tipo,
-                            'hora_inicio' => $this->createCarbonSafely($novedadCoincidente->hora_inicio, 'H:i:s')?->format('h:i A') ?? $novedadCoincidente->hora_inicio,
-                            'hora_fin' => $this->createCarbonSafely($novedadCoincidente->hora_fin, 'H:i:s')?->format('h:i A') ?? $novedadCoincidente->hora_fin
-                        ];
-
-                        if ($novedadCoincidente->tipo === 'mantenimiento' || $novedadCoincidente->tipo === 'cerrado') {
-                            $slot['disponible'] = false;
-                            $slot['estilos'] = [
-                                'background_color' => '#edeef1',
-                                'text_color' => '#757f8e',
-                            ];
-                        } else {
-                            $slot['estilos'] = [
-                                'background_color' => '#ffc408',
-                                'text_color' => '#170f04',
-                            ];
-                        }
+                        $slot['novedad'] = true;
+                        $slot['disponible'] = false;
+                        $slot['novedad_desc'] = $novedadCoincidente->tipo;
                     }
 
                     $disponibilidad[] = $slot;
@@ -355,6 +341,9 @@ class ReservaService
                     throw new Exception('Usuario no autenticado.');
                 }
 
+                $this->validarTipoUsuarioParaReserva($data['base']['id'], $usuario->tipo_usuario);
+
+                $this->validarTiempoAperturaReserva($data['base']['id'], $usuario->tipo_usuario, $fecha);
 
                 $reservaExistenteUsuario = $this->usuarioTieneReservaEnFecha($usuario->id_usuario, $fecha);
 
@@ -451,7 +440,7 @@ class ReservaService
                 'error' => $th->getMessage(),
                 'trace' => $th->getTraceAsString()
             ]);
-            throw new Exception('Error al iniciar la reserva: ' . $th->getMessage());
+            throw new Exception($th->getMessage());
         }
     }
 
@@ -647,6 +636,76 @@ class ReservaService
         }
 
         return $query->get();
+    }
+
+    private function validarTipoUsuarioParaReserva(int $espacioId, string $tipoUsuario): void
+    {
+        $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+            ->where('tipo_usuario', $tipoUsuario)
+            ->whereNull('eliminado_en')
+            ->first();
+
+        if (!$configTipoUsuario) {
+            throw new Exception("Los usuarios <strong>{$tipoUsuario}s</strong> no tienen permitido reservar este espacio.");
+        }
+    }
+
+    private function validarTiempoAperturaReserva(int $espacioId, string $tipoUsuario, Carbon $fechaReserva): void
+    {
+        $configuracionEspacio = $this->obtenerConfiguracionEspacio($espacioId, $fechaReserva);
+
+        if (!$configuracionEspacio) {
+            throw new Exception("No se encontró configuración para este espacio.");
+        }
+
+        $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+            ->where('tipo_usuario', $tipoUsuario)
+            ->whereNull('eliminado_en')
+            ->first();
+
+        $minutosRetraso = $configTipoUsuario ? $configTipoUsuario->retraso_reserva : 0;
+
+        $diasPreviosApertura = $configuracionEspacio->dias_previos_apertura ?? self::DIAS_PREVIOS_APERTURA_DEFAULT;
+        $horaApertura = $configuracionEspacio->hora_apertura ?? self::HORA_APERTURA_DEFAULT;
+
+        $fechaAperturaReserva = $fechaReserva->copy()->subDays($diasPreviosApertura);
+
+        $horaAperturaConRetraso = Carbon::createFromFormat('H:i', $horaApertura)
+            ->addMinutes($minutosRetraso);
+
+        $fechaHoraApertura = $fechaAperturaReserva->copy()
+            ->setTime($horaAperturaConRetraso->hour, $horaAperturaConRetraso->minute, 0);
+
+        $ahora = Carbon::now();
+
+        if ($ahora->lessThan($fechaHoraApertura)) {
+            $fechaFormateada = $fechaHoraApertura->format('d/m/Y');
+            $horaFormateada = $fechaHoraApertura->format('h:i A');
+
+            throw new Exception(
+                "Las reservas para el {$fechaReserva->format('d/m/Y')} " .
+                    "estarán disponibles a partir del {$fechaFormateada} a las {$horaFormateada}."
+            );
+        }
+    }
+
+    private function obtenerConfiguracionEspacio(int $espacioId, Carbon $fecha)
+    {
+        $fechaConsulta = $fecha->toDateString();
+        $diaSemana = $fecha->dayOfWeekIso;
+
+        $configuracion = EspacioConfiguracion::where('id_espacio', $espacioId)
+            ->whereDate('fecha', $fechaConsulta)
+            ->first();
+
+        if (!$configuracion) {
+            $configuracion = EspacioConfiguracion::where('id_espacio', $espacioId)
+                ->whereNull('fecha')
+                ->where('dia_semana', $diaSemana)
+                ->first();
+        }
+
+        return $configuracion;
     }
 
     public function getReservaById(int $id): Reservas
