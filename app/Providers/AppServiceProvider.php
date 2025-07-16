@@ -70,6 +70,10 @@ class AppServiceProvider extends ServiceProvider
                         'activo' => true,
                         // 'id_rol' => 3,
                     ]);
+
+                    // Asignar el permiso de reservar a todos los usuarios nuevos
+                    $user->asignarPermisoReservar();
+
                     Log::info('New SAML user created', ['user_id' => $user->id_usuario, 'email' => $email]);
                 } else {
                     $user->update([

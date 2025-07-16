@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Permiso;
 use App\Models\Persona;
 use App\Models\Usuario;
 use Exception;
@@ -129,6 +130,9 @@ class AuthController extends Controller
                 'segundo_apellido' => implode(' ', array_slice(explode(' ', $datosNombre['apellido']), 1)) ?? '',
                 'celular' => $request->celular,
             ]);
+
+            // Asignar el permiso de reservar a todos los usuarios nuevos
+            $usuario->asignarPermisoReservar();
 
             DB::commit();
             return response()->json([

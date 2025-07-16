@@ -52,6 +52,10 @@ class CategoriaController extends Controller
         $validated_data = $request->validate([
             'nombre' => 'required|string|max:255',
             'id_grupo' => 'sometimes|integer|exists:grupos,id',
+            'reservas_estudiante' => 'required|integer|min:1',
+            'reservas_administrativo' => 'required|integer|min:1',
+            'reservas_egresado' => 'required|integer|min:1',
+            'reservas_externo' => 'required|integer|min:1',
         ]);
 
         try {
@@ -83,6 +87,10 @@ class CategoriaController extends Controller
         $validated_data = $request->validate([
             'nombre' => 'required|string|max:255',
             'id_grupo' => 'sometimes|integer|exists:grupos,id',
+            'reservas_estudiante' => 'sometimes|integer|min:1',
+            'reservas_administrativo' => 'sometimes|integer|min:1',
+            'reservas_egresado' => 'sometimes|integer|min:1',
+            'reservas_externo' => 'sometimes|integer|min:1',
         ]);
 
         try {

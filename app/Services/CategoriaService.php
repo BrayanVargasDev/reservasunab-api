@@ -35,6 +35,10 @@ class CategoriaService
                 'nombre' => $data['nombre'],
                 'id_grupo' => $data['id_grupo'],
                 'creado_por' => Auth::id(),
+                'reservas_estudiante' => $data['reservas_estudiante'],
+                'reservas_administrativo' => $data['reservas_administrativo'],
+                'reservas_egresado' => $data['reservas_egresado'],
+                'reservas_externo' => $data['reservas_externo'],
             ]);
             DB::commit();
             return $categoria;
@@ -53,6 +57,10 @@ class CategoriaService
                 'nombre' => $data['nombre'],
                 'id_grupo' => $data['id_grupo'],
                 'actualizado_por' => Auth::id(),
+                'reservas_estudiante' => $data['reservas_estudiante'],
+                'reservas_administrativo' => $data['reservas_administrativo'],
+                'reservas_egresado' => $data['reservas_egresado'],
+                'reservas_externo' => $data['reservas_externo'],
             ]);
             DB::commit();
             return $categoria;

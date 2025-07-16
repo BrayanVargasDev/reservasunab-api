@@ -12,10 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('categorias', function (Blueprint $table) {
-            $table->integer('reservas_estudiante')->default(0)->after('id_grupo');
-            $table->integer('reservas_administrativo')->default(0)->after('reservas_estudiante');
-            $table->integer('reservas_egresado')->default(0)->after('reservas_administrativo');
-            $table->integer('reservas_externo')->default(0)->after('reservas_egresado');
+            $table->integer('reservas_estudiante')->default(1);
+            $table->integer('reservas_administrativo')->default(1);
+            $table->integer('reservas_egresado')->default(1);
+            $table->integer('reservas_externo')->default(1);
         });
     }
 

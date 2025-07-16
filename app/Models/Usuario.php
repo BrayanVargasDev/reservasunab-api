@@ -131,4 +131,29 @@ class Usuario extends Authenticatable
 
         return !empty(array_intersect($codigosPermisos, $permisosUsuario));
     }
+
+    /**
+     * Asigna el permiso de reservar a este usuario
+     *
+     * @return bool Retorna true si se asignó correctamente, false si no se encontró el permiso
+     */
+    public function asignarPermisoReservar(): bool
+    {
+        $permisoReservar = Permiso::where('codigo', 'reservar')->first();
+
+        if ($permisoReservar) {
+            // Verificar si ya tiene el permiso para evitar duplicados
+            if (!$this->permisosDirectos()->where('id_permiso', $permisoReservar->id_permiso)->exists()) {
+                $this->permisosDirectos()->attach($permisoReservar->id_permiso);
+            }
+            return true;
+        }
+
+        \Illuminate\Support\Facades\Log::warning('No se encontró el permiso con código "reservar"', [
+            'usuario_id' => $this->id_usuario,
+            'email' => $this->email
+        ]);
+
+        return false;
+    }
 }

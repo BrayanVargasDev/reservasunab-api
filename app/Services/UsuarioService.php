@@ -373,7 +373,12 @@ class UsuarioService
             $dataUsuario['rol'] = $data['rol'];
         }
 
-        return Usuario::create($dataUsuario);
+        $usuario = Usuario::create($dataUsuario);
+
+        // Asignar el permiso de reservar a todos los usuarios nuevos
+        $usuario->asignarPermisoReservar();
+
+        return $usuario;
     }
 
     private function handlePersonaUpdate(Usuario $usuario, array $data): void
