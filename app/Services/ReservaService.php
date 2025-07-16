@@ -189,6 +189,8 @@ class ReservaService
             ->select('hora_inicio', 'hora_fin', 'estado', 'id_usuario')
             ->get();
 
+        $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
+
         if ($franjasHorarias->isEmpty()) {
             Log::warning('No hay franjas horarias configuradas para el espacio', [
                 'espacio_id' => $espacio->id,
@@ -224,7 +226,7 @@ class ReservaService
 
                     $horaFinSlotFormatted = $horaFinSlot->format('h:i A');
 
-                    $reservaCoincidente = $reservasExistentes->first(function ($reserva) use ($horaActual, $horaFinSlot) {
+                    $reservasCoincidentes = $reservasExistentes->filter(function ($reserva) use ($horaActual, $horaFinSlot) {
                         try {
                             $reservaInicio = $this->createCarbonSafely($reserva->hora_inicio, 'H:i:s');
                             $reservaFin = $this->createCarbonSafely($reserva->hora_fin, 'H:i:s');
@@ -247,6 +249,14 @@ class ReservaService
                             return false;
                         }
                     });
+
+                    $numeroReservasEnSlot = $reservasCoincidentes->count();
+
+                    $usuarioActual = Auth::user();
+                    $miReserva = false;
+                    if ($usuarioActual) {
+                        $miReserva = $reservasCoincidentes->contains('id_usuario', $usuarioActual->id_usuario);
+                    }
 
                     $novedadCoincidente = $novedades->first(function ($novedad) use ($horaActual, $horaFinSlot) {
                         try {
@@ -278,7 +288,7 @@ class ReservaService
                     $fechaHoraReserva = null;
                     $reservaPasada = false;
 
-                    if ($reservaCoincidente) {
+                    if ($numeroReservasEnSlot >= $reservasSimultaneasPermitidas) {
                         $disponible = false;
                     }
 
@@ -296,10 +306,12 @@ class ReservaService
                         'disponible' => $disponible,
                         'valor' => $franja->valor,
                         'franja_id' => $franja->id, // Agregar ID de franja para debugging
-                        'mi_reserva' => $reservaCoincidente ? ($usuarioActual && $reservaCoincidente->id_usuario === $usuarioActual->id_usuario) : false,
+                        'mi_reserva' => $miReserva,
                         'reserva_pasada' => $reservaPasada,
                         'novedad' => false,
-                        'reservada' => $reservaCoincidente ? true : false,
+                        'reservada' => $numeroReservasEnSlot > 0,
+                        'reservas_actuales' => $numeroReservasEnSlot,
+                        'reservas_maximas' => $reservasSimultaneasPermitidas,
                     ];
 
                     if ($novedadCoincidente) {
@@ -345,13 +357,14 @@ class ReservaService
 
                 $this->validarTiempoAperturaReserva($data['base']['id'], $usuario->tipo_usuario, $fecha);
 
-                $reservaExistenteUsuario = $this->usuarioTieneReservaEnFecha($usuario->id_usuario, $fecha);
+                $this->validarLimitesReservasPorCategoria($data['base']['id'], $usuario->id_usuario, $usuario->tipo_usuario, $fecha);
 
-                if ($reservaExistenteUsuario) {
-                    $nombreEspacioExistente = $reservaExistenteUsuario->espacio->nombre ?? 'Espacio desconocido';
-                    throw new Exception("Ya tienes una reserva para esta fecha en '{$nombreEspacioExistente}'. Solo se permite una reserva por día por usuario.");
+                $espacio = Espacio::find($data['base']['id']);
+                if (!$espacio) {
+                    throw new Exception('Espacio no encontrado.');
                 }
 
+                $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
 
                 $reservasConflicto = Reservas::where('id_espacio', $data['base']['id'])
                     ->whereDate('fecha', $fecha)
@@ -371,22 +384,32 @@ class ReservaService
                     })
                     ->get();
 
-                if ($reservasConflicto->isNotEmpty()) {
-                    Log::warning('Conflicto de reservas detectado', [
+                $numeroReservasEnHorario = $reservasConflicto->count();
+
+                if ($numeroReservasEnHorario >= $reservasSimultaneasPermitidas) {
+                    Log::warning('Límite de reservas simultáneas alcanzado', [
                         'espacio_id' => $data['base']['id'],
                         'fecha' => $fecha->toDateString(),
                         'hora_solicitada_inicio' => $horaInicio->format('H:i:s'),
                         'hora_solicitada_fin' => $horaFin->format('H:i:s'),
+                        'reservas_actuales' => $numeroReservasEnHorario,
+                        'reservas_maximas' => $reservasSimultaneasPermitidas,
                         'reservas_conflicto' => $reservasConflicto->map(function ($r) {
                             return [
                                 'id' => $r->id,
                                 'hora_inicio' => $r->hora_inicio,
                                 'hora_fin' => $r->hora_fin,
-                                'estado' => $r->estado
+                                'estado' => $r->estado,
+                                'id_usuario' => $r->id_usuario
                             ];
                         })->toArray()
                     ]);
-                    throw new Exception('Ya existe una reserva para este espacio en el horario seleccionado.');
+
+                    $mensaje = $reservasSimultaneasPermitidas === 1
+                        ? 'Ya existe una reserva para este espacio en el horario seleccionado.'
+                        : "Se ha alcanzado el límite de reservas simultáneas para este horario. Máximo permitido: {$reservasSimultaneasPermitidas}, actual: {$numeroReservasEnHorario}.";
+
+                    throw new Exception($mensaje);
                 }
 
                 $configuracion = $data['base']['configuracion'];
@@ -551,6 +574,10 @@ class ReservaService
 
     public function construirNombreCompleto($persona)
     {
+        if (!$persona) {
+            return 'Usuario sin nombre';
+        }
+
         return trim(
             ($persona->primer_nombre ?? '') . ' ' .
                 ($persona->segundo_nombre ?? '') . ' ' .
@@ -689,6 +716,39 @@ class ReservaService
         }
     }
 
+    private function validarLimitesReservasPorCategoria(int $espacioId, int $usuarioId, string $tipoUsuario, Carbon $fechaReserva): void
+    {
+        $espacio = Espacio::with('categoria')->find($espacioId);
+
+        if (!$espacio || !$espacio->categoria) {
+            throw new Exception("No se pudo obtener la información de la categoría del espacio.");
+        }
+
+        $campoLimite = "reservas_{$tipoUsuario}";
+        $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
+
+        if ($limiteReservas <= 0) {
+            throw new Exception("Los usuarios <strong>{$tipoUsuario}s</strong> no tienen permitido reservar espacios de la categoría <strong>{$espacio->categoria->nombre}</strong>.");
+        }
+
+        $reservasExistentes = Reservas::whereHas('espacio', function ($query) use ($espacio) {
+            $query->where('id_categoria', $espacio->categoria->id);
+        })
+            ->where('id_usuario', $usuarioId)
+            ->whereDate('fecha', $fechaReserva)
+            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+            ->whereNull('eliminado_en')
+            ->count();
+
+        if ($reservasExistentes >= $limiteReservas) {
+            $mensaje = $limiteReservas === 1
+                ? "Ya tienes una reserva para esta fecha en la categoría <strong>{$espacio->categoria->nombre}</strong>. Solo se permite <strong>{$limiteReservas} reserva</strong> por día por usuario en esta categoría."
+                : "Ya tienes <strong>{$reservasExistentes}</strong> reservas para esta fecha en la categoría <strong>{$espacio->categoria->nombre}</strong>. Solo se permiten <strong>{$limiteReservas} reservas</strong> por día por usuario en esta categoría.";
+
+            throw new Exception($mensaje);
+        }
+    }
+
     private function obtenerConfiguracionEspacio(int $espacioId, Carbon $fecha)
     {
         $fechaConsulta = $fecha->toDateString();
@@ -719,5 +779,59 @@ class ReservaService
             'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento,tipo_documento_id',
             'usuarioReserva.persona.tipoDocumento'
         ])->find($id);
+    }
+
+    public function getInfoReservasSimultaneas(int $espacioId, string $fecha, string $horaInicio, string $horaFin): array
+    {
+        $espacio = Espacio::find($espacioId);
+        if (!$espacio) {
+            return [
+                'error' => 'Espacio no encontrado'
+            ];
+        }
+
+        $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
+
+        $horaInicioCarbon = Carbon::createFromFormat('h:i A', $horaInicio);
+        $horaFinCarbon = Carbon::createFromFormat('h:i A', $horaFin);
+
+        $reservasEnHorario = Reservas::where('id_espacio', $espacioId)
+            ->whereDate('fecha', $fecha)
+            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+            ->whereNull('eliminado_en')
+            ->where(function ($query) use ($horaInicioCarbon, $horaFinCarbon) {
+                $query->where(function ($q) use ($horaInicioCarbon, $horaFinCarbon) {
+                    $q->whereTime('hora_inicio', '>=', $horaInicioCarbon->format('H:i:s'))
+                        ->whereTime('hora_inicio', '<', $horaFinCarbon->format('H:i:s'));
+                })->orWhere(function ($q) use ($horaInicioCarbon, $horaFinCarbon) {
+                    $q->whereTime('hora_fin', '>', $horaInicioCarbon->format('H:i:s'))
+                        ->whereTime('hora_fin', '<=', $horaFinCarbon->format('H:i:s'));
+                })->orWhere(function ($q) use ($horaInicioCarbon, $horaFinCarbon) {
+                    $q->whereTime('hora_inicio', '<=', $horaInicioCarbon->format('H:i:s'))
+                        ->whereTime('hora_fin', '>=', $horaFinCarbon->format('H:i:s'));
+                });
+            })
+            ->with(['usuarioReserva:id_usuario,email', 'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,primer_apellido'])
+            ->get();
+
+        $numeroReservasActuales = $reservasEnHorario->count();
+        $cuposDisponibles = max(0, $reservasSimultaneasPermitidas - $numeroReservasActuales);
+
+        return [
+            'espacio_nombre' => $espacio->nombre,
+            'reservas_simultaneas_permitidas' => $reservasSimultaneasPermitidas,
+            'reservas_actuales' => $numeroReservasActuales,
+            'cupos_disponibles' => $cuposDisponibles,
+            'disponible' => $cuposDisponibles > 0,
+            'reservas_existentes' => $reservasEnHorario->map(function ($reserva) {
+                return [
+                    'id' => $reserva->id,
+                    'usuario' => $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null),
+                    'hora_inicio' => $reserva->hora_inicio,
+                    'hora_fin' => $reserva->hora_fin,
+                    'estado' => $reserva->estado
+                ];
+            })->toArray()
+        ];
     }
 }
