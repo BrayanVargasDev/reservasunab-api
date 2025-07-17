@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Log;
 class RolService
 {
     private const CACHE_KEY_PREFIX = 'roles_';
-    private const CACHE_TTL = 3600;
 
     private $permisoService;
 
@@ -22,11 +21,7 @@ class RolService
 
     public function getAll()
     {
-        $cacheKey = self::CACHE_KEY_PREFIX . 'all';
-
-        // return Cache::remember($cacheKey, self::CACHE_TTL, function () {
-            return Rol::orderBy('id_rol')->get();
-        // });
+        return Rol::orderBy('id_rol')->get();
     }
 
     public function getAllWithPermisos(int $perPage = 10)
@@ -78,11 +73,9 @@ class RolService
     {
         $rol = Rol::findOrFail($idRol);
 
-        // Si los permisos vienen como objetos con propiedad concedido, filtrarlos
         if (isset($permisos[0]) && is_array($permisos[0]) && isset($permisos[0]['concedido'])) {
             $permisosIds = $this->filtrarPermisosConcedidos($permisos);
         } else {
-            // Si vienen como array simple de IDs, usarlos directamente
             $permisosIds = $permisos;
         }
 

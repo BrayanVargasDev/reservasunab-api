@@ -22,11 +22,6 @@ class ReservasController extends Controller
         $this->reserva_service = $reserva_service;
     }
 
-    public function index()
-    {
-        //
-    }
-
     public function getEspacios(Request $request)
     {
         try {
@@ -103,11 +98,6 @@ class ReservasController extends Controller
         }
     }
 
-    public function create()
-    {
-        //
-    }
-
     public function store(StoreReservasRequest $request)
     {
         try {
@@ -141,48 +131,31 @@ class ReservasController extends Controller
         }
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  \App\Models\Reservas  $reservas
-     * @return \Illuminate\Http\Response
-     */
-    public function show(Reservas $reservas)
+    public function misReservas(Request $request)
     {
-        //
-    }
+        try {
 
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  \App\Models\Reservas  $reservas
-     * @return \Illuminate\Http\Response
-     */
-    public function edit(Reservas $reservas)
-    {
-        //
-    }
+            $per_page = $request->input('per_page', 10);
+            $search =  $request->input('search', '');
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \App\Http\Requests\UpdateReservasRequest  $request
-     * @param  \App\Models\Reservas  $reservas
-     * @return \Illuminate\Http\Response
-     */
-    public function update(UpdateReservasRequest $request, Reservas $reservas)
-    {
-        //
-    }
+            $reservas = $this->reserva_service->getMisReservas(Auth::id(), $per_page, $search);
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  \App\Models\Reservas  $reservas
-     * @return \Illuminate\Http\Response
-     */
-    public function destroy(Reservas $reservas)
-    {
-        //
+            return $reservas;
+        } catch (Exception $e) {
+            Log::error('Error al obtener mis reservas', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener mis reservas',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
     }
 }

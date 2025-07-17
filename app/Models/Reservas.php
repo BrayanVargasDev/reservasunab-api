@@ -39,8 +39,8 @@ class Reservas extends Model
         'valor' => 'float',
         'id_usuario' => 'integer',
         'fecha' => 'datetime',
-        'hora_inicio' => 'string',
-        'hora_fin' => 'string',
+        'hora_inicio' => 'datetime',
+        'hora_fin' => 'datetime',
         'check_in' => 'boolean',
         'estado' => 'string',
         'observaciones' => 'string',
@@ -66,5 +66,10 @@ class Reservas extends Model
     public function usuarioReserva()
     {
         return $this->belongsTo(Usuario::class, 'id_usuario');
+    }
+
+    public function pago()
+    {
+        return $this->hasOne(Pago::class, 'id_reserva');
     }
 }

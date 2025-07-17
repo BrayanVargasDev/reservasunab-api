@@ -938,4 +938,28 @@ class ReservaService
             ];
         }
     }
+
+    public function getMisReservas(int $usuarioId, int $perPage = 10, string $search = '')
+    {
+        $query = Reservas::where('id_usuario', $usuarioId);
+
+        // if ($search) {
+        //     $query->where(function ($q) use ($search) {
+        //         $q->where('nombre', 'like', "%{$search}%")
+        //             ->orWhere('descripcion', 'like', "%{$search}%");
+        //     });
+        // }
+
+        $query->orderBy('fecha', 'desc')
+            ->orderBy('hora_inicio', 'desc')
+            ->with([
+                'pago',
+                'espacio:id,nombre,id_sede,id_categoria',
+                'espacio.sede:id,nombre',
+                'espacio.categoria:id,nombre',
+                'espacio.imagen:id_espacio,ubicacion',
+            ]);
+
+        return $query->paginate($perPage);
+    }
 }
