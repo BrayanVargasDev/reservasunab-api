@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\ManageTimezone;
+use Carbon\Carbon;
 
 class Reservas extends Model
 {
@@ -71,5 +72,45 @@ class Reservas extends Model
     public function pago()
     {
         return $this->hasOne(Pago::class, 'id_reserva');
+    }
+
+    /**
+     * Scope para obtener reservas que pueden ser canceladas
+     */
+    public function scopePuedeCancelar($query)
+    {
+        return $query->whereHas('configuracion', function ($q) {
+            $q->whereRaw('
+                reservas.fecha > NOW()
+                AND TIMESTAMPDIFF(MINUTE, NOW(), CONCAT(reservas.fecha, " ", reservas.hora_inicio)) >= espacios_configuracion.tiempo_cancelacion
+            ');
+        });
+    }
+
+    /**
+     * Verifica si la reserva puede ser cancelada
+     */
+    public function puedeSerCancelada()
+    {
+        if ($this->fecha->isPast()) {
+            return false;
+        }
+
+        if (!$this->configuracion) {
+            return false;
+        }
+
+        $fechaHoraReserva = $this->fecha->format('Y-m-d') . ' ' . $this->hora_inicio->format('H:i:s');
+        $momentoReserva = Carbon::parse($fechaHoraReserva);
+
+        $tiempoCancelacion = $this->configuracion->tiempo_cancelacion ?? 0;
+
+        $minutosHastaReserva = now()->diffInMinutes($momentoReserva, false);
+
+        if ($minutosHastaReserva < 0) {
+            return false;
+        }
+
+        return $minutosHastaReserva >= $tiempoCancelacion;
     }
 }

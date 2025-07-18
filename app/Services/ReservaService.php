@@ -958,6 +958,38 @@ class ReservaService
                 'espacio.sede:id,nombre',
                 'espacio.categoria:id,nombre',
                 'espacio.imagen:id_espacio,ubicacion',
+                'configuracion:id,id_espacio,tiempo_cancelacion',
+            ]);
+
+        $reservas = $query->paginate($perPage);
+
+        $reservas->getCollection()->transform(function ($reserva) {
+            $reserva->puede_cancelar = $reserva->puedeSerCancelada();
+            return $reserva;
+        });
+
+        return $reservas;
+    }
+
+    /**
+     * Obtiene las reservas del usuario que pueden ser canceladas
+     */
+    public function getMisReservasCancelables(int $usuarioId, int $perPage = 10)
+    {
+        $query = Reservas::where('id_usuario', $usuarioId)
+            // ->puedeCancelar()
+            // ->whereIn('estado', ['inicial', 'pagada', 'completada', 'confirmada'])
+            ->whereNull('eliminado_en');
+
+        $query->orderBy('fecha', 'asc')
+            ->orderBy('hora_inicio', 'asc')
+            ->with([
+                'pago',
+                'espacio:id,nombre,id_sede,id_categoria',
+                'espacio.sede:id,nombre',
+                'espacio.categoria:id,nombre',
+                'espacio.imagen:id_espacio,ubicacion',
+                'configuracion:id,id_espacio,tiempo_cancelacion',
             ]);
 
         return $query->paginate($perPage);
