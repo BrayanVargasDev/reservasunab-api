@@ -7,6 +7,7 @@ use App\Models\Persona;
 use App\Models\Usuario;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -34,13 +35,6 @@ class AuthController extends Controller
         'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
     ];
 
-    /**
-     * Procesa un nombre completo y lo separa en nombre y apellido
-     * según las reglas especificadas
-     *
-     * @param array $palabrasNombre Array con las palabras del nombre completo
-     * @return array ['nombre' => string, 'apellido' => string]
-     */
     private function procesarNombreCompleto(array $palabrasNombre)
     {
         $cantidadPalabras = count($palabrasNombre);
@@ -193,7 +187,7 @@ class AuthController extends Controller
             }
 
             $token = $usuario->createToken('auth-token', ['*'], now()->addHour());
-
+            Auth::login($usuario);
             return response()->json([
                 'status' => 'success',
                 'data' => [

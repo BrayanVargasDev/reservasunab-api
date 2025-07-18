@@ -13,18 +13,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->statefulApi();
-
-        $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
-        ]);
+        // Comentamos statefulApi() para usar solo tokens sin cookies
+        // $middleware->statefulApi();
 
         $middleware->alias([
-            'custom-auth' => \App\Http\Middleware\CustomSanctumAuth::class,
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
 
+        // Deshabilitamos la validación CSRF para las rutas API
         $middleware->validateCsrfTokens(except: [
+            'api/*',
             'api/saml/*/acs'
         ]);
     })

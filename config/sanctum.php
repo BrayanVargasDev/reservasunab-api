@@ -8,18 +8,13 @@ return [
     | Stateful Domains
     |--------------------------------------------------------------------------
     |
-    | Requests from the following domains / hosts will receive stateful API
-    | authentication cookies. Typically, these should include your local
-    | and production domains which access your API via a frontend SPA.
+    | Para usar solo tokens sin cookies/sesión, mantenemos esta configuración
+    | vacía o con dominios específicos solo si necesitas autenticación
+    | stateful en el futuro.
     |
     */
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', sprintf(
-        '%s%s%s',
-        'localhost,localhost:3000,localhost:8100,127.0.0.1,127.0.0.1:3000,127.0.0.1:8100,::1',
-        env('APP_ENV') === 'production' ? ',' : ',',
-        Sanctum::currentApplicationUrlWithPort()
-    ))),
+    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', '')),
 
     /*
     |--------------------------------------------------------------------------
