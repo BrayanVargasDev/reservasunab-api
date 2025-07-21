@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Uid\Ulid;
 use Throwable;
@@ -26,6 +27,45 @@ class ReservaService
     const HORA_APERTURA_DEFAULT = '08:00';
     const PERMITIR_MULTIPLES_RESERVAS_POR_DIA = false;
 
+    private $api_key;
+    private $url_pagos;
+    private $entity_code;
+    private $service_code;
+    private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
+    private $session_token;
+
+    public function __construct()
+    {
+        $this->api_key = config('app.key_pagos');
+        $this->url_pagos = config('app.url_pagos');
+        $this->entity_code = config('app.entity_code');
+        $this->service_code = config('app.service_code');
+        $this->session_token = null;
+    }
+
+    public function getSessionToken()
+    {
+        $url = "$this->url_pagos/getSessionToken";
+
+        $data = [
+            'EntityCode' => $this->entity_code,
+            'ApiKey' => $this->api_key,
+        ];
+
+        try {
+            $response = Http::post($url, $data);
+
+            if (!$response->successful()) {
+                throw new Exception('Error retrieving session token: ' . $response->body());
+            }
+
+            $this->session_token = $response->json()['SessionToken'];
+            return $this->session_token;
+        } catch (Throwable $th) {
+            throw new Exception('Error retrieving session token: ' . $th->getMessage());
+        }
+    }
+
     /**
      * Crear un objeto Carbon de manera segura desde un formato específico
      */
@@ -36,7 +76,7 @@ class ReservaService
                 return $default;
             }
             return Carbon::createFromFormat($format, $value);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::warning('Error al crear Carbon desde formato', [
                 'value' => $value,
                 'format' => $format,
@@ -184,9 +224,9 @@ class ReservaService
 
         $reservasExistentes = Reservas::where('id_espacio', $espacio->id)
             ->whereDate('fecha', $fechaConsulta)
-            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+            ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
             ->whereNull('eliminado_en')
-            ->select('hora_inicio', 'hora_fin', 'estado', 'id_usuario')
+            ->select('hora_inicio', 'hora_fin', 'estado', 'id_usuario', 'id')
             ->get();
 
         $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
@@ -228,8 +268,8 @@ class ReservaService
 
                     $reservasCoincidentes = $reservasExistentes->filter(function ($reserva) use ($horaActual, $horaFinSlot) {
                         try {
-                            $reservaInicio = $this->createCarbonSafely($reserva->hora_inicio, 'H:i:s');
-                            $reservaFin = $this->createCarbonSafely($reserva->hora_fin, 'H:i:s');
+                            $reservaInicio = $this->createCarbonSafely($reserva->hora_inicio, 'Y-m-d H:i:s');
+                            $reservaFin = $this->createCarbonSafely($reserva->hora_fin, 'Y-m-d H:i:s');
 
                             if (!$reservaInicio || !$reservaFin) {
                                 return false;
@@ -254,8 +294,15 @@ class ReservaService
 
                     $usuarioActual = Auth::user();
                     $miReserva = false;
+                    $idMiReserva = null;
                     if ($usuarioActual) {
-                        $miReserva = $reservasCoincidentes->contains('id_usuario', $usuarioActual->id_usuario);
+                        $reservaUsuario = $reservasCoincidentes->first(function ($reserva) use ($usuarioActual) {
+                            return $reserva->id_usuario == $usuarioActual->id_usuario;
+                        });
+                        if ($reservaUsuario) {
+                            $miReserva = true;
+                            $idMiReserva = $reservaUsuario->id ?? null;
+                        }
                     }
 
                     $novedadCoincidente = $novedades->first(function ($novedad) use ($horaActual, $horaFinSlot) {
@@ -313,6 +360,7 @@ class ReservaService
                         'mi_reserva' => $miReserva,
                         'reserva_pasada' => $reservaPasada,
                         'novedad' => false,
+                        'id_reserva' => $miReserva ? $idMiReserva : null,
                         'reservada' => $numeroReservasEnSlot > 0,
                         'reservas_actuales' => $numeroReservasEnSlot,
                         'reservas_maximas' => $reservasSimultaneasPermitidas,
@@ -993,5 +1041,99 @@ class ReservaService
             ]);
 
         return $query->paginate($perPage);
+    }
+
+    public function getMiReserva(int $id_reserva)
+    {
+        $resumenReserva = null;
+
+        $reserva = Reservas::with([
+            'espacio:id,nombre,id_sede',
+            'espacio.sede:id,nombre',
+            'usuarioReserva:id_usuario,email',
+            'configuracion',
+            'configuracion.franjas_horarias',
+            'pago',
+            'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+        ])->find($id_reserva);
+
+        if (!$reserva) {
+            DB::rollBack();
+            return null;
+        }
+
+        $fecha = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
+        $horaInicio = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio : Carbon::createFromFormat('H:i:s', $reserva->hora_inicio);
+        $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::createFromFormat('H:i:s', $reserva->hora_fin);
+
+        $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
+        $valor = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
+        $estado = $reserva->estado;
+        $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
+
+        if ($reserva->pago->estado != 'OK') {
+            DB::beginTransaction();
+            try {
+
+                $url = $this->url_pagos . "/getTransactionInformation";
+
+                if (!$this->session_token) {
+                    $this->getSessionToken();
+                }
+
+                $response = Http::post($url, [
+                    'SessionToken' => $this->session_token,
+                    'EntityCode' => $this->entity_code,
+                    'TicketId' => $reserva->pago->ticket_id,
+                ]);
+
+                if (!$response->successful()) {
+                    Log::warning('Error al obtener información de pago', [
+                        'ticket_id' => $reserva->pago->ticket_id,
+                        'response' => $response->body()
+                    ]);
+                    DB::rollBack();
+                } else {
+                    $pagoData = $response->json();
+                    $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
+                    $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
+                    $reserva->save();
+                    $reserva->pago->save();
+                }
+                DB::commit();
+            } catch (Throwable $th) {
+                DB::rollBack();
+                Log::error('Error obteniendo información de la reserva: ' . $th->getMessage());
+            }
+        }
+
+        $resumenReserva = [
+            'id' => $reserva->id,
+            'nombre_espacio' => $reserva->espacio->nombre ?? null,
+            'duracion' => $duracionMinutos,
+            'sede' => $reserva->espacio->sede->nombre ?? null,
+            'fecha' => $fecha->format('Y-m-d'),
+            'hora_inicio' => $horaInicio->format('h:i A'),
+            'valor' => $valor,
+            'estado' => $reserva->estado,
+            'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
+            'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
+            'agrega_jugadores' => false
+        ];
+
+        return $resumenReserva;
+    }
+
+    public function getReservaEstadoByPagoEstado($estado)
+    {
+        if ($estado === 'OK') {
+            return 'pagada';
+        }
+
+        if ($estado === 'PENDING') {
+            return 'pendiente';
+        }
+
+        return 'rechazada';
     }
 }

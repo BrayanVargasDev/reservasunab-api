@@ -133,6 +133,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
     Route::group(['prefix' => 'reservas'], function () {
         Route::get('/me', [ReservasController::class, 'misReservas']);
         Route::post('/', [ReservasController::class, 'store']);
+        Route::get('/mi-reserva/{reserva}', [ReservasController::class, 'miReserva']);
     });
 
     Route::group(['prefix' => 'grupos'], function () {

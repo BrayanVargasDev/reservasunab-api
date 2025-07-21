@@ -158,4 +158,35 @@ class ReservasController extends Controller
             );
         }
     }
+
+    public function miReserva($reservaId)
+    {
+        try {
+            $reserva = $this->reserva_service->getMiReserva((int) $reservaId);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $reserva,
+                    'message' => 'Reserva obtenida correctamente.',
+                ],
+                200,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al obtener mi reserva', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener mi reserva',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }
