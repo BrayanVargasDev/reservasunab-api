@@ -524,4 +524,37 @@ class UsuarioService
             ->values()
             ->toArray();
     }
+
+    public function buscarJugadores(string $termino)
+    {
+        $termino = trim(strtolower($termino));
+
+        return Usuario::with('persona')
+            ->select([
+                'usuarios.id_usuario as id',
+                'usuarios.email',
+                'usuarios.tipo_usuario',
+                'usuarios.ldap_uid',
+                'usuarios.activo',
+                'usuarios.id_rol',
+                'usuarios.creado_en',
+                'usuarios.actualizado_en',
+                'usuarios.eliminado_en'
+            ])
+            ->where(function ($query) use ($termino) {
+                $query->whereRaw('LOWER(email) LIKE ?', ["%{$termino}%"])
+                    // ->orWhereRaw('ldap_uid LIKE ?', ["%{$termino}%"])
+                    ->orWhereRaw('LOWER(tipo_usuario::text) LIKE ?', ["%{$termino}%"])
+                    ->orWhereHas('persona', function ($q) use ($termino) {
+                        $q->whereRaw('LOWER(primer_nombre) LIKE ?', ["%{$termino}%"])
+                            ->orWhereRaw('LOWER(segundo_nombre) LIKE ?', ["%{$termino}%"])
+                            ->orWhereRaw('LOWER(primer_apellido) LIKE ?', ["%{$termino}%"])
+                            ->orWhereRaw('LOWER(segundo_apellido) LIKE ?', ["%{$termino}%"])
+                            ->orWhereRaw('LOWER(numero_documento) LIKE ?', ["%{$termino}%"]);
+                    });
+            })
+            ->where('id_usuario', '!=', Auth::id())
+            ->where('eliminado_en', null)
+            ->get();
+    }
 }

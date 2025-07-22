@@ -82,6 +82,23 @@ class Usuario extends Authenticatable
         return $this->belongsToMany(Permiso::class, 'usuarios_permisos', 'id_usuario', 'id_permiso');
     }
 
+    public function jugadoresReserva()
+    {
+        return $this->hasMany(JugadorReserva::class, 'id_usuario', 'id_usuario');
+    }
+
+    public function reservasComoJugador()
+    {
+        return $this->hasManyThrough(
+            Reservas::class,
+            JugadorReserva::class,
+            'id_usuario',
+            'id',
+            'id_usuario',
+            'id_reserva'
+        );
+    }
+
     public function esAdministrador(): bool
     {
         return $this->rol && strtolower($this->rol->nombre) === 'administrador';

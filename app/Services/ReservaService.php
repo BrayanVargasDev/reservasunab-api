@@ -7,6 +7,7 @@ use App\Models\EspacioConfiguracion;
 use App\Models\EspacioTipoUsuarioConfig;
 use App\Models\FranjaHoraria;
 use App\Models\Reservas;
+use App\Models\Usuario;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
 use Exception;
@@ -1047,20 +1048,31 @@ class ReservaService
     {
         $resumenReserva = null;
 
-        $reserva = Reservas::with([
-            'espacio:id,nombre,id_sede',
-            'espacio.sede:id,nombre',
-            'usuarioReserva:id_usuario,email',
-            'configuracion',
-            'configuracion.franjas_horarias',
-            'pago',
-            'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
-        ])->find($id_reserva);
+        try {
+            $reserva = Reservas::with([
+                'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
+                'espacio.sede:id,nombre',
+                'usuarioReserva:id_usuario,email',
+                'configuracion',
+                'configuracion.franjas_horarias',
+                'pago',
+                'jugadores:id,id_reserva,id_usuario',
+                'jugadores.usuario:id_usuario,email',
+                'jugadores.usuario.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento',
+                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+            ])->find($id_reserva);
 
-        if (!$reserva) {
-            DB::rollBack();
-            return null;
-        }
+            if (!$reserva) {
+                return null;
+            }
+
+            // Log para debuggear si el pago es null
+            if (!$reserva->pago) {
+                Log::warning('Reserva sin pago asociado', [
+                    'reserva_id' => $id_reserva,
+                    'usuario_id' => $reserva->id_usuario ?? null,
+                ]);
+            }
 
         $fecha = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
         $horaInicio = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio : Carbon::createFromFormat('H:i:s', $reserva->hora_inicio);
@@ -1071,7 +1083,7 @@ class ReservaService
         $estado = $reserva->estado;
         $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
-        if ($reserva->pago->estado != 'OK') {
+        if ($reserva->pago && $reserva->pago->estado != 'OK') {
             DB::beginTransaction();
             try {
 
@@ -1084,26 +1096,53 @@ class ReservaService
                 $response = Http::post($url, [
                     'SessionToken' => $this->session_token,
                     'EntityCode' => $this->entity_code,
-                    'TicketId' => $reserva->pago->ticket_id,
+                    'TicketId' => $reserva->pago->ticket_id ?? null,
                 ]);
 
                 if (!$response->successful()) {
                     Log::warning('Error al obtener información de pago', [
-                        'ticket_id' => $reserva->pago->ticket_id,
+                        'ticket_id' => $reserva->pago->ticket_id ?? null,
                         'response' => $response->body()
                     ]);
                     DB::rollBack();
                 } else {
                     $pagoData = $response->json();
-                    $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
+                    if ($reserva->pago) {
+                        $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
+                        $reserva->pago->save();
+                    }
                     $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
                     $reserva->save();
-                    $reserva->pago->save();
                 }
                 DB::commit();
             } catch (Throwable $th) {
                 DB::rollBack();
                 Log::error('Error obteniendo información de la reserva: ' . $th->getMessage());
+            }
+        }
+
+        // Procesar información de jugadores
+        $jugadores = [];
+
+        if ($reserva->jugadores->isNotEmpty()) {
+            foreach ($reserva->jugadores as $jugador) {
+                $jugadorInfo = [
+                    'id' => $jugador->id,
+                    'id_usuario' => $jugador->id_usuario,
+                ];
+
+                // Obtener información del usuario
+                if ($jugador->usuario && $jugador->usuario->persona) {
+                    $jugadorInfo['nombre'] = $this->construirNombreCompleto($jugador->usuario->persona);
+                    $jugadorInfo['email'] = $jugador->usuario->email;
+                    $jugadorInfo['codigo_usuario'] = $jugador->usuario->persona->numero_documento ?? null;
+                } else {
+                    $jugadorInfo['nombre'] = 'Usuario no encontrado';
+                    $jugadorInfo['email'] = null;
+                    $jugadorInfo['codigo_usuario'] = null;
+                }
+
+                $jugadores[] = $jugadorInfo;
             }
         }
 
@@ -1118,10 +1157,27 @@ class ReservaService
             'estado' => $reserva->estado,
             'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
             'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
-            'agrega_jugadores' => false
+            'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
+            'permite_externos' => $reserva->espacio->permite_externos ?? false,
+            'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
+            'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
+            'jugadores' => $jugadores,
+            'total_jugadores' => count($jugadores),
+            'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
+                                       (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
+                                        count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
         ];
 
         return $resumenReserva;
+
+        } catch (Exception $e) {
+            Log::error('Error en getMiReserva', [
+                'reserva_id' => $id_reserva,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     public function getReservaEstadoByPagoEstado($estado)
@@ -1135,5 +1191,87 @@ class ReservaService
         }
 
         return 'rechazada';
+    }
+
+    public function agregarJugadores(int $idReserva, array $jugadoresIds)
+    {
+        try {
+            // Obtener la reserva y validar que existe
+            $reserva = Reservas::with(['jugadores', 'usuarioReserva'])->find($idReserva);
+
+            if (!$reserva) {
+                throw new Exception('La reserva no existe.');
+            }
+
+            // Validar que la reserva pertenece al usuario autenticado
+            $usuarioAutenticado = Auth::id();
+            if ($reserva->id_usuario !== $usuarioAutenticado) {
+                throw new Exception('No tienes permisos para agregar jugadores a esta reserva.');
+            }
+
+            // Validar que la reserva no ha pasado
+            $fechaHoraReserva = Carbon::parse($reserva->fecha->format('Y-m-d') . ' ' . $reserva->hora_inicio->format('H:i:s'));
+            if ($fechaHoraReserva->isPast()) {
+                throw new Exception('No se pueden agregar jugadores a una reserva que ya ha pasado.');
+            }
+
+            // Validar que los usuarios existen
+            $usuariosExisten = Usuario::whereIn('id_usuario', $jugadoresIds)->count();
+            if ($usuariosExisten !== count($jugadoresIds)) {
+                throw new Exception('Uno o más usuarios no existen.');
+            }
+
+            // Obtener los jugadores ya agregados a la reserva
+            $jugadoresExistentes = $reserva->jugadores->pluck('id_usuario')->toArray();
+
+            // Filtrar los jugadores que no están ya agregados
+            $jugadoresNuevos = array_diff($jugadoresIds, $jugadoresExistentes);
+
+            // También evitar agregar al usuario que hizo la reserva como jugador
+            $jugadoresNuevos = array_diff($jugadoresNuevos, [$reserva->id_usuario]);
+
+            if (empty($jugadoresNuevos)) {
+                throw new Exception('Los jugadores ya están agregados a la reserva o son el usuario que hizo la reserva.');
+            }
+
+            // Crear los registros de jugadores en la reserva
+            $jugadoresData = [];
+            foreach ($jugadoresNuevos as $idUsuario) {
+                $jugadoresData[] = [
+                    'id_reserva' => $idReserva,
+                    'id_usuario' => $idUsuario,
+                    'creado_en' => now(),
+                    'actualizado_en' => now(),
+                ];
+            }
+
+            // Insertar en batch los jugadores
+            DB::table('jugadores_reserva')->insert($jugadoresData);
+
+            // Recargar la reserva con los jugadores actualizados
+            $reserva->load([
+                'jugadores.usuario.persona',
+                'espacio:id,nombre',
+                'usuarioReserva.persona'
+            ]);
+
+            Log::info('Jugadores agregados a la reserva', [
+                'reserva_id' => $idReserva,
+                'jugadores_agregados' => $jugadoresNuevos,
+                'usuario_id' => $usuarioAutenticado,
+            ]);
+
+            return $reserva;
+
+        } catch (Exception $e) {
+            Log::error('Error al agregar jugadores a la reserva', [
+                'reserva_id' => $idReserva,
+                'jugadores_ids' => $jugadoresIds,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
     }
 }

@@ -578,4 +578,31 @@ class UsuarioController extends Controller
             ], 500);
         }
     }
+
+    public function jugadores(Request $request)
+    {
+        try {
+            $termino = $request->query('term', '');
+
+            $jugadores = $this->usuarioService->buscarJugadores($termino);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $jugadores,
+                'message' => 'Jugadores obtenidos correctamente',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al consultar jugadores', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al obtener los jugadores',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

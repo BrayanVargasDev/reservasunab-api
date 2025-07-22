@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservasRequest;
 use App\Http\Requests\UpdateReservasRequest;
+use App\Http\Requests\AgregarJugadoresReservaRequest;
 use App\Http\Resources\EspacioReservaResource;
+use App\Http\Resources\ReservaConJugadoresResource;
 use App\Models\Reservas;
 use App\Services\ReservaService;
 use Exception;
@@ -183,6 +185,39 @@ class ReservasController extends Controller
                 [
                     'status' => 'error',
                     'message' => 'Ocurrió un error al obtener mi reserva',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
+
+    public function agregarJugadores(AgregarJugadoresReservaRequest $request, $reservaId)
+    {
+        try {
+            $data = $request->validated();
+
+            $reserva = $this->reserva_service->agregarJugadores((int) $reservaId, $data['jugadores']);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $reserva,
+                    'message' => 'Jugadores agregados correctamente.',
+                ],
+                200,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al agregar jugadores a la reserva', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al agregar jugadores a la reserva',
                     'error' => $e->getMessage(),
                 ],
                 500,

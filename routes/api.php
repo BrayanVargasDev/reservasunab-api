@@ -33,6 +33,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/', [UsuarioController::class, 'index']);
         Route::post('/', [UsuarioController::class, 'store']);
         Route::get('/eliminados', [UsuarioController::class, 'trashed']);
+        Route::get('/buscar-jugadores', [UsuarioController::class, 'jugadores']);
         Route::get('/{usuario}', [UsuarioController::class, 'show']);
         Route::patch('/{usuario}', [UsuarioController::class, 'update']);
         Route::delete('/{usuario}', [UsuarioController::class, 'destroy']);
@@ -134,6 +135,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/me', [ReservasController::class, 'misReservas']);
         Route::post('/', [ReservasController::class, 'store']);
         Route::get('/mi-reserva/{reserva}', [ReservasController::class, 'miReserva']);
+        Route::post('/{reserva}/agregar-jugadores', [ReservasController::class, 'agregarJugadores']);
     });
 
     Route::group(['prefix' => 'grupos'], function () {
