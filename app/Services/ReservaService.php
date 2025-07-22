@@ -1196,45 +1196,37 @@ class ReservaService
     public function agregarJugadores(int $idReserva, array $jugadoresIds)
     {
         try {
-            // Obtener la reserva y validar que existe
             $reserva = Reservas::with(['jugadores', 'usuarioReserva'])->find($idReserva);
 
             if (!$reserva) {
                 throw new Exception('La reserva no existe.');
             }
 
-            // Validar que la reserva pertenece al usuario autenticado
             $usuarioAutenticado = Auth::id();
             if ($reserva->id_usuario !== $usuarioAutenticado) {
                 throw new Exception('No tienes permisos para agregar jugadores a esta reserva.');
             }
 
-            // Validar que la reserva no ha pasado
             $fechaHoraReserva = Carbon::parse($reserva->fecha->format('Y-m-d') . ' ' . $reserva->hora_inicio->format('H:i:s'));
             if ($fechaHoraReserva->isPast()) {
                 throw new Exception('No se pueden agregar jugadores a una reserva que ya ha pasado.');
             }
 
-            // Validar que los usuarios existen
             $usuariosExisten = Usuario::whereIn('id_usuario', $jugadoresIds)->count();
             if ($usuariosExisten !== count($jugadoresIds)) {
                 throw new Exception('Uno o más usuarios no existen.');
             }
 
-            // Obtener los jugadores ya agregados a la reserva
             $jugadoresExistentes = $reserva->jugadores->pluck('id_usuario')->toArray();
 
-            // Filtrar los jugadores que no están ya agregados
             $jugadoresNuevos = array_diff($jugadoresIds, $jugadoresExistentes);
 
-            // También evitar agregar al usuario que hizo la reserva como jugador
             $jugadoresNuevos = array_diff($jugadoresNuevos, [$reserva->id_usuario]);
 
             if (empty($jugadoresNuevos)) {
                 throw new Exception('Los jugadores ya están agregados a la reserva o son el usuario que hizo la reserva.');
             }
 
-            // Crear los registros de jugadores en la reserva
             $jugadoresData = [];
             foreach ($jugadoresNuevos as $idUsuario) {
                 $jugadoresData[] = [
@@ -1245,24 +1237,15 @@ class ReservaService
                 ];
             }
 
-            // Insertar en batch los jugadores
             DB::table('jugadores_reserva')->insert($jugadoresData);
 
-            // Recargar la reserva con los jugadores actualizados
             $reserva->load([
                 'jugadores.usuario.persona',
                 'espacio:id,nombre',
                 'usuarioReserva.persona'
             ]);
 
-            Log::info('Jugadores agregados a la reserva', [
-                'reserva_id' => $idReserva,
-                'jugadores_agregados' => $jugadoresNuevos,
-                'usuario_id' => $usuarioAutenticado,
-            ]);
-
             return $reserva;
-
         } catch (Exception $e) {
             Log::error('Error al agregar jugadores a la reserva', [
                 'reserva_id' => $idReserva,
