@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\CategoriaResource;
 use App\Services\CategoriaService;
 use Exception;
 use Illuminate\Http\Request;
@@ -25,10 +26,8 @@ class CategoriaController extends Controller
             $per_page = $request->query('per_page', null);
 
             $categorias = $this->categoria_service->getAll($per_page, $search);
-            return $per_page ? response()->json($categorias, 200) : response()->json([
-                'success' => true,
-                'data' => $categorias,
-            ], 200);
+
+            return CategoriaResource::collection($categorias);
         } catch (Exception $e) {
             Log::error('Error al consultar categorías', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
