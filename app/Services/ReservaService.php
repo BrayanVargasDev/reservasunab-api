@@ -1066,7 +1066,6 @@ class ReservaService
                 return null;
             }
 
-            // Log para debuggear si el pago es null
             if (!$reserva->pago) {
                 Log::warning('Reserva sin pago asociado', [
                     'reserva_id' => $id_reserva,
@@ -1074,108 +1073,102 @@ class ReservaService
                 ]);
             }
 
-        $fecha = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
-        $horaInicio = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio : Carbon::createFromFormat('H:i:s', $reserva->hora_inicio);
-        $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::createFromFormat('H:i:s', $reserva->hora_fin);
+            $fecha = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
+            $horaInicio = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio : Carbon::createFromFormat('H:i:s', $reserva->hora_inicio);
+            $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::createFromFormat('H:i:s', $reserva->hora_fin);
 
-        $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
-        $valor = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
-        $estado = $reserva->estado;
-        $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
+            $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
+            $valor = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
+            $estado = $reserva->estado;
+            $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
-        if ($reserva->pago && $reserva->pago->estado != 'OK') {
-            DB::beginTransaction();
-            try {
+            if ($reserva->pago && $reserva->pago->estado != 'OK') {
+                DB::beginTransaction();
+                try {
 
-                $url = $this->url_pagos . "/getTransactionInformation";
+                    $url = $this->url_pagos . "/getTransactionInformation";
 
-                if (!$this->session_token) {
-                    $this->getSessionToken();
-                }
-
-                $response = Http::post($url, [
-                    'SessionToken' => $this->session_token,
-                    'EntityCode' => $this->entity_code,
-                    'TicketId' => $reserva->pago->ticket_id ?? null,
-                ]);
-
-                if (!$response->successful()) {
-                    Log::warning('Error al obtener información de pago', [
-                        'ticket_id' => $reserva->pago->ticket_id ?? null,
-                        'response' => $response->body()
-                    ]);
-                    DB::rollBack();
-                } else {
-                    $pagoData = $response->json();
-                    if ($reserva->pago) {
-                        $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
-                        $reserva->pago->save();
+                    if (!$this->session_token) {
+                        $this->getSessionToken();
                     }
-                    $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
-                    $reserva->save();
+
+                    $response = Http::post($url, [
+                        'SessionToken' => $this->session_token,
+                        'EntityCode' => $this->entity_code,
+                        'TicketId' => $reserva->pago->ticket_id ?? null,
+                    ]);
+
+                    if (!$response->successful()) {
+                        Log::warning('Error al obtener información de pago', [
+                            'ticket_id' => $reserva->pago->ticket_id ?? null,
+                            'response' => $response->body()
+                        ]);
+                        DB::rollBack();
+                    } else {
+                        $pagoData = $response->json();
+                        if ($reserva->pago) {
+                            $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
+                            $reserva->pago->save();
+                        }
+                        $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
+                        $reserva->save();
+                    }
+                    DB::commit();
+                } catch (Throwable $th) {
+                    DB::rollBack();
+                    Log::error('Error obteniendo información de la reserva: ' . $th->getMessage());
                 }
-                DB::commit();
-            } catch (Throwable $th) {
-                DB::rollBack();
-                Log::error('Error obteniendo información de la reserva: ' . $th->getMessage());
             }
-        }
 
-        // Procesar información de jugadores
-        $jugadores = [];
+            // Procesar información de jugadores
+            $jugadores = [];
 
-        if ($reserva->jugadores->isNotEmpty()) {
-            foreach ($reserva->jugadores as $jugador) {
-                $jugadorInfo = [
-                    'id' => $jugador->id,
-                    'id_usuario' => $jugador->id_usuario,
-                ];
+            if ($reserva->jugadores->isNotEmpty()) {
+                foreach ($reserva->jugadores as $jugador) {
+                    $jugadorInfo = [
+                        'id' => $jugador->id,
+                        'id_usuario' => $jugador->id_usuario,
+                    ];
 
-                // Obtener información del usuario
-                if ($jugador->usuario && $jugador->usuario->persona) {
-                    $jugadorInfo['nombre'] = $this->construirNombreCompleto($jugador->usuario->persona);
-                    $jugadorInfo['email'] = $jugador->usuario->email;
-                    $jugadorInfo['codigo_usuario'] = $jugador->usuario->persona->numero_documento ?? null;
-                } else {
-                    $jugadorInfo['nombre'] = 'Usuario no encontrado';
-                    $jugadorInfo['email'] = null;
-                    $jugadorInfo['codigo_usuario'] = null;
+                    // Obtener información del usuario
+                    if ($jugador->usuario && $jugador->usuario->persona) {
+                        $jugadorInfo['nombre'] = $this->construirNombreCompleto($jugador->usuario->persona);
+                        $jugadorInfo['email'] = $jugador->usuario->email;
+                        $jugadorInfo['documento'] = $jugador->usuario->persona->numero_documento ?? null;
+                    } else {
+                        $jugadorInfo['nombre'] = 'Usuario no encontrado';
+                        $jugadorInfo['email'] = null;
+                        $jugadorInfo['documento'] = null;
+                    }
+
+                    $jugadores[] = $jugadorInfo;
                 }
-
-                $jugadores[] = $jugadorInfo;
             }
-        }
 
-        $resumenReserva = [
-            'id' => $reserva->id,
-            'nombre_espacio' => $reserva->espacio->nombre ?? null,
-            'duracion' => $duracionMinutos,
-            'sede' => $reserva->espacio->sede->nombre ?? null,
-            'fecha' => $fecha->format('Y-m-d'),
-            'hora_inicio' => $horaInicio->format('h:i A'),
-            'valor' => $valor,
-            'estado' => $reserva->estado,
-            'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
-            'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
-            'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
-            'permite_externos' => $reserva->espacio->permite_externos ?? false,
-            'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
-            'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
-            'jugadores' => $jugadores,
-            'total_jugadores' => count($jugadores),
-            'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
-                                       (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
-                                        count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
-        ];
+            $resumenReserva = [
+                'id' => $reserva->id,
+                'nombre_espacio' => $reserva->espacio->nombre ?? null,
+                'duracion' => $duracionMinutos,
+                'sede' => $reserva->espacio->sede->nombre ?? null,
+                'fecha' => $fecha->format('Y-m-d'),
+                'hora_inicio' => $horaInicio->format('h:i A'),
+                'valor' => $valor,
+                'estado' => $reserva->estado,
+                'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
+                'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
+                'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
+                'permite_externos' => $reserva->espacio->permite_externos ?? false,
+                'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
+                'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
+                'jugadores' => $jugadores,
+                'total_jugadores' => count($jugadores),
+                'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
+                    (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
+                        count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
+            ];
 
-        return $resumenReserva;
-
+            return $resumenReserva;
         } catch (Exception $e) {
-            Log::error('Error en getMiReserva', [
-                'reserva_id' => $id_reserva,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
             throw $e;
         }
     }
@@ -1239,21 +1232,8 @@ class ReservaService
 
             DB::table('jugadores_reserva')->insert($jugadoresData);
 
-            $reserva->load([
-                'jugadores.usuario.persona',
-                'espacio:id,nombre',
-                'usuarioReserva.persona'
-            ]);
-
-            return $reserva;
+            return $this->getMiReserva($idReserva);
         } catch (Exception $e) {
-            Log::error('Error al agregar jugadores a la reserva', [
-                'reserva_id' => $idReserva,
-                'jugadores_ids' => $jugadoresIds,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-            ]);
-
             throw $e;
         }
     }
