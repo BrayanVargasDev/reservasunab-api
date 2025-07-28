@@ -575,4 +575,48 @@ class UsuarioService
             ->where('eliminado_en', null)
             ->get();
     }
+
+    /**
+     * Cambiar la contraseña de un usuario
+     *
+     * @param int $usuarioId ID del usuario
+     * @param string $nuevaPassword Nueva contraseña
+     * @return Usuario
+     * @throws UsuarioException
+     */
+    public function cambiarPassword(int $usuarioId, string $nuevaPassword): Usuario
+    {
+        try {
+            DB::beginTransaction();
+
+            $usuario = $this->getById($usuarioId);
+
+            $usuario->password_hash = Hash::make($nuevaPassword);
+            $usuario->save();
+
+            DB::commit();
+
+            Log::info('Contraseña cambiada exitosamente', [
+                'usuario_id' => $usuarioId,
+                'email' => $usuario->email,
+            ]);
+
+            return $usuario->load('persona');
+        } catch (UsuarioException $e) {
+            DB::rollBack();
+            throw $e;
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->logError('Error al cambiar contraseña', $e, [
+                'usuario_id' => $usuarioId,
+            ]);
+
+            throw new UsuarioException(
+                'Error al cambiar la contraseña: ' . $e->getMessage(),
+                'password_change_failed',
+                500,
+                $e,
+            );
+        }
+    }
 }

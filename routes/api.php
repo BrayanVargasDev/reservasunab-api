@@ -38,6 +38,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::post('/', [UsuarioController::class, 'store']);
         Route::get('/eliminados', [UsuarioController::class, 'trashed']);
         Route::get('/buscar-jugadores', [UsuarioController::class, 'jugadores']);
+        Route::put('/cambiar-password', [UsuarioController::class, 'cambiarPassword']);
         Route::get('/{usuario}', [UsuarioController::class, 'show']);
         Route::patch('/{usuario}', [UsuarioController::class, 'update']);
         Route::delete('/{usuario}', [UsuarioController::class, 'destroy']);

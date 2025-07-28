@@ -11,6 +11,7 @@ use App\Exceptions\UsuarioException;
 use App\Http\Requests\StoreUsuarioDashboardRequest;
 use App\Http\Requests\UpdateUsuarioDashboardRequest;
 use App\Http\Requests\UpdateUsuarioPermisosRequest;
+use App\Http\Requests\CambiarPasswordRequest;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -601,6 +602,53 @@ class UsuarioController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ocurrió un error al obtener los jugadores',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Cambiar la contraseña del usuario autenticado
+     *
+     * @param CambiarPasswordRequest $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function cambiarPassword(CambiarPasswordRequest $request)
+    {
+        try {
+            $data = $request->validated();
+            $usuarioId = Auth::id();
+
+            $usuario = $this->usuarioService->cambiarPassword($usuarioId, $data['newPassword']);
+
+            Log::info('Contraseña cambiada desde el controlador', [
+                'usuario_id' => $usuarioId,
+                'email' => $usuario->email,
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Contraseña cambiada correctamente',
+            ], 200);
+        } catch (UsuarioException $e) {
+            Log::error('Error al cambiar contraseña desde el controlador', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'error_type' => $e->getErrorType(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $e->render();
+        } catch (Exception $e) {
+            Log::error('Error al cambiar contraseña desde el controlador', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al cambiar la contraseña',
                 'error' => $e->getMessage(),
             ], 500);
         }
