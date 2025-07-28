@@ -35,6 +35,9 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'fechaNacimiento' => 'sometimes',
             'telefono' => 'sometimes|string|max:15',
             'direccion' => 'sometimes|string|max:255',
+            'ciudadExpedicion' => 'sometimes|exists:ciudades,id',
+            'ciudadResidencia' => 'sometimes|exists:ciudades,id',
+            'regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
         ];
     }
 
@@ -57,6 +60,9 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'fechaNacimiento.date_format' => 'La fecha de nacimiento debe estar en el formato Y-m-d.',
             'telefono.string' => 'El teléfono debe ser una cadena de texto.',
             'direccion.string' => 'La dirección debe ser una cadena de texto.',
+            'ciudadExpedicion.exists' => 'La ciudad de expedición seleccionada no es válida.',
+            'ciudadResidencia.exists' => 'La ciudad de residencia seleccionada no es válida.',
+            'regimenTributario.exists' => 'El régimen tributario seleccionado no es válido.',
         ];
     }
 }

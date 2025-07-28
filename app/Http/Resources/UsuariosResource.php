@@ -26,6 +26,10 @@ class UsuariosResource extends JsonResource
             'viendoDetalles' => false,
             'direccion' => $this->persona?->direccion,
             'fechaNacimiento' => $this->persona?->fecha_nacimiento,
+            'regimenTributario' => $this->persona?->regimen_tributario_id ?? null,
+            'ciudadExpedicion' => $this->persona?->ciudad_expedicion_id ?? null,
+            'ciudadResidencia' => $this->persona?->ciudad_residencia_id ?? null,
+            'tipoPersona' => $this->persona?->tipo_persona ?? null,
         ];
     }
 }

@@ -32,6 +32,10 @@ class UsuarioService
         'telefono' => 'celular',
         'tipoDocumento' => 'tipo_documento_id',
         'documento' => 'numero_documento',
+        'tipoPersona' => 'tipo_persona',
+        'regimenTributario' => 'regimen_tributario_id',
+        'ciudadExpedicion' => 'ciudad_expedicion_id',
+        'ciudadResidencia' => 'ciudad_residencia_id',
     ];
 
     private const PERSONA_DATA_KEYS = [
@@ -41,7 +45,11 @@ class UsuarioService
         'documento',
         'fechaNacimiento',
         'direccion',
-        'telefono'
+        'telefono',
+        'tipoPersona',
+        'regimenTributarioId',
+        'ciudadExpedicionId',
+        'ciudadResidenciaId'
     ];
 
     public function getAll(int $perPage = 10, string $search = ''): LengthAwarePaginator
@@ -49,8 +57,11 @@ class UsuarioService
         $search = (string) $search;
 
         return Usuario::withTrashed()->with([
-            'persona:id_persona,tipo_documento_id,numero_documento,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,celular,direccion,fecha_nacimiento,id_usuario',
+            'persona:id_persona,tipo_documento_id,numero_documento,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,celular,direccion,fecha_nacimiento,tipo_persona,regimen_tributario_id,ciudad_expedicion_id,ciudad_residencia_id,id_usuario',
             'persona.tipoDocumento:id_tipo,nombre,codigo',
+            'persona.regimenTributario:id,nombre',
+            'persona.ciudadExpedicion:id,nombre',
+            'persona.ciudadResidencia:id,nombre',
             'rol:id_rol,nombre',
         ])
             ->select(
@@ -104,7 +115,9 @@ class UsuarioService
         }
 
         try {
-            return Usuario::with('persona')->findOrFail($id);
+            return Usuario::with([
+                'persona',
+            ])->findOrFail($id);
         } catch (ModelNotFoundException $e) {
             throw new UsuarioException(
                 "Usuario no encontrado con ID: {$id}",
@@ -326,6 +339,11 @@ class UsuarioService
         // Si no se proporciona tipo de documento, usar Cédula de Ciudadanía como predeterminado
         if (!isset($personaData['tipo_documento_id'])) {
             $personaData['tipo_documento_id'] = self::DEFAULT_TIPO_DOCUMENTO_ID;
+        }
+
+        // Si no se proporciona tipo de persona, usar 'natural' como predeterminado
+        if (!isset($personaData['tipo_persona'])) {
+            $personaData['tipo_persona'] = 'natural';
         }
 
         // Asignar el ID del usuario a la persona

@@ -27,12 +27,17 @@ class Persona extends Model {
         'fecha_nacimiento',
         'direccion',
         'celular',
+        'tipo_persona',
+        'regimen_tributario_id',
+        'ciudad_expedicion_id',
+        'ciudad_residencia_id',
         'version',
         'id_usuario',
     ];
 
     protected $casts = [
         'fecha_nacimiento' => 'datetime',
+        'tipo_persona' => 'string',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
     ];
@@ -43,5 +48,17 @@ class Persona extends Model {
 
     public function tipoDocumento(): BelongsTo {
         return $this->belongsTo(TipoDocumento::class, 'tipo_documento_id');
+    }
+
+    public function regimenTributario(): BelongsTo {
+        return $this->belongsTo(RegimenTributario::class, 'regimen_tributario_id');
+    }
+
+    public function ciudadExpedicion(): BelongsTo {
+        return $this->belongsTo(Ciudad::class, 'ciudad_expedicion_id');
+    }
+
+    public function ciudadResidencia(): BelongsTo {
+        return $this->belongsTo(Ciudad::class, 'ciudad_residencia_id');
     }
 }

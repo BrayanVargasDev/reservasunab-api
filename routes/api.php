@@ -2,12 +2,16 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CategoriaController;
+use App\Http\Controllers\CiudadController;
+use App\Http\Controllers\DepartamentoController;
 use App\Http\Controllers\EspacioConfiguracionController;
 use App\Http\Controllers\EspacioController;
 use App\Http\Controllers\EspacioTipoUsuarioConfigController;
 use App\Http\Controllers\PagoController;
 use App\Http\Controllers\PantallaController;
 use App\Http\Controllers\PermisoController;
+use App\Http\Controllers\PersonaController;
+use App\Http\Controllers\RegimenTributarioController;
 use App\Http\Controllers\ReservasController;
 use App\Http\Controllers\RolController;
 use App\Http\Controllers\SedeController;
@@ -44,9 +48,45 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::patch('/{usuario}/permisos', [UsuarioController::class, 'updatePermisos']);
     });
 
+    Route::group(['prefix' => 'personas'], function () {
+        Route::get('/', [PersonaController::class, 'index']);
+        Route::post('/', [PersonaController::class, 'store']);
+        Route::get('/buscar-documento', [PersonaController::class, 'buscarPorDocumento']);
+        Route::get('/{id}', [PersonaController::class, 'show']);
+        Route::patch('/{id}', [PersonaController::class, 'update']);
+        Route::delete('/{id}', [PersonaController::class, 'destroy']);
+        Route::get('/{id}/facturacion', [PersonaController::class, 'facturacion']);
+        Route::get('/{id}/ubicacion', [PersonaController::class, 'ubicacion']);
+    });
+
     Route::group(['prefix' => 'tipo-doc'], function () {
         Route::get('/', [TipoDocumentoController::class, 'index']);
         Route::get('/{tipoDocumento}', [TipoDocumentoController::class, 'show']);
+    });
+
+    Route::group(['prefix' => 'regimenes-tributarios'], function () {
+        Route::get('/', [RegimenTributarioController::class, 'index']);
+        Route::post('/', [RegimenTributarioController::class, 'store']);
+        Route::get('/{regimenTributario}', [RegimenTributarioController::class, 'show']);
+        Route::patch('/{regimenTributario}', [RegimenTributarioController::class, 'update']);
+        Route::delete('/{regimenTributario}', [RegimenTributarioController::class, 'destroy']);
+    });
+
+    Route::group(['prefix' => 'ciudades'], function () {
+        Route::get('/', [CiudadController::class, 'index']);
+        Route::post('/', [CiudadController::class, 'store']);
+        Route::get('/departamento/{departamentoId}', [CiudadController::class, 'porDepartamento']);
+        Route::get('/{ciudad}', [CiudadController::class, 'show']);
+        Route::patch('/{ciudad}', [CiudadController::class, 'update']);
+        Route::delete('/{ciudad}', [CiudadController::class, 'destroy']);
+    });
+
+    Route::group(['prefix' => 'departamentos'], function () {
+        Route::get('/', [DepartamentoController::class, 'index']);
+        Route::post('/', [DepartamentoController::class, 'store']);
+        Route::get('/{departamento}', [DepartamentoController::class, 'show']);
+        Route::patch('/{departamento}', [DepartamentoController::class, 'update']);
+        Route::delete('/{departamento}', [DepartamentoController::class, 'destroy']);
     });
 
     Route::group(['prefix' => 'roles'], function () {
