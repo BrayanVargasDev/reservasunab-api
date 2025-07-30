@@ -21,17 +21,18 @@ class EspacioNovedad extends Model
     protected $fillable = [
         'id_espacio',
         'fecha',
+        'fecha_fin',
         'hora_inicio',
         'hora_fin',
         'descripcion',
-        'tipo',
         'creado_por',
     ];
 
     protected $casts = [
         'fecha' => 'date',
-        'hora_inicio' => 'time',
-        'hora_fin' => 'time',
+        'fecha_fin' => 'date',
+        'hora_inicio' => 'datetime:H:i:s',
+        'hora_fin' => 'datetime:H:i:s',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',

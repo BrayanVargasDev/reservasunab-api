@@ -221,7 +221,10 @@ class ReservaService
         }
 
         $franjasHorarias = $configuracion->franjas_horarias;
-        $novedades = $espacio->novedades;
+        $novedades = $espacio->novedades
+            ->whereNull('eliminado_en')
+            ->sortBy('fecha')
+            ->sortBy('hora_inicio');
 
         $reservasExistentes = Reservas::where('id_espacio', $espacio->id)
             ->whereDate('fecha', $fechaConsulta)
@@ -312,8 +315,8 @@ class ReservaService
                                 return false;
                             }
 
-                            $novedadInicio = $this->createCarbonSafely($novedad->hora_inicio, 'H:i:s');
-                            $novedadFin = $this->createCarbonSafely($novedad->hora_fin, 'H:i:s');
+                            $novedadInicio = $this->createCarbonSafely($novedad->hora_inicio, 'Y-m-d H:i:s');
+                            $novedadFin = $this->createCarbonSafely($novedad->hora_fin, 'Y-m-d H:i:s');
 
                             if (!$novedadInicio || !$novedadFin) {
                                 return false;
@@ -370,7 +373,7 @@ class ReservaService
                     if ($novedadCoincidente) {
                         $slot['novedad'] = true;
                         $slot['disponible'] = false;
-                        $slot['novedad_desc'] = $novedadCoincidente->tipo;
+                        $slot['novedad_desc'] = $novedadCoincidente->descripcion ?? 'Novedad en el espacio';
                     }
 
                     $disponibilidad[] = $slot;
@@ -931,10 +934,10 @@ class ReservaService
         ];
     }
 
-    public function getInfoDescuentoUsuario(int $espacioId, int $usuarioId = null): array
+    public function getInfoDescuentoUsuario(int $espacioId, int $usuarioId): array
     {
         try {
-            $usuario = $usuarioId ? \App\Models\Usuario::find($usuarioId) : Auth::user();
+            $usuario = $usuarioId ? Usuario::find($usuarioId) : Auth::user();
 
             if (!$usuario || !$usuario->tipo_usuario) {
                 return [

@@ -97,12 +97,7 @@ class PagoController extends Controller
         //
     }
 
-    public function ecollect(Request $request)
-    {
-        Log::debug('Ecollect request received', [
-            'request' => $request->all(),
-        ]);
-    }
+    public function ecollect(Request $request) {}
 
     public function info(Request $request)
     {

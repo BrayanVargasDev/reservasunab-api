@@ -6,6 +6,7 @@ use App\Http\Controllers\CiudadController;
 use App\Http\Controllers\DepartamentoController;
 use App\Http\Controllers\EspacioConfiguracionController;
 use App\Http\Controllers\EspacioController;
+use App\Http\Controllers\EspacioNovedadController;
 use App\Http\Controllers\EspacioTipoUsuarioConfigController;
 use App\Http\Controllers\PagoController;
 use App\Http\Controllers\PantallaController;
@@ -154,6 +155,16 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
             Route::post('/', [EspacioConfiguracionController::class, 'store']);
             Route::patch('/', [EspacioConfiguracionController::class, 'update']);
             Route::delete('/{configuracion}', [EspacioConfiguracionController::class, 'destroy']);
+        });
+
+        Route::group(['prefix' => 'novedades'], function () {
+            Route::get('/', [EspacioNovedadController::class, 'index']);
+            Route::post('/', [EspacioNovedadController::class, 'store']);
+            Route::get('/{novedad}', [EspacioNovedadController::class, 'show']);
+            Route::patch('/{novedad}', [EspacioNovedadController::class, 'update']);
+            Route::delete('/{novedad}', [EspacioNovedadController::class, 'destroy']);
+            Route::patch('/{novedad}/restaurar', [EspacioNovedadController::class, 'restore']);
+            Route::delete('/{novedad}/force', [EspacioNovedadController::class, 'forceDelete']);
         });
 
         Route::get('/{espacio}', [EspacioController::class, 'show']);
