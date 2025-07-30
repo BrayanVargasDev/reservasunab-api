@@ -13,7 +13,7 @@ class AlterTablePersonasAddFacturacionColumns extends Migration
     {
         Schema::table('personas', function (Blueprint $table) {
             $table->enum('tipo_persona', ['natural', 'juridica'])->default('natural')->after('celular');
-            $table->foreignId('regimen_tributario_id')->nullable()->constrained('regimenes_tributarios')->nullOnDelete()->after('tipo_persona');
+            $table->foreignId('regimen_tributario_id')->nullable()->constrained('regimenes_tributarios', 'codigo')->nullOnDelete()->after('tipo_persona');
             $table->foreignId('ciudad_expedicion_id')->nullable()->constrained('ciudades')->nullOnDelete()->after('regimen_tributario_id');
             $table->foreignId('ciudad_residencia_id')->nullable()->constrained('ciudades')->nullOnDelete()->after('ciudad_expedicion_id');
         });
