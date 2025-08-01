@@ -44,6 +44,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::patch('/{usuario}', [UsuarioController::class, 'update']);
         Route::delete('/{usuario}', [UsuarioController::class, 'destroy']);
         Route::patch('/{id}/restaurar', [UsuarioController::class, 'restore']);
+        Route::patch('/{id}/validar-campos-facturacion', [UsuarioController::class, 'validarCamposFacturacion']);
         Route::post('/dsbd', [UsuarioController::class, 'storeFromDashboard']);
         Route::patch('/dsbd/{usuario}', [UsuarioController::class, 'updateFromDashboard']);
 

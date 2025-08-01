@@ -56,12 +56,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Almacena un nuevo usuario
-     *
-     * @param  \App\Http\Requests\StoreUsuarioRequest  $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function store(StoreUsuarioRequest $request)
     {
         try {
@@ -160,12 +154,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Muestra los detalles de un usuario específico
-     *
-     * @param  int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function show($id)
     {
         try {
@@ -249,13 +237,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Actualiza un usuario específico
-     *
-     * @param  \App\Http\Requests\UpdateUsuarioRequest  $request
-     * @param  \App\Models\Usuario  $usuario
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function update(UpdateUsuarioRequest $request, Usuario $usuario)
     {
         try {
@@ -365,12 +346,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Elimina un usuario (softDelete)
-     *
-     * @param  \App\Models\Usuario  $usuario
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function destroy(Usuario $usuario)
     {
         try {
@@ -430,12 +405,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Restaura un usuario eliminado previamente
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function restore($id)
     {
         try {
@@ -606,12 +575,6 @@ class UsuarioController extends Controller
         }
     }
 
-    /**
-     * Cambiar la contraseña del usuario autenticado
-     *
-     * @param CambiarPasswordRequest $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function cambiarPassword(CambiarPasswordRequest $request)
     {
         try {
@@ -648,6 +611,63 @@ class UsuarioController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Ocurrió un error al cambiar la contraseña',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function validarCamposFacturacion($id)
+    {
+        try {
+            $usuario = Usuario::findOrFail($id);
+
+            $puede_pagar = true;
+
+            if (!$usuario->persona) {
+                $puede_pagar = false;
+            }
+
+            if (!$usuario->persona->tipo_documento_id || !$usuario->persona->numero_documento) {
+                $puede_pagar = false;
+            }
+
+            if (!$usuario->persona->direccion || !$usuario->persona->ciudad_residencia_id) {
+                $puede_pagar = false;
+            }
+
+            if (!$usuario->persona->regimen_tributario_id || !$usuario->persona->ciudad_expedicion_id) {
+                $puede_pagar = false;
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'usuario' => $usuario,
+                    'puede_pagar' => $puede_pagar,
+                ],
+                'message' => 'Campos de facturación validados correctamente',
+            ], 200);
+        } catch (UsuarioException $e) {
+            Log::error('Error al validar campos de facturación', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        } catch (Exception $e) {
+            Log::error('Error al validar campos de facturación', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al validar los campos de facturación',
                 'error' => $e->getMessage(),
             ], 500);
         }

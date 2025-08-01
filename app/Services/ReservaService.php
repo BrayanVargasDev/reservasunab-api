@@ -228,7 +228,6 @@ class ReservaService
 
         $reservasExistentes = Reservas::where('id_espacio', $espacio->id)
             ->whereDate('fecha', $fechaConsulta)
-            ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
             ->whereNull('eliminado_en')
             ->select('hora_inicio', 'hora_fin', 'estado', 'id_usuario', 'id')
             ->get();
@@ -462,8 +461,8 @@ class ReservaService
                     ]);
 
                     $mensaje = $reservasSimultaneasPermitidas === 1
-                        ? 'Ya existe una reserva para este espacio en el horario seleccionado.'
-                        : "Se ha alcanzado el límite de reservas simultáneas para este horario. Máximo permitido: {$reservasSimultaneasPermitidas}, actual: {$numeroReservasEnHorario}.";
+                        ? 'Horario ocupado.'
+                        : "Límite de reservas: {$reservasSimultaneasPermitidas}. Ocupadas: {$numeroReservasEnHorario}.";
 
                     throw new Exception($mensaje);
                 }
@@ -493,7 +492,8 @@ class ReservaService
                 ]);
 
                 $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
-                $valor = $this->obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin);
+                $valoresReserva = $this->obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin);
+                $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
                 $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona);
 
                 $resumenReserva = [
@@ -543,7 +543,10 @@ class ReservaService
     public function obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin)
     {
         if (isset($data['valor'])) {
-            return $data['valor'];
+            return [
+                'valor_real' => $data['valor'],
+                'valor_descuento' => $data['valor']
+            ];
         }
 
         try {
@@ -615,16 +618,19 @@ class ReservaService
                 }
             });
 
-            $valorBase = $franjaCoincidente ? $franjaCoincidente->valor : null;
+            $valorReal = $franjaCoincidente ? $franjaCoincidente->valor : null;
 
-            if ($valorBase === null) {
+            if ($valorReal === null) {
                 return null;
             }
 
             // Aplicar descuento por tipo de usuario si existe
-            $valorFinal = $this->aplicarDescuentoPorTipoUsuario($valorBase, $configuracionCompleta->id_espacio);
+            $valorDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio);
 
-            return $valorFinal;
+            return [
+                'valor_real' => $valorReal,
+                'valor_descuento' => $valorDescuento
+            ];
         } catch (Exception $e) {
             Log::error('Error al obtener valor de franja', [
                 'configuracion_id' => $idConfiguracion,
@@ -772,7 +778,7 @@ class ReservaService
             ->first();
 
         if (!$configTipoUsuario) {
-            throw new Exception("Los usuarios <strong>{$tipoUsuario}s</strong> no tienen permitido reservar este espacio.");
+            throw new Exception("No permitido para {$tipoUsuario}.");
         }
     }
 
@@ -781,7 +787,7 @@ class ReservaService
         $configuracionEspacio = $this->obtenerConfiguracionEspacio($espacioId, $fechaReserva);
 
         if (!$configuracionEspacio) {
-            throw new Exception("No se encontró configuración para este espacio.");
+            throw new Exception("Sin configuración.");
         }
 
         $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
@@ -809,8 +815,7 @@ class ReservaService
             $horaFormateada = $fechaHoraApertura->format('h:i A');
 
             throw new Exception(
-                "Las reservas para el {$fechaReserva->format('d/m/Y')} " .
-                    "estarán disponibles a partir del {$fechaFormateada} a las {$horaFormateada}."
+                "Disponible el {$fechaFormateada} {$horaFormateada}."
             );
         }
     }
@@ -820,14 +825,14 @@ class ReservaService
         $espacio = Espacio::with('categoria')->find($espacioId);
 
         if (!$espacio || !$espacio->categoria) {
-            throw new Exception("No se pudo obtener la información de la categoría del espacio.");
+            throw new Exception("Sin categoría.");
         }
 
         $campoLimite = "reservas_{$tipoUsuario}";
         $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
 
         if ($limiteReservas <= 0) {
-            throw new Exception("Los usuarios <strong>{$tipoUsuario}s</strong> no tienen permitido reservar espacios de la categoría <strong>{$espacio->categoria->nombre}</strong>.");
+            throw new Exception("No permitido para {$tipoUsuario}.");
         }
 
         $reservasExistentes = Reservas::whereHas('espacio', function ($query) use ($espacio) {
@@ -835,16 +840,12 @@ class ReservaService
         })
             ->where('id_usuario', $usuarioId)
             ->whereDate('fecha', $fechaReserva)
-            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+            ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
             ->whereNull('eliminado_en')
             ->count();
 
         if ($reservasExistentes >= $limiteReservas) {
-            $mensaje = $limiteReservas === 1
-                ? "Ya tienes una reserva para esta fecha en la categoría <strong>{$espacio->categoria->nombre}</strong>. Solo se permite <strong>{$limiteReservas} reserva</strong> por día por usuario en esta categoría."
-                : "Ya tienes <strong>{$reservasExistentes}</strong> reservas para esta fecha en la categoría <strong>{$espacio->categoria->nombre}</strong>. Solo se permiten <strong>{$limiteReservas} reservas</strong> por día por usuario en esta categoría.";
-
-            throw new Exception($mensaje);
+            throw new Exception("No puedes reservar más.");
         }
     }
 
@@ -991,33 +992,59 @@ class ReservaService
         }
     }
 
-    public function getMisReservas(int $usuarioId, int $perPage = 10, string $search = '')
+    public function getMisReservas(int $usuarioId, string | null $search = '')
     {
-        $query = Reservas::where('id_usuario', $usuarioId);
+        $query = Reservas::with([
+            'pago',
+            'espacio:id,nombre,id_sede,id_categoria',
+            'espacio.sede:id,nombre',
+            'espacio.categoria:id,nombre',
+            'espacio.imagen:id_espacio,ubicacion',
+            'configuracion:id,id_espacio,tiempo_cancelacion',
+        ])->where('id_usuario', $usuarioId);
 
-        // if ($search) {
-        //     $query->where(function ($q) use ($search) {
-        //         $q->where('nombre', 'like', "%{$search}%")
-        //             ->orWhere('descripcion', 'like', "%{$search}%");
-        //     });
-        // }
+        $query->when($search, function ($q) use ($search) {
+            $q->where(function ($subQ) use ($search) {
+                $subQ->orWhere('codigo', 'like', "%{$search}%");
+
+                $subQ->orWhereHas('pago', function ($pagoQ) use ($search) {
+                    $pagoQ->whereRaw('LOWER(codigo) LIKE ?', ['%' . strtolower($search) . '%']);
+                });
+                $subQ->orWhereHas('espacio', function ($espacioQ) use ($search) {
+                    $espacioQ->whereRaw('LOWER(nombre) LIKE ?', ['%' . strtolower($search) . '%']);
+                });
+                $subQ->orWhereHas('espacio.sede', function ($sedeQ) use ($search) {
+                    $sedeQ->whereRaw('LOWER(nombre) LIKE ?', ['%' . strtolower($search) . '%']);
+                });
+                $subQ->orWhereHas('espacio.categoria', function ($catQ) use ($search) {
+                    $catQ->whereRaw('LOWER(nombre) LIKE ?', ['%' . strtolower($search) . '%']);
+                });
+
+                $fechaNormalizada = null;
+                if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $search, $m)) {
+                    $fechaNormalizada = $m[3] . '-' . $m[2] . '-' . $m[1];
+                } elseif (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/', $search, $m)) {
+                    $anio = (int)$m[3] < 50 ? '20' . $m[3] : '19' . $m[3];
+                    $fechaNormalizada = $anio . '-' . $m[2] . '-' . $m[1];
+                } elseif (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $search, $m)) {
+                    $fechaNormalizada = $m[1] . '-' . $m[2] . '-' . $m[3];
+                }
+                if ($fechaNormalizada) {
+                    $subQ->orWhereDate('fecha', $fechaNormalizada);
+                }
+                $subQ->orWhere('hora_inicio', 'like', "%{$search}%");
+            });
+        });
 
         $query->orderBy('fecha', 'desc')
-            ->orderBy('hora_inicio', 'desc')
-            ->with([
-                'pago',
-                'espacio:id,nombre,id_sede,id_categoria',
-                'espacio.sede:id,nombre',
-                'espacio.categoria:id,nombre',
-                'espacio.imagen:id_espacio,ubicacion',
-                'configuracion:id,id_espacio,tiempo_cancelacion',
-            ]);
+            ->orderBy('hora_inicio', 'desc');
 
-        $reservas = $query->paginate($perPage);
+        $reservas = $query->get();
 
-        $reservas->getCollection()->transform(function ($reserva) {
+        // Agregar validaciones de reservas pasadas y cancelación
+        $reservas->each(function ($reserva) {
+            $reserva->es_pasada = $this->esReservaPasada($reserva);
             $reserva->puede_cancelar = $reserva->puedeSerCancelada();
-            return $reserva;
         });
 
         return $reservas;
@@ -1081,8 +1108,8 @@ class ReservaService
             $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::createFromFormat('H:i:s', $reserva->hora_fin);
 
             $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
-            $valor = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
-            $estado = $reserva->estado;
+            $valoresReserva = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
+            $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
             if ($reserva->pago && $reserva->pago->estado != 'OK') {
@@ -1155,7 +1182,8 @@ class ReservaService
                 'sede' => $reserva->espacio->sede->nombre ?? null,
                 'fecha' => $fecha->format('Y-m-d'),
                 'hora_inicio' => $horaInicio->format('h:i A'),
-                'valor' => $valor,
+                'valor' => $valoresReserva ? $valoresReserva['valor_real'] : 0,
+                'valor_descuento' => $valor,
                 'estado' => $reserva->estado,
                 'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
                 'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
@@ -1165,6 +1193,8 @@ class ReservaService
                 'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
                 'jugadores' => $jugadores,
                 'total_jugadores' => count($jugadores),
+                'es_pasada' => $this->esReservaPasada($reserva),
+                'puede_cancelar' => $reserva->puedeSerCancelada(),
                 'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
                     (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
                         count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
@@ -1239,5 +1269,17 @@ class ReservaService
         } catch (Exception $e) {
             throw $e;
         }
+    }
+
+    private function esReservaPasada($reserva)
+    {
+        if (!$reserva->fecha || !$reserva->hora_inicio) {
+            return false;
+        }
+
+        $fechaHoraReserva = Carbon::parse(
+            $reserva->fecha->format('Y-m-d') . ' ' . $reserva->hora_inicio->format('H:i:s')
+        );
+        return $fechaHoraReserva->isPast();
     }
 }

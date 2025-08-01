@@ -136,13 +136,18 @@ class ReservasController extends Controller
     public function misReservas(Request $request)
     {
         try {
-
-            $per_page = $request->input('per_page', 10);
             $search =  $request->input('search', '');
 
-            $reservas = $this->reserva_service->getMisReservas(Auth::id(), $per_page, $search);
+            $reservas = $this->reserva_service->getMisReservas(Auth::id(), $search);
 
-            return $reservas;
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $reservas,
+                    'message' => 'Mis reservas obtenidas correctamente.',
+                ],
+                200,
+            );
         } catch (Exception $e) {
             Log::error('Error al obtener mis reservas', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',

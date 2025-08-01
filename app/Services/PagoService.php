@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Pago;
+use App\Models\PagoConsulta;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -123,14 +124,16 @@ class PagoService
 
         $reserva = $this->reserva_service->getReservaById($id_reserva);
 
+        $valoresReserva = $this->reserva_service->obtenerValorReserva(
+            [],
+            $reserva->configuracion->id,
+            $reserva->hora_inicio,
+            $reserva->hora_fin
+        );
+
         $pago = Pago::create([
             'id_reserva' => $reserva->id,
-            'valor' => $this->reserva_service->obtenerValorReserva(
-                [],
-                $reserva->configuracion->id,
-                $reserva->hora_inicio,
-                $reserva->hora_fin
-            ),
+            'valor' => $valoresReserva ? $valoresReserva['valor_descuento'] : 0,
             'estado' => 'inicial',
         ]);
 
@@ -146,47 +149,15 @@ class PagoService
 
     public function get_info_pago(string $codigo)
     {
-
-        $url = "$this->url_pagos/getTransactionInformation";
-
-        if (!$this->session_token) {
-            $this->getSessionToken();
-        }
-
         try {
+            // Primero buscar en PagoConsulta
+            $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
+
+            if ($pagoConsulta) {
+                return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
+            }
+
             $pago = Pago::where('codigo', $codigo)->firstOrFail();
-
-            $pagoInfoResponse = Http::post($url, [
-                'SessionToken' => $this->session_token,
-                'EntityCode' => $this->entity_code,
-                'TicketId' => $pago->ticket_id,
-            ]);
-
-            if (!$pagoInfoResponse->successful()) {
-                throw new Exception('Error obteniendo información del pago: ' . $pagoInfoResponse->body());
-            }
-
-            $pagoInfo = $pagoInfoResponse->json();
-
-            if (isset($pagoInfo['ReturnCode']) && $pagoInfo['ReturnCode'] === 'FAIL_APIEXPIREDSESSION') {
-                $this->getSessionToken();
-                $pagoInfoResponse = Http::post($url, [
-                    'SessionToken' => $this->session_token,
-                    'EntityCode' => $this->entity_code,
-                    'TicketId' => $pago->ticket_id,
-                ]);
-
-                if (!$pagoInfoResponse->successful()) {
-                    throw new Exception('Error obteniendo información del pago después de refrescar el token: ' . $pagoInfoResponse->body());
-                }
-
-                $pagoInfo = $pagoInfoResponse->json();
-            }
-
-            if ($pago->estado !== $pagoInfo['TranState']) {
-                $pago->estado = $pagoInfo['TranState'];
-                $pago->save();
-            }
 
             $pago->load([
                 'reserva',
@@ -196,6 +167,31 @@ class PagoService
                 'reserva.usuarioReserva.persona',
                 'reserva.usuarioReserva.persona.tipoDocumento',
             ]);
+
+            $pagoInfo = $this->consultarPasarelaPago($pago->ticket_id);
+
+            if ($pago->estado !== $pagoInfo['TranState']) {
+                $pago->estado = $pagoInfo['TranState'];
+                $pago->save();
+            }
+
+            if ($this->esEstadoExitoso($pagoInfo['TranState'])) {
+                DB::beginTransaction();
+
+                try {
+                    $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
+
+                    $pago->reserva->estado = 'pagada';
+                    $pago->reserva->save();
+
+                    DB::commit();
+
+                    return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
+                } catch (Exception $e) {
+                    DB::rollBack();
+                    throw $e;
+                }
+            }
 
             $transaccion = $this->formatearTransaccion($pagoInfo);
 
@@ -255,6 +251,7 @@ class PagoService
             'moneda' => $pagoInfo['PayCurrency'],
             'fecha_banco' => $pagoInfo['BankProcessDate'],
             'codigo_traza' => $pagoInfo['TrazabilityCode'],
+            'tipo_doc_titular' => $pagoInfo['ReferenceArray'][0] ?? '',
         ];
 
         if ($pagoInfo['PaymentSystem'] === "0") {
@@ -274,5 +271,141 @@ class PagoService
         }
 
         return $data;
+    }
+
+    private function consultarPasarelaPago(int $ticketId): array
+    {
+        $url = "$this->url_pagos/getTransactionInformation";
+
+        if (!$this->session_token) {
+            $this->getSessionToken();
+        }
+
+        $pagoInfoResponse = Http::post($url, [
+            'SessionToken' => $this->session_token,
+            'EntityCode' => $this->entity_code,
+            'TicketId' => $ticketId,
+        ]);
+
+        if (!$pagoInfoResponse->successful()) {
+            throw new Exception('Error obteniendo información del pago: ' . $pagoInfoResponse->body());
+        }
+
+        $pagoInfo = $pagoInfoResponse->json();
+
+        if (isset($pagoInfo['ReturnCode']) && $pagoInfo['ReturnCode'] === 'FAIL_APIEXPIREDSESSION') {
+            $this->getSessionToken();
+            $pagoInfoResponse = Http::post($url, [
+                'SessionToken' => $this->session_token,
+                'EntityCode' => $this->entity_code,
+                'TicketId' => $ticketId,
+            ]);
+
+            if (!$pagoInfoResponse->successful()) {
+                throw new Exception('Error obteniendo información del pago después de refrescar el token: ' . $pagoInfoResponse->body());
+            }
+
+            $pagoInfo = $pagoInfoResponse->json();
+        }
+
+        return $pagoInfo;
+    }
+
+    private function esEstadoExitoso(string $estado): bool
+    {
+        $estadosExitosos = ['completado', 'approved', 'APPROVED', 'success', 'SUCCESS', 'pagado', 'OK'];
+        return in_array(strtolower($estado), array_map('strtolower', $estadosExitosos));
+    }
+
+    private function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
+    {
+        $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
+
+        // Obtener valores reales y con descuento
+        $valoresReserva = $this->reserva_service->obtenerValorReserva(
+            [],
+            $pago->reserva->configuracion->id,
+            $pago->reserva->hora_inicio,
+            $pago->reserva->hora_fin
+        );
+
+        $valorReal = $valoresReserva ? $valoresReserva['valor_real'] : $pago->valor;
+
+        return PagoConsulta::create([
+            'codigo' => $pago->codigo,
+            'valor_real' => $valorReal, // Valor sin descuento
+            'valor_transaccion' => $pagoInfo['TransValue'] ?? $pago->valor, // Valor de la transacción del proveedor
+            'estado' => $pagoInfo['TranState'],
+            'ticket_id' => $pago->ticket_id,
+            'codigo_traza' => $pagoInfo['TrazabilityCode'],
+            'medio_pago' => $pagoInfo['PaymentSystem'] === "0" ? 'PSE' : 'Tarjeta',
+            'tipo_doc_titular' => $transaccionFormateada['tipo_doc_titular'] ?? '',
+            'numero_doc_titular' => $pago->reserva->usuarioReserva->persona->numero_documento,
+            'nombre_titular' => $transaccionFormateada['titular'] ?? $this->reserva_service->construirNombreCompleto($pago->reserva->usuarioReserva->persona),
+            'email_titular' => $pago->reserva->usuarioReserva->email,
+            'celular_titular' => $pago->reserva->usuarioReserva->persona->celular,
+            'descripcion_pago' => "Pago reserva {$pago->reserva->codigo}",
+            'nombre_medio_pago' => $pagoInfo['FiName'],
+            'tarjeta_oculta' => $transaccionFormateada['digitos'] ?? null,
+            'ultimos_cuatro' => isset($transaccionFormateada['digitos']) ? substr($transaccionFormateada['digitos'], -4) : null,
+            'fecha_banco' => $pagoInfo['BankProcessDate'],
+            'moneda' => $pagoInfo['PayCurrency'],
+            'id_reserva' => $pago->reserva->id,
+            'hora_inicio' => $pago->reserva->hora_inicio,
+            'hora_fin' => $pago->reserva->hora_fin,
+            'fecha_reserva' => $pago->reserva->fecha->format('Y-m-d'),
+            'codigo_reserva' => $pago->reserva->codigo,
+            'id_usuario_reserva' => $pago->reserva->usuarioReserva->id_usuario,
+            'tipo_doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->tipoDocumento->codigo,
+            'doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->numero_documento,
+            'email_usuario_reserva' => $pago->reserva->usuarioReserva->email,
+            'celular_usuario_reserva' => $pago->reserva->usuarioReserva->persona->celular,
+            'id_espacio' => $pago->reserva->espacio->id,
+            'nombre_espacio' => $pago->reserva->espacio->nombre,
+        ]);
+    }
+
+    private function formatearRespuestaDesdePagoConsulta(PagoConsulta $pagoConsulta): array
+    {
+        return [
+            'pago' => [
+                'codigo' => $pagoConsulta->codigo,
+                'valor' => $pagoConsulta->valor_transaccion ?? $pagoConsulta->valor_real,
+                'estado' => $pagoConsulta->estado,
+                'ticket_id' => $pagoConsulta->ticket_id,
+                'creado_en' => $pagoConsulta->fecha_banco,
+                'actualizado_en' => $pagoConsulta->fecha_banco,
+            ],
+            'transaccion' => [
+                'entidad' => $pagoConsulta->nombre_medio_pago,
+                'moneda' => $pagoConsulta->moneda,
+                'fecha_banco' => $pagoConsulta->fecha_banco,
+                'codigo_traza' => $pagoConsulta->codigo_traza,
+                'tipo' => $pagoConsulta->medio_pago,
+                'titular' => $pagoConsulta->nombre_titular,
+                'doc_titular' => $pagoConsulta->numero_doc_titular,
+                'digitos' => $pagoConsulta->tarjeta_oculta,
+                'cuotas' => null, // Este campo no se guarda en PagoConsulta
+            ],
+            'reserva' => [
+                'id' => $pagoConsulta->id_reserva,
+                'hora_inicio' => $pagoConsulta->hora_inicio,
+                'hora_fin' => $pagoConsulta->hora_fin,
+                'codigo' => $pagoConsulta->codigo_reserva,
+                'fecha' => $pagoConsulta->fecha_reserva,
+                'usuario' => [
+                    'id' => $pagoConsulta->id_usuario_reserva,
+                    'tipo_docuemnto' => $pagoConsulta->tipo_doc_usuario_reserva . ' ' . $pagoConsulta->doc_usuario_reserva,
+                    'documento' => $pagoConsulta->doc_usuario_reserva,
+                    'nombre_completo' => $pagoConsulta->nombre_titular,
+                    'email' => $pagoConsulta->email_usuario_reserva,
+                    'celular' => $pagoConsulta->celular_usuario_reserva,
+                ],
+                'espacio' => [
+                    'id' => $pagoConsulta->id_espacio,
+                    'nombre' => $pagoConsulta->nombre_espacio,
+                ],
+            ]
+        ];
     }
 }
