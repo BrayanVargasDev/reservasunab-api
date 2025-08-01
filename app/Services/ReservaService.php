@@ -1045,14 +1045,12 @@ class ReservaService
         $reservas->each(function ($reserva) {
             $reserva->es_pasada = $this->esReservaPasada($reserva);
             $reserva->puede_cancelar = $reserva->puedeSerCancelada();
+            $reserva->porcentaje_descuento = $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario);
         });
 
         return $reservas;
     }
 
-    /**
-     * Obtiene las reservas del usuario que pueden ser canceladas
-     */
     public function getMisReservasCancelables(int $usuarioId, int $perPage = 10)
     {
         $query = Reservas::where('id_usuario', $usuarioId)
@@ -1184,6 +1182,7 @@ class ReservaService
                 'hora_inicio' => $horaInicio->format('h:i A'),
                 'valor' => $valoresReserva ? $valoresReserva['valor_real'] : 0,
                 'valor_descuento' => $valor,
+                'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
                 'estado' => $reserva->estado,
                 'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
                 'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
@@ -1281,5 +1280,30 @@ class ReservaService
             $reserva->fecha->format('Y-m-d') . ' ' . $reserva->hora_inicio->format('H:i:s')
         );
         return $fechaHoraReserva->isPast();
+    }
+
+    private function obtenerPorcentajeDescuento($espacioId, $usuarioId = null)
+    {
+        try {
+            $usuario = $usuarioId ? Usuario::find($usuarioId) : Auth::user();
+
+            if (!$usuario || !$usuario->tipo_usuario) {
+                return 0;
+            }
+
+            $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereNull('eliminado_en')
+                ->first();
+
+            return $configTipoUsuario ? ($configTipoUsuario->porcentaje_descuento ?? 0) : 0;
+        } catch (Exception $e) {
+            Log::error('Error al obtener porcentaje de descuento', [
+                'error' => $e->getMessage(),
+                'espacio_id' => $espacioId,
+                'usuario_id' => $usuarioId,
+            ]);
+            return 0;
+        }
     }
 }
