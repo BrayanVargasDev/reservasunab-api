@@ -27,8 +27,14 @@ class StoreUsuarioRequest extends FormRequest
         return [
             'email' => 'required|string|email|max:100|unique:usuarios',
             'password' => 'required|string|min:8',
-            'tipo_usuario' => [
+            'tipos_usuario' => [
                 'required',
+                'array',
+                'min:1'
+            ],
+            'tipos_usuario.*' => [
+                'required',
+                'string',
                 Rule::in(['estudiante', 'docente', 'administrativo', 'egresado', 'externo']),
             ],
             'rol' => [
@@ -54,8 +60,11 @@ class StoreUsuarioRequest extends FormRequest
             'email.unique' => 'El email ya está en uso',
             'password.required' => 'La contraseña es obligatoria',
             'password.min' => 'La contraseña debe tener al menos 8 caracteres',
-            'tipo_usuario.required' => 'El tipo de usuario es obligatorio',
-            'tipo_usuario.in' => 'El tipo de usuario seleccionado no es válido',
+            'tipos_usuario.required' => 'Los tipos de usuario son obligatorios',
+            'tipos_usuario.array' => 'Los tipos de usuario deben ser un array',
+            'tipos_usuario.min' => 'Debe seleccionar al menos un tipo de usuario',
+            'tipos_usuario.*.required' => 'Cada tipo de usuario es obligatorio',
+            'tipos_usuario.*.in' => 'Uno o más tipos de usuario seleccionados no son válidos',
             'rol.required' => 'El rol es obligatorio',
             'rol.in' => 'El rol seleccionado no es válido',
             'ldap_uid.uuid' => 'El formato del UID de LDAP no es válido',

@@ -32,7 +32,7 @@ class EspacioNovedadPolicy
     public function create(Usuario $usuario): bool
     {
         // Solo administradores y staff pueden crear novedades
-        return in_array($usuario->tipo_usuario, ['administrador', 'staff']);
+        return $usuario->tieneAlgunTipo(['administrador', 'staff']);
     }
 
     /**
@@ -41,8 +41,8 @@ class EspacioNovedadPolicy
     public function update(Usuario $usuario, EspacioNovedad $espacioNovedad): bool
     {
         // Solo administradores, staff o quien creó la novedad pueden actualizarla
-        return in_array($usuario->tipo_usuario, ['administrador', 'staff']) || 
-               $espacioNovedad->creado_por === $usuario->id_usuario;
+        return $usuario->tieneAlgunTipo(['administrador', 'staff']) ||
+            $espacioNovedad->creado_por === $usuario->id_usuario;
     }
 
     /**
@@ -51,8 +51,8 @@ class EspacioNovedadPolicy
     public function delete(Usuario $usuario, EspacioNovedad $espacioNovedad): bool
     {
         // Solo administradores, staff o quien creó la novedad pueden eliminarla
-        return in_array($usuario->tipo_usuario, ['administrador', 'staff']) || 
-               $espacioNovedad->creado_por === $usuario->id_usuario;
+        return $usuario->tieneAlgunTipo(['administrador', 'staff']) ||
+            $espacioNovedad->creado_por === $usuario->id_usuario;
     }
 
     /**
@@ -61,7 +61,7 @@ class EspacioNovedadPolicy
     public function restore(Usuario $usuario, EspacioNovedad $espacioNovedad): bool
     {
         // Solo administradores y staff pueden restaurar novedades eliminadas
-        return in_array($usuario->tipo_usuario, ['administrador', 'staff']);
+        return $usuario->tieneAlgunTipo(['administrador', 'staff']);
     }
 
     /**
@@ -70,6 +70,6 @@ class EspacioNovedadPolicy
     public function forceDelete(Usuario $usuario, EspacioNovedad $espacioNovedad): bool
     {
         // Solo administradores pueden eliminar permanentemente
-        return $usuario->tipo_usuario === 'administrador';
+        return $usuario->tieneTipo('administrador');
     }
 }

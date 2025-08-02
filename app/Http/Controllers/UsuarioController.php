@@ -159,6 +159,7 @@ class UsuarioController extends Controller
         try {
             $usuario = $this->usuarioService->getById($id);
             // $this->authorize('ver', $usuario);
+            Log::debug($usuario);
             return response()->json(
                 [
                     'status' => 'success',

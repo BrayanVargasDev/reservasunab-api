@@ -26,7 +26,7 @@ class PermisoService
                 'usuarios.id_usuario',
                 'usuarios.email',
                 'usuarios.id_rol',
-                'usuarios.tipo_usuario'
+                'usuarios.tipos_usuario'
             )
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
@@ -317,7 +317,7 @@ class PermisoService
             'usuario' => [
                 'id_usuario' => $usuario->id_usuario,
                 'email' => $usuario->email,
-                'tipo_usuario' => $usuario->tipo_usuario,
+                'tipo_usuario' => $usuario->tipos_usuario,
                 'es_administrador' => $usuario->esAdministrador(),
             ],
             'rol' => $usuario->rol ? [

@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use InvalidArgumentException;
 
 class Usuario extends Authenticatable
 {
@@ -22,10 +24,23 @@ class Usuario extends Authenticatable
     const UPDATED_AT = 'actualizado_en';
     const DELETED_AT = 'eliminado_en';
 
+    // Tipos de usuario válidos
+    const TIPO_ESTUDIANTE = 'estudiante';
+    const TIPO_ADMINISTRATIVO = 'administrativo';
+    const TIPO_EGRESADO = 'egresado';
+    const TIPO_EXTERNO = 'externo';
+
+    const TIPOS_USUARIO_VALIDOS = [
+        self::TIPO_ESTUDIANTE,
+        self::TIPO_ADMINISTRATIVO,
+        self::TIPO_EGRESADO,
+        self::TIPO_EXTERNO,
+    ];
+
     protected $fillable = [
         'email',
         'password_hash',
-        'tipo_usuario',
+        'tipos_usuario',
         'rol',
         'ldap_uid',
         'activo',
@@ -39,7 +54,7 @@ class Usuario extends Authenticatable
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
-        'tipo_usuario' => 'string',
+        // 'tipos_usuario' => 'array',
         'email_verified_at' => 'datetime',
     ];
 
@@ -97,6 +112,58 @@ class Usuario extends Authenticatable
             'id_usuario',
             'id_reserva'
         );
+    }
+
+    public function tieneTipo(string $tipo)
+    {
+        return in_array($tipo, $this->tipos_usuario ?? []);
+    }
+
+    public function tieneAlgunTipo(array $tipos): bool
+    {
+        return !empty(array_intersect($tipos, $this->tipos_usuario ?? []));
+    }
+
+    public function agregarTipo(string $tipo): bool
+    {
+        if (!in_array($tipo, self::TIPOS_USUARIO_VALIDOS)) {
+            throw new InvalidArgumentException("Tipo de usuario inválido: {$tipo}");
+        }
+
+        $tiposActuales = $this->tipos_usuario ?? [];
+
+        if (!in_array($tipo, $tiposActuales)) {
+            $tiposActuales[] = $tipo;
+            $this->tipos_usuario = $tiposActuales;
+            return true;
+        }
+
+        return false;
+    }
+
+    public function removerTipo(string $tipo): bool
+    {
+        $tiposActuales = $this->tipos_usuario ?? [];
+        $key = array_search($tipo, $tiposActuales);
+
+        if ($key !== false) {
+            unset($tiposActuales[$key]);
+            $this->tipos_usuario = array_values($tiposActuales);
+            return true;
+        }
+
+        return false;
+    }
+
+    public function setTiposUsuario(array $tipos): void
+    {
+        $tiposInvalidos = array_diff($tipos, self::TIPOS_USUARIO_VALIDOS);
+
+        if (!empty($tiposInvalidos)) {
+            throw new InvalidArgumentException("Tipos de usuario inválidos: " . implode(', ', $tiposInvalidos));
+        }
+
+        $this->tipos_usuario = array_unique($tipos);
     }
 
     public function esAdministrador(): bool
@@ -172,5 +239,24 @@ class Usuario extends Authenticatable
         ]);
 
         return false;
+    }
+
+    protected function tiposUsuario(): Attribute
+    {
+        return Attribute::make(
+            get: fn($value) => $this->fromPostgresArray($value),
+            set: fn($value) => $this->toPostgresArray($value),
+        );
+    }
+
+    private function fromPostgresArray($value): array
+    {
+        // Quita las llaves { } y explota por coma
+        return str_getcsv(trim($value, '{}'));
+    }
+
+    private function toPostgresArray(array $array): string
+    {
+        return '{' . implode(',', $array) . '}';
     }
 }

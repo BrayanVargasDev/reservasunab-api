@@ -12,7 +12,7 @@ class UsuariosResource extends JsonResource
             'id' => $this->id_usuario,
             'avatar' => $this->avatar,
             'email' => $this->email,
-            'tipoUsuario' => $this->tipo_usuario ?? null,
+            'tipoUsuario' => $this->tipos_usuario ?? null,
             'telefono' => $this->persona?->celular ?? '',
             'rol' => $this->rol->nombre ?? null,
             'tipoDocumento' => $this->persona?->tipo_documento_id ?? null,

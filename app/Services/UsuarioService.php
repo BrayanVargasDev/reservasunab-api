@@ -22,7 +22,7 @@ class UsuarioService
     // Constantes para campos de mapeo
     private const USUARIO_FIELDS_MAPPING = [
         'email' => 'email',
-        'tipo_usuario' => 'tipo_usuario',
+        'tipos_usuario' => 'tipos_usuario',
         'id_persona' => 'id_persona',
         'activo' => 'activo',
     ];
@@ -67,7 +67,7 @@ class UsuarioService
             ->select(
                 'usuarios.id_usuario',
                 'usuarios.email',
-                'usuarios.tipo_usuario',
+                'usuarios.tipos_usuario',
                 'usuarios.ldap_uid',
                 'usuarios.activo',
                 'usuarios.id_rol',
@@ -78,7 +78,7 @@ class UsuarioService
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->whereRaw('LOWER(usuarios.email) LIKE ?', ['%' . strtolower($search) . '%'])
-                        ->orWhereRaw('LOWER(usuarios.tipo_usuario::text) LIKE ?', ['%' . strtolower($search) . '%'])
+                        ->orWhereRaw('LOWER(ANY(usuarios.tipos_usuario)) LIKE ?', ['%' . strtolower($search) . '%'])
                         ->orWhereHas('persona', function ($q) use ($search) {
                             $q->whereRaw('LOWER(personas.primer_nombre) LIKE ?', ['%' . strtolower($search) . '%'])
                                 ->orWhereRaw('LOWER(personas.segundo_nombre) LIKE ?', ['%' . strtolower($search) . '%'])
@@ -381,7 +381,7 @@ class UsuarioService
         $dataUsuario = [
             'email' => $data['email'],
             'password_hash' => Hash::make($password),
-            'tipo_usuario' => $data['tipoUsuario'] ?? 'externo',
+            'tipos_usuario' => $data['tiposUsuario'] ?? ['externo'],
             'ldap_uid' => $data['ldap_uid'] ?? null,
             'activo' => $data['activo'] ?? true,
             'id_persona' => $persona->id_persona,
@@ -551,7 +551,7 @@ class UsuarioService
             ->select([
                 'usuarios.id_usuario as id',
                 'usuarios.email',
-                'usuarios.tipo_usuario',
+                'usuarios.tipos_usuario',
                 'usuarios.ldap_uid',
                 'usuarios.activo',
                 'usuarios.id_rol',
@@ -562,7 +562,7 @@ class UsuarioService
             ->where(function ($query) use ($termino) {
                 $query->whereRaw('LOWER(email) LIKE ?', ["%{$termino}%"])
                     // ->orWhereRaw('ldap_uid LIKE ?', ["%{$termino}%"])
-                    ->orWhereRaw('LOWER(tipo_usuario::text) LIKE ?', ["%{$termino}%"])
+                    ->orWhereRaw('LOWER(ANY(tipos_usuario)) LIKE ?', ["%{$termino}%"])
                     ->orWhereHas('persona', function ($q) use ($termino) {
                         $q->whereRaw('LOWER(primer_nombre) LIKE ?', ["%{$termino}%"])
                             ->orWhereRaw('LOWER(segundo_nombre) LIKE ?', ["%{$termino}%"])

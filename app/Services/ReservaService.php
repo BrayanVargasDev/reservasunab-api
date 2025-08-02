@@ -408,11 +408,11 @@ class ReservaService
                     throw new Exception('Usuario no autenticado.');
                 }
 
-                $this->validarTipoUsuarioParaReserva($data['base']['id'], $usuario->tipo_usuario);
+                $this->validarTipoUsuarioParaReserva($data['base']['id'], $usuario->tipos_usuario);
 
-                $this->validarTiempoAperturaReserva($data['base']['id'], $usuario->tipo_usuario, $fecha);
+                $this->validarTiempoAperturaReserva($data['base']['id'], $usuario->tipos_usuario, $fecha);
 
-                $this->validarLimitesReservasPorCategoria($data['base']['id'], $usuario->id_usuario, $usuario->tipo_usuario, $fecha);
+                $this->validarLimitesReservasPorCategoria($data['base']['id'], $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
 
                 $espacio = Espacio::find($data['base']['id']);
                 if (!$espacio) {
@@ -470,7 +470,7 @@ class ReservaService
                 $configuracion = $data['base']['configuracion'];
                 $idConfiguracion = $this->obtenerIdConfiguracion($configuracion, $data['base']['id'], $fecha);
 
-                $estado = ($usuario->tipo_usuario === 'estudiante') ? 'completada' : 'inicial';
+                $estado = $usuario->tieneTipo('estudiante') ? 'completada' : 'inicial';
 
                 $reserva = Reservas::create([
                     'id_usuario' => $usuario->id_usuario,
@@ -646,13 +646,15 @@ class ReservaService
         try {
             $usuario = Auth::user();
 
-            if (!$usuario || !$usuario->tipo_usuario) {
+            if (!$usuario || !$usuario->tipos_usuario || empty($usuario->tipos_usuario)) {
                 return $valorBase;
             }
 
+            // Obtener la configuración con mayor descuento de todos los tipos del usuario
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
-                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereIn('tipo_usuario', $usuario->tipos_usuario)
                 ->whereNull('eliminado_en')
+                ->orderBy('porcentaje_descuento', 'desc')
                 ->first();
 
             if (!$configTipoUsuario || !$configTipoUsuario->porcentaje_descuento) {
@@ -770,19 +772,20 @@ class ReservaService
         return $query->get();
     }
 
-    private function validarTipoUsuarioParaReserva(int $espacioId, string $tipoUsuario): void
+    private function validarTipoUsuarioParaReserva(int $espacioId, array $tiposUsuario): void
     {
-        $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
-            ->where('tipo_usuario', $tipoUsuario)
+        $configsPermitidas = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
+            ->whereIn('tipo_usuario', $tiposUsuario)
             ->whereNull('eliminado_en')
-            ->first();
+            ->exists();
 
-        if (!$configTipoUsuario) {
-            throw new Exception("No permitido para {$tipoUsuario}.");
+        if (!$configsPermitidas) {
+            $tiposStr = implode(', ', $tiposUsuario);
+            throw new Exception("No permitido para los tipos de usuario: {$tiposStr}.");
         }
     }
 
-    private function validarTiempoAperturaReserva(int $espacioId, string $tipoUsuario, Carbon $fechaReserva): void
+    private function validarTiempoAperturaReserva(int $espacioId, array $tiposUsuario, Carbon $fechaReserva): void
     {
         $configuracionEspacio = $this->obtenerConfiguracionEspacio($espacioId, $fechaReserva);
 
@@ -790,9 +793,11 @@ class ReservaService
             throw new Exception("Sin configuración.");
         }
 
+        // Obtener la configuración con menor retraso de reserva de todos los tipos del usuario
         $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
-            ->where('tipo_usuario', $tipoUsuario)
+            ->whereIn('tipo_usuario', $tiposUsuario)
             ->whereNull('eliminado_en')
+            ->orderBy('retraso_reserva', 'asc')
             ->first();
 
         $minutosRetraso = $configTipoUsuario ? $configTipoUsuario->retraso_reserva : 0;
@@ -820,7 +825,7 @@ class ReservaService
         }
     }
 
-    private function validarLimitesReservasPorCategoria(int $espacioId, int $usuarioId, string $tipoUsuario, Carbon $fechaReserva): void
+    private function validarLimitesReservasPorCategoria(int $espacioId, int $usuarioId, array $tiposUsuario, Carbon $fechaReserva): void
     {
         $espacio = Espacio::with('categoria')->find($espacioId);
 
@@ -828,24 +833,27 @@ class ReservaService
             throw new Exception("Sin categoría.");
         }
 
-        $campoLimite = "reservas_{$tipoUsuario}";
-        $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
+        // Verificar límites para cada tipo de usuario que tiene el usuario
+        foreach ($tiposUsuario as $tipoUsuario) {
+            $campoLimite = "reservas_{$tipoUsuario}";
+            $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
 
-        if ($limiteReservas <= 0) {
-            throw new Exception("No permitido para {$tipoUsuario}.");
-        }
+            if ($limiteReservas <= 0) {
+                continue;
+            }
 
-        $reservasExistentes = Reservas::whereHas('espacio', function ($query) use ($espacio) {
-            $query->where('id_categoria', $espacio->categoria->id);
-        })
-            ->where('id_usuario', $usuarioId)
-            ->whereDate('fecha', $fechaReserva)
-            ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
-            ->whereNull('eliminado_en')
-            ->count();
+            $reservasExistentes = Reservas::whereHas('espacio', function ($query) use ($espacio) {
+                $query->where('id_categoria', $espacio->categoria->id);
+            })
+                ->where('id_usuario', $usuarioId)
+                ->whereDate('fecha', $fechaReserva)
+                ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
+                ->whereNull('eliminado_en')
+                ->count();
 
-        if ($reservasExistentes >= $limiteReservas) {
-            throw new Exception("No puedes reservar más.");
+            if ($reservasExistentes >= $limiteReservas) {
+                throw new Exception("No puedes reservar más como {$tipoUsuario}.");
+            }
         }
     }
 
@@ -940,26 +948,29 @@ class ReservaService
         try {
             $usuario = $usuarioId ? Usuario::find($usuarioId) : Auth::user();
 
-            if (!$usuario || !$usuario->tipo_usuario) {
+            if (!$usuario || !$usuario->tipos_usuario || empty($usuario->tipos_usuario)) {
                 return [
                     'tiene_descuento' => false,
                     'porcentaje_descuento' => 0,
-                    'tipo_usuario' => null,
-                    'mensaje' => 'Usuario no encontrado o sin tipo de usuario'
+                    'tipos_usuario' => null,
+                    'mensaje' => 'Usuario no encontrado o sin tipos de usuario'
                 ];
             }
 
+            // Obtener la configuración con mayor descuento de todos los tipos del usuario
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
-                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereIn('tipo_usuario', $usuario->tipos_usuario)
                 ->whereNull('eliminado_en')
+                ->orderBy('porcentaje_descuento', 'desc')
                 ->first();
 
             if (!$configTipoUsuario) {
+                $tiposStr = implode(', ', $usuario->tipos_usuario);
                 return [
                     'tiene_descuento' => false,
                     'porcentaje_descuento' => 0,
-                    'tipo_usuario' => $usuario->tipo_usuario,
-                    'mensaje' => "No hay configuración para usuarios tipo '{$usuario->tipo_usuario}' en este espacio"
+                    'tipos_usuario' => $usuario->tipos_usuario,
+                    'mensaje' => "No hay configuración para usuarios tipos '{$tiposStr}' en este espacio"
                 ];
             }
 
@@ -968,10 +979,11 @@ class ReservaService
             return [
                 'tiene_descuento' => $porcentajeDescuento > 0,
                 'porcentaje_descuento' => $porcentajeDescuento,
-                'tipo_usuario' => $usuario->tipo_usuario,
+                'tipos_usuario' => $usuario->tipos_usuario,
+                'tipo_usuario_descuento' => $configTipoUsuario->tipo_usuario,
                 'mensaje' => $porcentajeDescuento > 0
-                    ? "Descuento del {$porcentajeDescuento}% aplicable para usuarios {$usuario->tipo_usuario}"
-                    : "Sin descuento para usuarios {$usuario->tipo_usuario}",
+                    ? "Descuento del {$porcentajeDescuento}% aplicable como {$configTipoUsuario->tipo_usuario}"
+                    : "Sin descuento disponible",
                 'retraso_reserva' => $configTipoUsuario->retraso_reserva ?? 0
             ];
         } catch (Exception $e) {
@@ -985,7 +997,7 @@ class ReservaService
             return [
                 'tiene_descuento' => false,
                 'porcentaje_descuento' => 0,
-                'tipo_usuario' => null,
+                'tipos_usuario' => null,
                 'mensaje' => 'Error al obtener información de descuento',
                 'error' => $e->getMessage()
             ];
@@ -1287,13 +1299,15 @@ class ReservaService
         try {
             $usuario = $usuarioId ? Usuario::find($usuarioId) : Auth::user();
 
-            if (!$usuario || !$usuario->tipo_usuario) {
+            if (!$usuario || !$usuario->tipos_usuario || empty($usuario->tipos_usuario)) {
                 return 0;
             }
 
+            // Obtener la configuración con mayor descuento de todos los tipos del usuario
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
-                ->where('tipo_usuario', $usuario->tipo_usuario)
+                ->whereIn('tipo_usuario', $usuario->tipos_usuario)
                 ->whereNull('eliminado_en')
+                ->orderBy('porcentaje_descuento', 'desc')
                 ->first();
 
             return $configTipoUsuario ? ($configTipoUsuario->porcentaje_descuento ?? 0) : 0;
