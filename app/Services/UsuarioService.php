@@ -58,7 +58,7 @@ class UsuarioService
     {
         $search = (string) $search;
 
-        return Usuario::withTrashed()->with([
+        $query = Usuario::withTrashed()->with([
             'persona:id_persona,tipo_documento_id,numero_documento,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,celular,direccion,fecha_nacimiento,tipo_persona,regimen_tributario_id,ciudad_expedicion_id,ciudad_residencia_id,id_usuario',
             'persona.tipoDocumento:id_tipo,nombre,codigo',
             'persona.regimenTributario:id,nombre',
@@ -81,23 +81,30 @@ class UsuarioService
             )
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
-                    $q->whereRaw('LOWER(usuarios.email) LIKE ?', ['%' . strtolower($search) . '%'])
-                        ->orWhereRaw('LOWER(ANY(usuarios.tipos_usuario)) LIKE ?', ['%' . strtolower($search) . '%'])
-                        ->orWhereHas('persona', function ($q) use ($search) {
-                            $q->whereRaw('LOWER(personas.primer_nombre) LIKE ?', ['%' . strtolower($search) . '%'])
-                                ->orWhereRaw('LOWER(personas.segundo_nombre) LIKE ?', ['%' . strtolower($search) . '%'])
-                                ->orWhereRaw('LOWER(personas.primer_apellido) LIKE ?', ['%' . strtolower($search) . '%'])
-                                ->orWhereRaw('LOWER(personas.segundo_apellido) LIKE ?', ['%' . strtolower($search) . '%'])
-                                ->orWhereRaw('LOWER(personas.numero_documento) LIKE ?', ['%' . $search . '%']);
+                    $searchLower = strtolower($search);
+
+                    $q->where('usuarios.email', 'ILIKE', "%{$searchLower}%")
+                        ->orWhereHas('persona', function ($personaQuery) use ($searchLower, $search) {
+                            $personaQuery->where('personas.primer_nombre', 'ILIKE', "%{$searchLower}%")
+                                ->orWhere('personas.segundo_nombre', 'ILIKE', "%{$searchLower}%")
+                                ->orWhere('personas.primer_apellido', 'ILIKE', "%{$searchLower}%")
+                                ->orWhere('personas.segundo_apellido', 'ILIKE', "%{$searchLower}%")
+                                ->orWhere('personas.numero_documento', 'LIKE', "%{$search}%");
                         })
-                        ->orWhereHas('rol', function ($q) use ($search) {
-                            $q->whereRaw('LOWER(roles.nombre) LIKE ?', ['%' . strtolower($search) . '%']);
-                        });
+                        ->orWhereHas('rol', function ($rolQuery) use ($searchLower) {
+                            $rolQuery->where('roles.nombre', 'ILIKE', "%{$searchLower}%");
+                        })
+                        ->orWhere(DB::raw("array_to_string(usuarios.tipos_usuario, ',')"), 'ILIKE', "%{$searchLower}%");
                 });
             })
             ->where('usuarios.id_usuario', '!=', Auth::id())
-            ->orderBy('usuarios.id_usuario', 'asc')
-            ->paginate($perPage);
+            ->orderBy('usuarios.id_usuario', 'asc');
+
+
+        // Print the generated SQL query for debugging
+        Log::debug('Generated SQL query:', [$query->toSql(), $query->getBindings()]);
+
+        return $query->paginate($perPage);
     }
 
     public function getTrashed(int $perPage = 10): LengthAwarePaginator
@@ -353,7 +360,7 @@ class UsuarioService
         return strtolower("{$nombre}.{$apellido}.{$fechaNacimiento}");
     }
 
-    private function createPersonaFromData(array $data, int $idUsuario): Persona
+    private function createPersonaFromData(array $data, ?int $idUsuario): Persona
     {
         $personaData = [];
 
@@ -376,8 +383,9 @@ class UsuarioService
             $personaData['tipo_persona'] = 'natural';
         }
 
-        // Asignar el ID del usuario a la persona
-        $personaData['id_usuario'] = $idUsuario;
+        if ($idUsuario !== null) {
+            $personaData['id_usuario'] = $idUsuario;
+        }
 
         return Persona::create($personaData);
     }
@@ -391,7 +399,8 @@ class UsuarioService
             }
         }
 
-        return $this->createPersonaFromData($data, $data['id_usuario'] ?? 0);
+        // Crear persona sin id_usuario inicialmente
+        return $this->createPersonaFromData($data, null);
     }
 
     private function createUsuarioRecord(array $data, Persona $persona, bool $desdeDashboard): Usuario
@@ -652,15 +661,15 @@ class UsuarioService
                 'usuarios.eliminado_en'
             ])
             ->where(function ($query) use ($termino) {
-                $query->whereRaw('LOWER(email) LIKE ?', ["%{$termino}%"])
-                    // ->orWhereRaw('ldap_uid LIKE ?', ["%{$termino}%"])
-                    ->orWhereRaw('LOWER(ANY(tipos_usuario)) LIKE ?', ["%{$termino}%"])
-                    ->orWhereHas('persona', function ($q) use ($termino) {
-                        $q->whereRaw('LOWER(primer_nombre) LIKE ?', ["%{$termino}%"])
-                            ->orWhereRaw('LOWER(segundo_nombre) LIKE ?', ["%{$termino}%"])
-                            ->orWhereRaw('LOWER(primer_apellido) LIKE ?', ["%{$termino}%"])
-                            ->orWhereRaw('LOWER(segundo_apellido) LIKE ?', ["%{$termino}%"])
-                            ->orWhereRaw('LOWER(numero_documento) LIKE ?', ["%{$termino}%"]);
+                $query->where('email', 'ILIKE', "%{$termino}%")
+                    // ->orWhere('ldap_uid', 'LIKE', "%{$termino}%")
+                    ->orWhere('tipos_usuario', 'LIKE', "%{$termino}%")
+                    ->orWhereHas('persona', function ($personaQuery) use ($termino) {
+                        $personaQuery->where('primer_nombre', 'ILIKE', "%{$termino}%")
+                            ->orWhere('segundo_nombre', 'ILIKE', "%{$termino}%")
+                            ->orWhere('primer_apellido', 'ILIKE', "%{$termino}%")
+                            ->orWhere('segundo_apellido', 'ILIKE', "%{$termino}%")
+                            ->orWhere('numero_documento', 'LIKE', "%{$termino}%");
                     });
             })
             ->where('id_usuario', '!=', Auth::id())

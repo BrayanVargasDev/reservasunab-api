@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class Reservas extends Model
 {
@@ -97,16 +98,16 @@ class Reservas extends Model
      */
     public function puedeSerCancelada()
     {
-        if ($this->fecha->isPast()) {
-            return false;
-        }
-
         if (!$this->configuracion) {
             return false;
         }
 
         $fechaHoraReserva = $this->fecha->format('Y-m-d') . ' ' . $this->hora_inicio->format('H:i:s');
         $momentoReserva = Carbon::parse($fechaHoraReserva);
+
+        if ($momentoReserva->isPast()) {
+            return false;
+        }
 
         $tiempoCancelacion = $this->configuracion->tiempo_cancelacion ?? 0;
 
