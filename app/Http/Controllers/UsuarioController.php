@@ -673,4 +673,108 @@ class UsuarioController extends Controller
             ], 500);
         }
     }
+
+    public function validarTerminosCondiciones()
+    {
+        try {
+            $usuario = Auth::user();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'terminos_condiciones' => $usuario->terminos_condiciones,
+                ],
+                'message' => 'Términos y condiciones validados correctamente',
+            ], 200);
+        } catch (UsuarioException $e) {
+            Log::error('Error al validar términos y condiciones', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        } catch (Exception $e) {
+            Log::error('Error al validar términos y condiciones', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al validar los términos y condiciones',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function terminosCondiciones()
+    {
+        try {
+            $usuario = Usuario::findOrFail(Auth::id());
+
+            $usuario->terminos_condiciones = true;
+            $usuario->save();
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $usuario->terminos_condiciones,
+                'message' => 'Términos y condiciones aceptados correctamente',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al obtener términos y condiciones', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al obtener los términos y condiciones',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function validarPerfilCompleto()
+    {
+        try {
+            $es_completo = $this->usuarioService->verificarPerfilCompleto(Auth::id());
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'perfil_completo' => $es_completo,
+                ],
+                'message' => 'Perfil completo validado correctamente',
+            ], 200);
+        } catch (UsuarioException $e) {
+            Log::error('Error al validar perfil completo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+            ], 400);
+        } catch (Exception $e) {
+            Log::error('Error al validar perfil completo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al validar el perfil completo',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

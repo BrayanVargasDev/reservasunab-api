@@ -9,6 +9,7 @@ use App\Services\ReservaService;
 use App\Services\PagoService;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,15 +26,15 @@ class AppServiceProvider extends ServiceProvider
     {
         Sanctum::usePersonalAccessTokenModel(\Laravel\Sanctum\PersonalAccessToken::class);
 
-        // Registrar eventos SAML2 directamente
+        // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
-            Log::info('SAML2 SignedIn event received');
+            Log::info('Evento SignedIn recibido');
 
             try {
                 $samlUser = $event->auth->getSaml2User();
                 $attributes = $samlUser->getAttributes();
 
-                Log::info('SAML user attributes', ['attributes' => $attributes]);
+                Log::info('Atributos del usuario de Google', ['attributes' => $attributes]);
 
                 // Extraer email del usuario - ajustar según tu proveedor SAML
                 $email = null;
@@ -51,12 +52,15 @@ class AppServiceProvider extends ServiceProvider
                     $email = $samlUser->getUserId();
                 }
 
-                Log::info('Extracted email from SAML', ['email' => $email]);
+                Log::info('Email extraido de google', ['email' => $email]);
 
                 if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    Log::error('Invalid email from SAML user', ['email' => $email]);
+                    Log::error('Email inválido de usuario de Google', ['email' => $email]);
                     return;
                 }
+
+                // $usuarioEnUnab = Http::get();
+
 
                 // Buscar o crear usuario
                 $user = Usuario::where('email', $email)->first();
@@ -73,19 +77,19 @@ class AppServiceProvider extends ServiceProvider
                     // Asignar el permiso de reservar a todos los usuarios nuevos
                     $user->asignarPermisoReservar();
 
-                    Log::info('New SAML user created', ['user_id' => $user->id_usuario, 'email' => $email]);
+                    Log::info('Nuevo usuario google creado', ['user_id' => $user->id_usuario, 'email' => $email]);
                 } else {
                     $user->update([
                         'ldap_uid' => $samlUser->getUserId(),
                         'activo' => true,
                     ]);
-                    Log::info('Existing SAML user updated', ['user_id' => $user->id_usuario, 'email' => $email]);
+                    Log::info('Usuario existente actualizado', ['user_id' => $user->id_usuario, 'email' => $email]);
                 }
 
-                Auth::login($user, true); // true para "remember me"
-                Log::info('User authenticated via SAML', ['user_id' => $user->id_usuario]);
+                Auth::login($user, true);
+                Log::info('Usuario autenticado a través de Google', ['user_id' => $user->id_usuario]);
             } catch (\Exception $e) {
-                Log::error('Error in SAML authentication', [
+                Log::error('Error en la autenticación con Google', [
                     'error' => $e->getMessage(),
                     'file' => $e->getFile(),
                     'line' => $e->getLine()

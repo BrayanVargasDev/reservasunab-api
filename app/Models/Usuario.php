@@ -45,12 +45,16 @@ class Usuario extends Authenticatable
         'ldap_uid',
         'activo',
         'id_rol',
+        'perfil_completado',
+        'terminos_condiciones',
     ];
 
     protected $hidden = ['password_hash', 'remember_token'];
 
     protected $casts = [
         'activo' => 'boolean',
+        'perfil_completado' => 'boolean',
+        'terminos_condiciones' => 'boolean',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',

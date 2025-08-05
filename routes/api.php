@@ -20,7 +20,6 @@ use App\Http\Controllers\SharedController;
 use App\Http\Controllers\TipoDocumentoController;
 use App\Http\Controllers\UsuarioController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\SamlAuthController;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
 Route::post('/ingresar', [AuthController::class, 'login']);
@@ -37,6 +36,9 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
     Route::group(['prefix' => 'usuarios'], function () {
         Route::get('/', [UsuarioController::class, 'index']);
         Route::post('/', [UsuarioController::class, 'store']);
+        Route::get('/terminos-condiciones', [UsuarioController::class, 'validarTerminosCondiciones']);
+        Route::get('/perfil-completo', [UsuarioController::class, 'validarPerfilCompleto']);
+        Route::post('/terminos-condiciones', [UsuarioController::class, 'terminosCondiciones']);
         Route::get('/eliminados', [UsuarioController::class, 'trashed']);
         Route::get('/buscar-jugadores', [UsuarioController::class, 'jugadores']);
         Route::put('/cambiar-password', [UsuarioController::class, 'cambiarPassword']);

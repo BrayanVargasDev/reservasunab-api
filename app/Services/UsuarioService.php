@@ -25,6 +25,8 @@ class UsuarioService
         'tipos_usuario' => 'tipos_usuario',
         'id_persona' => 'id_persona',
         'activo' => 'activo',
+        'perfil_completado' => 'perfil_completado',
+        'terminos_condiciones' => 'terminos_condiciones',
     ];
 
     private const PERSONA_FIELDS_MAPPING = [
@@ -71,6 +73,8 @@ class UsuarioService
                 'usuarios.ldap_uid',
                 'usuarios.activo',
                 'usuarios.id_rol',
+                'usuarios.perfil_completado',
+                'usuarios.terminos_condiciones',
                 'usuarios.creado_en',
                 'usuarios.actualizado_en',
                 'usuarios.eliminado_en'
@@ -206,9 +210,19 @@ class UsuarioService
     private function updateUsuarioFields(Usuario $usuario, array $data): void
     {
         foreach (self::USUARIO_FIELDS_MAPPING as $dataKey => $modelField) {
-            if (array_key_exists($dataKey, $data)) {
+            if (array_key_exists($dataKey, $data) && $dataKey !== 'tipos_usuario' && $dataKey !== 'perfil_completado') {
                 $usuario->$modelField = $data[$dataKey];
             }
+        }
+
+        if (isset($data['tipos_usuario'])) {
+            $usuario->tipos_usuario = is_array($data['tipos_usuario'])
+                ? $data['tipos_usuario']
+                : [$data['tipos_usuario']];
+        } elseif (isset($data['tiposUsuario'])) {
+            $usuario->tipos_usuario = is_array($data['tiposUsuario'])
+                ? $data['tiposUsuario']
+                : [$data['tiposUsuario']];
         }
 
         if (isset($data['password'])) {
@@ -219,6 +233,14 @@ class UsuarioService
             $usuario->id_rol = $data['rol'] ?? $data['id_rol'] ?? null;
         }
 
+        // Manejar terminos_condiciones
+        if (isset($data['terminos_condiciones'])) {
+            $usuario->terminos_condiciones = (bool) $data['terminos_condiciones'];
+        }
+
+        $usuario->save();
+
+        $usuario->perfil_completado = $this->esPerfilCompleto($usuario);
         $usuario->save();
     }
 
@@ -238,6 +260,14 @@ class UsuarioService
         }
 
         $persona->save();
+
+        if ($persona->id_usuario) {
+            $usuario = Usuario::find($persona->id_usuario);
+            if ($usuario) {
+                $usuario->perfil_completado = $this->esPerfilCompleto($usuario);
+                $usuario->save();
+            }
+        }
     }
 
     public function delete(int $id): ?bool
@@ -378,22 +408,32 @@ class UsuarioService
             );
         }
 
+        $tiposUsuario = $data['tiposUsuario'] ?? $data['tipos_usuario'] ?? ['externo'];
+
+        if (!is_array($tiposUsuario)) {
+            $tiposUsuario = [$tiposUsuario];
+        }
+
         $dataUsuario = [
             'email' => $data['email'],
             'password_hash' => Hash::make($password),
-            'tipos_usuario' => $data['tiposUsuario'] ?? ['externo'],
+            'tipos_usuario' => $tiposUsuario,
             'ldap_uid' => $data['ldap_uid'] ?? null,
             'activo' => $data['activo'] ?? true,
             'id_persona' => $persona->id_persona,
+            'perfil_completado' => false, // Se calculará después
+            'terminos_condiciones' => $data['terminos_condiciones'] ?? false,
         ];
 
-        if (isset($data['rol'])) {
-            $dataUsuario['rol'] = $data['rol'];
+        if (isset($data['rol']) || isset($data['id_rol'])) {
+            $dataUsuario['id_rol'] = $data['rol'] ?? $data['id_rol'];
         }
 
         $usuario = Usuario::create($dataUsuario);
 
-        // Asignar el permiso de reservar a todos los usuarios nuevos
+        $usuario->perfil_completado = $this->esPerfilCompleto($usuario);
+        $usuario->save();
+
         $usuario->asignarPermisoReservar();
 
         return $usuario;
@@ -462,6 +502,56 @@ class UsuarioService
         if (isset($data['fechaNacimiento'])) {
             $personaData['fecha_nacimiento'] = Carbon::createFromFormat('Y-m-d', $data['fechaNacimiento'])->format('Y-m-d');
         }
+    }
+
+    public function verificarPerfilCompleto(int $usuarioId): bool
+    {
+        $usuario = $this->getById($usuarioId);
+        return $this->esPerfilCompleto($usuario);
+    }
+
+    public function actualizarEstadoPerfil(int $usuarioId): Usuario
+    {
+        try {
+            DB::beginTransaction();
+
+            $usuario = $this->getById($usuarioId);
+            $usuario->perfil_completado = $this->esPerfilCompleto($usuario);
+            $usuario->save();
+
+            DB::commit();
+
+            return $usuario->load('persona');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            $this->logError('Error al actualizar estado del perfil', $e, [
+                'usuario_id' => $usuarioId,
+            ]);
+
+            throw new UsuarioException(
+                'Error al actualizar el estado del perfil: ' . $e->getMessage(),
+                'profile_update_failed',
+                500,
+                $e,
+            );
+        }
+    }
+
+    private function esPerfilCompleto(Usuario $usuario): bool
+    {
+        if (!$usuario->persona) {
+            return false;
+        }
+
+        $persona = $usuario->persona;
+
+        return !empty($persona->ciudad_residencia_id) &&
+            !empty($persona->direccion) &&
+            !empty($persona->ciudad_expedicion_id) &&
+            !empty($persona->numero_documento) &&
+            !empty($persona->tipo_documento_id) &&
+            !empty($persona->tipo_persona) &&
+            !empty($persona->regimen_tributario_id);
     }
 
     private function logError(string $message, \Exception $exception, array $context = []): void
@@ -555,6 +645,8 @@ class UsuarioService
                 'usuarios.ldap_uid',
                 'usuarios.activo',
                 'usuarios.id_rol',
+                'usuarios.perfil_completado',
+                'usuarios.terminos_condiciones',
                 'usuarios.creado_en',
                 'usuarios.actualizado_en',
                 'usuarios.eliminado_en'
