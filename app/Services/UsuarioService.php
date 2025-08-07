@@ -61,7 +61,7 @@ class UsuarioService
         $query = Usuario::withTrashed()->with([
             'persona:id_persona,tipo_documento_id,numero_documento,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,celular,direccion,fecha_nacimiento,tipo_persona,regimen_tributario_id,ciudad_expedicion_id,ciudad_residencia_id,id_usuario',
             'persona.tipoDocumento:id_tipo,nombre,codigo',
-            'persona.regimenTributario:id,nombre',
+            'persona.regimenTributario:codigo,nombre',
             'persona.ciudadExpedicion:id,nombre',
             'persona.ciudadResidencia:id,nombre',
             'rol:id_rol,nombre',
