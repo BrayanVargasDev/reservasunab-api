@@ -51,7 +51,7 @@ class Persona extends Model {
     }
 
     public function regimenTributario(): BelongsTo {
-        return $this->belongsTo(RegimenTributario::class, 'regimen_tributario_id');
+        return $this->belongsTo(RegimenTributario::class, 'codigo', 'regimen_tributario_id');
     }
 
     public function ciudadExpedicion(): BelongsTo {
