@@ -100,10 +100,6 @@ class UsuarioService
             ->where('usuarios.id_usuario', '!=', Auth::id())
             ->orderBy('usuarios.id_usuario', 'asc');
 
-
-        // Print the generated SQL query for debugging
-        Log::debug('Generated SQL query:', [$query->toSql(), $query->getBindings()]);
-
         return $query->paginate($perPage);
     }
 
@@ -554,13 +550,31 @@ class UsuarioService
 
         $persona = $usuario->persona;
 
-        return !empty($persona->ciudad_residencia_id) &&
+        $esta_completo = !empty($persona->ciudad_residencia_id) &&
             !empty($persona->direccion) &&
             !empty($persona->ciudad_expedicion_id) &&
             !empty($persona->numero_documento) &&
             !empty($persona->tipo_documento_id) &&
             !empty($persona->tipo_persona) &&
             !empty($persona->regimen_tributario_id);
+
+        try {
+            DB::beginTransaction();
+
+            $usuario->perfil_completado = $esta_completo;
+            $usuario->save();
+
+            DB::commit();
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            $this->logError('Error al actualizar estado de perfil', $th, [
+                'usuario_id' => $usuario->id_usuario,
+                'perfil_completado' => $esta_completo,
+            ]);
+            return false;
+        }
+
+        return $esta_completo;
     }
 
     private function logError(string $message, \Exception $exception, array $context = []): void

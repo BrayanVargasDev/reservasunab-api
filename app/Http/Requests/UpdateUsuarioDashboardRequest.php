@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateUsuarioDashboardRequest extends FormRequest
 {
@@ -30,7 +31,16 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',
             'documento' => 'sometimes|string|max:20',
             // 'rol' => 'sometimes|exists:roles,id_rol',
-            'tipoUsuario' => 'sometimes|in:estudiante,administrativo,egresado,externo',
+            'tipoUsuario' => [
+                'sometimes',
+                'array',
+                'min:1'
+            ],
+            'tipoUsuario.*' => [
+                'required',
+                'string',
+                Rule::in(['estudiante', 'administrativo', 'egresado', 'externo']),
+            ],
             'password' => 'sometimes|string|min:8|max:255',
             'fechaNacimiento' => 'sometimes',
             'telefono' => 'sometimes|string|max:15',
