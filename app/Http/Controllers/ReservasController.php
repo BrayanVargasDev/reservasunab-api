@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateReservasRequest;
 use App\Http\Requests\AgregarJugadoresReservaRequest;
 use App\Http\Resources\EspacioReservaResource;
 use App\Http\Resources\ReservaConJugadoresResource;
+use App\Http\Resources\ReservaResource;
 use App\Models\Reservas;
 use App\Services\ReservaService;
 use Exception;
@@ -22,6 +23,34 @@ class ReservasController extends Controller
     public function __construct(ReservaService $reserva_service)
     {
         $this->reserva_service = $reserva_service;
+    }
+
+    public function index(Request $request)
+    {
+        try {
+            // $this->authorize('verTodos', Usuario::class);
+            $per_page = $request->input('per_page', 10);
+            $search = $request->input('search', '') ?? '';
+
+            $reservas = $this->reserva_service->getAllReservas($search, $per_page);
+
+            return ReservaResource::collection($reservas);
+        } catch (Exception $e) {
+            Log::error('Error al consultar reservas', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener las reservas',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
     }
 
     public function getEspacios(Request $request)

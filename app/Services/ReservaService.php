@@ -87,14 +87,49 @@ class ReservaService
         }
     }
 
-    public function getAll(string $search = '', int $per_page = 10)
+    public function getAllReservas(?string $search = '', int $per_page = 10)
     {
-        return [
-            'data' => [],
-            'per_page' => $per_page,
-            'current_page' => 1,
-            'total' => 0,
-        ];
+        $search = strtolower($search ?? '');
+
+        $query = Reservas::query()
+            ->with([
+                'espacio:id,nombre,id_sede,id_categoria,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
+                'espacio.sede:id,nombre',
+                'espacio.categoria:id,nombre',
+                'usuarioReserva:id_usuario,email',
+                'configuracion',
+                'configuracion.franjas_horarias',
+                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+            ])
+            ->whereNull('eliminado_en')
+            ->orderBy('fecha', 'desc')
+            ->orderBy('hora_inicio', 'desc');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('codigo', 'like', "%$search%")
+                    ->orWhereHas('espacio', function ($qEspacio) use ($search) {
+                        $qEspacio->where('nombre', 'like', "%$search%");
+                    })
+                    ->orWhereHas('espacio.sede', function ($qSede) use ($search) {
+                        $qSede->where('nombre', 'like', "%$search%");
+                    })
+                    ->orWhereHas('espacio.categoria', function ($qCategoria) use ($search) {
+                        $qCategoria->where('nombre', 'like', "%$search%");
+                    })
+                    ->orWhereHas('usuarioReserva.persona', function ($qPersona) use ($search) {
+                        $qPersona->where(function ($qSub) use ($search) {
+                            $qSub->where('primer_nombre', 'like', "%$search%")
+                                ->orWhere('segundo_nombre', 'like', "%$search%")
+                                ->orWhere('primer_apellido', 'like', "%$search%")
+                                ->orWhere('segundo_apellido', 'like', "%$search%")
+                                ->orWhere('numero_documento', 'like', "%$search%");
+                        });
+                    });
+            });
+        }
+
+        return $query->paginate($per_page);
     }
 
     public function getAllEspacios(
