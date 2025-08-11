@@ -470,7 +470,7 @@ class ReservaService
                 $configuracion = $data['base']['configuracion'];
                 $idConfiguracion = $this->obtenerIdConfiguracion($configuracion, $data['base']['id'], $fecha);
 
-                $estado = $usuario->tieneTipo('estudiante') ? 'completada' : 'inicial';
+                $estado = (is_array($usuario->tipos_usuario) && in_array('estudiante', $usuario->tipos_usuario)) ? 'completada' : 'inicial';
 
                 $reserva = Reservas::create([
                     'id_usuario' => $usuario->id_usuario,
@@ -485,9 +485,11 @@ class ReservaService
                 ]);
 
                 $reserva->load([
-                    'espacio:id,nombre,id_sede',
+                    'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
                     'espacio.sede:id,nombre',
                     'usuarioReserva:id_usuario,email',
+                    'configuracion',
+                    'configuracion.franjas_horarias',
                     'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
                 ]);
 
@@ -503,11 +505,23 @@ class ReservaService
                     'sede' => $reserva->espacio->sede->nombre,
                     'fecha' => $fecha->format('Y-m-d'),
                     'hora_inicio' => $horaInicio->format('h:i A'),
-                    'valor' => $valor,
+                    'valor' => $valoresReserva ? $valoresReserva['valor_real'] : 0,
+                    'valor_descuento' => $valor,
+                    'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
                     'estado' => $valor > 0 ? 'inicial' : $estado,
                     'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
                     'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
-                    'agrega_jugadores' => false
+                    'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
+                    'permite_externos' => $reserva->espacio->permite_externos ?? false,
+                    'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
+                    'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
+                    'jugadores' => [], // Sin jugadores al crear la reserva
+                    'total_jugadores' => 0,
+                    'es_pasada' => $this->esReservaPasada($reserva),
+                    'puede_cancelar' => $reserva->puedeSerCancelada(),
+                    'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
+                        (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
+                            0 < ($reserva->espacio->maximo_jugadores ?? 0)),
                 ];
 
                 return $resumenReserva;
@@ -1008,6 +1022,10 @@ class ReservaService
     {
         $query = Reservas::with([
             'pago',
+            'usuarioReserva',
+            'usuarioReserva.persona' => function ($q) {
+                $q->select('id_persona', 'id_usuario', 'primer_nombre', 'primer_apellido', 'numero_documento');
+            },
             'espacio:id,nombre,id_sede,id_categoria',
             'espacio.sede:id,nombre',
             'espacio.categoria:id,nombre',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePagoRequest;
 use App\Http\Requests\UpdatePagoRequest;
+use App\Http\Resources\PagoResource;
 use App\Models\Pago;
 use App\Services\PagoService;
 use Exception;
@@ -21,9 +22,29 @@ class PagoController extends Controller
         $this->pago_service = $pago_service;
     }
 
-    public function index()
+    public function index(Request $request)
     {
-        //
+        try {
+            $per_page = $request->get('per_page', 10);
+            $search = $request->get('search', '');
+
+            $pagos = $this->pago_service->obtenerPagos($per_page, $search);
+            return PagoResource::collection($pagos);
+        } catch (Exception $e) {
+            Log::error('Error al obtener los pagos', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener los pagos.',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
     }
 
     public function reservas(Request $request)
