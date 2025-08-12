@@ -26,7 +26,7 @@ class UpdateEspacioRequest extends FormRequest
     {
         return [
             'nombre' => 'sometimes|string|max:255',
-            'descripcion' => 'sometimes|string|max:1000',
+            'descripcion' => 'sometimes|string|max:2500',
             'permitirJugadores' => 'sometimes|boolean',
             'minimoJugadores' => 'sometimes|integer|min:0',
             'maximoJugadores' => 'sometimes|integer|min:0',

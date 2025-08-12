@@ -25,7 +25,7 @@ class StoreEspacioRequest extends FormRequest
     {
         return [
             'nombre' => 'required|string|max:255',
-            'descripcion' => 'sometimes|string|max:1000',
+            'descripcion' => 'sometimes|string|max:2500',
             'permitirJugadores' => 'boolean',
             'minimoJugadores' => 'sometimes|integer|min:0',
             'maximoJugadores' => 'sometimes|integer|min:0',
