@@ -876,7 +876,7 @@ class ReservaService
             $horaFormateada = $fechaHoraApertura->format('h:i A');
 
             throw new Exception(
-                "Disponible el {$fechaFormateada} {$horaFormateada}."
+                "Disponible para reservar desde el {$fechaFormateada} {$horaFormateada}."
             );
         }
     }
