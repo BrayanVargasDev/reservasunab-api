@@ -15,11 +15,53 @@ class AppServiceProvider extends ServiceProvider
 
     const TIME_OUT = 30;
 
-    private $unab_host = 'portalpprd.unab.edu.co';
-    private $unab_endpoint = '/app-content/modulos/servicios/api/reservas/';
-    private $usuario_unab = 'RESERVASPPRD';
-    private $password_unab;
-    private $tarea = 1;
+    private $unab_host = null;
+    private $unab_endpoint = null;
+    private $usuario_unab = null;
+    private $password_unab = null;
+    private $tarea = null;
+
+    /**
+     * Carga las variables UNAB desde config('app.*') y valida que existan.
+     * Retorna true si todo está correcto, false si falta alguna crítica.
+     */
+    private function loadUnabConfig(): bool
+    {
+        // Advertir si la configuración está en caché
+        if (function_exists('app') && app()->configurationIsCached()) {
+            Log::debug('Configuración de Laravel está en caché (config:cache activo).');
+        }
+
+        $this->unab_host = config('app.unab_host');
+        $this->unab_endpoint = config('app.unab_endpoint');
+        $this->usuario_unab = config('app.unab_usuario');
+        $this->password_unab = config('app.unab_password');
+        $this->tarea = config('app.unab_tarea');
+
+        $missing = [];
+        if (empty($this->unab_host)) $missing[] = 'UNAB_HOST (app.unab_host)';
+        if (empty($this->unab_endpoint)) $missing[] = 'UNAB_ENDPOINT (app.unab_endpoint)';
+        if (empty($this->usuario_unab)) $missing[] = 'UNAB_USUARIO (app.unab_usuario)';
+        if ($this->password_unab === null || $this->password_unab === '') $missing[] = 'UNAB_PASSWORD (app.unab_password)';
+        if ($this->tarea === null || $this->tarea === '') $missing[] = 'UNAB_TAREA (app.unab_tarea)';
+
+        if (!empty($missing)) {
+            Log::error('Faltan variables de entorno/configuración UNAB', [
+                'faltantes' => $missing,
+            ]);
+            return false;
+        }
+
+        Log::info('Configuración UNAB cargada', [
+            'host' => $this->unab_host,
+            'endpoint' => $this->unab_endpoint,
+            'usuario' => $this->usuario_unab,
+            'tarea' => $this->tarea,
+            'password_set' => $this->password_unab ? true : false,
+        ]);
+
+        return true;
+    }
 
     /**
      * Register any application services.
@@ -37,18 +79,9 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
 
-            $this->unab_host = config('app.unab_host');
-            $this->unab_endpoint = config('app.unab_endpoint');
-            $this->usuario_unab = config('app.unab_usuario');
-            $this->password_unab = config('app.unab_password');
-            $this->tarea = config('app.unab_tarea');
-
-            Log::info('Configuración UNAB', [
-                'host' => $this->unab_host,
-                'endpoint' => $this->unab_endpoint,
-                'usuario' => $this->usuario_unab,
-                'tarea' => $this->tarea,
-            ]);
+            if (!$this->loadUnabConfig()) {
+                return;
+            }
 
             try {
                 $samlUser = $event->auth->getSaml2User();
@@ -56,7 +89,6 @@ class AppServiceProvider extends ServiceProvider
 
                 Log::info('Atributos del usuario de Google', ['attributes' => $attributes]);
 
-                // Extraer email del usuario - ajustar según tu proveedor SAML
                 $email = null;
                 $possibleEmailFields = ['emailaddress', 'email', 'mail', 'Email', 'EmailAddress'];
 
@@ -67,7 +99,6 @@ class AppServiceProvider extends ServiceProvider
                     }
                 }
 
-                // Si no se encuentra email en atributos, usar el ID del usuario
                 if (!$email) {
                     $email = $samlUser->getUserId();
                 }
@@ -86,8 +117,8 @@ class AppServiceProvider extends ServiceProvider
 
 
                 $url = "https://{$this->unab_host}{$this->unab_endpoint}";
-                $response = Http::timeout(30)
-                    ->connectTimeout(30)
+                $response = Http::timeout(self::TIME_OUT)
+                    ->connectTimeout(self::TIME_OUT)
                     ->withBasicAuth($this->usuario_unab, $this->password_unab)
                     ->withHeaders([
                         'Content-Type' => 'application/json',
