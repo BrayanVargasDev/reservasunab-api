@@ -127,7 +127,7 @@ class AppServiceProvider extends ServiceProvider
                     ->withHeaders([
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
-                        'Connection' => 'keep-alive' // Indica al servidor que mantenga la conexión abierta
+                        'Connection' => 'keep-alive'
                     ])
                     ->post($url, $datos);
 
