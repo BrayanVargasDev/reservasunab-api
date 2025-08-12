@@ -33,7 +33,7 @@ class PagoService
 
     public function obtenerPagos(int $perPage = 10, string $search = '')
     {
-        $search = (string) $search;
+        $search = trim((string) $search);
         $usuario = Auth::user();
 
         $esAdministrador = $usuario && optional($usuario->rol)->nombre === 'Administrador';
@@ -55,25 +55,28 @@ class PagoService
         }
 
         if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
-                $q->where('codigo', 'like', "%$search%")
-                    ->orWhere('ticket_id', 'like', "%$search%");
+            $fechaNormalizada = null;
+            if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $search, $m)) {
+                $fechaNormalizada = $m[3] . '-' . $m[2] . '-' . $m[1];
+            } elseif (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $search, $m)) {
+                $fechaNormalizada = $m[1] . '-' . $m[2] . '-' . $m[3];
+            }
 
-                $fechaNormalizada = null;
-                if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $search, $m)) {
-                    $fechaNormalizada = $m[3] . '-' . $m[2] . '-' . $m[1];
-                } elseif (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/', $search, $m)) {
-                    $anio = (int)$m[3] < 50 ? '20' . $m[3] : '19' . $m[3];
-                    $fechaNormalizada = $anio . '-' . $m[2] . '-' . $m[1];
-                } elseif (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $search, $m)) {
-                    $fechaNormalizada = $m[1] . '-' . $m[2] . '-' . $m[3];
-                }
+            $query->where(function ($q) use ($search, $fechaNormalizada) {
+                $q->where('codigo', 'ilike', "%$search%")
+                    ->orWhere('ticket_id', 'ilike', "%$search%");
 
                 if ($fechaNormalizada) {
                     $q->orWhereDate('creado_en', $fechaNormalizada);
-                } else {
-                    $q->orWhere('creado_en', 'like', "%$search%");
                 }
+
+                $q->orWhereHas('reserva.usuarioReserva.persona', function ($userQuery) use ($search) {
+                    $userQuery->where('numero_documento', 'ilike', "%$search%")
+                        ->orWhere('primer_nombre', 'ilike', "%$search%")
+                        ->orWhere('segundo_nombre', 'ilike', "%$search%")
+                        ->orWhere('primer_apellido', 'ilike', "%$search%")
+                        ->orWhere('segundo_apellido', 'ilike', "%$search%");
+                });
             });
         }
 
