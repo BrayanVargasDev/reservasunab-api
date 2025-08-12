@@ -92,7 +92,8 @@ class ReservaService
         $search = strtolower($search ?? '');
         $usuario = Auth::user();
 
-        $esAdministrador = $usuario && optional($usuario->rol)->nombre === 'Administrador';
+        $rolNombre = optional($usuario->rol)->nombre;
+        $esAdministrador = is_string($rolNombre) && strtolower($rolNombre) === 'administrador';
 
         $query = Reservas::query()
             ->with([
@@ -125,14 +126,12 @@ class ReservaService
                     ->orWhereHas('espacio.categoria', function ($qCategoria) use ($search) {
                         $qCategoria->where('nombre', 'like', "%$search%");
                     })
-                    ->orWhereHas('usuarioReserva.persona', function ($qPersona) use ($search) {
-                        $qPersona->where(function ($qSub) use ($search) {
-                            $qSub->where('primer_nombre', 'like', "%$search%")
-                                ->orWhere('segundo_nombre', 'like', "%$search%")
-                                ->orWhere('primer_apellido', 'like', "%$search%")
-                                ->orWhere('segundo_apellido', 'like', "%$search%")
-                                ->orWhere('numero_documento', 'like', "%$search%");
-                        });
+                    ->orWhereHas('usuarioReserva.persona', function ($userQuery) use ($search) {
+                        $userQuery->where('numero_documento', 'ilike', "%$search%")
+                            ->orWhere('primer_nombre', 'ilike', "%$search%")
+                            ->orWhere('segundo_nombre', 'ilike', "%$search%")
+                            ->orWhere('primer_apellido', 'ilike', "%$search%")
+                            ->orWhere('segundo_apellido', 'ilike', "%$search%");
                     });
             });
         }
