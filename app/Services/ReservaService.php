@@ -90,6 +90,9 @@ class ReservaService
     public function getAllReservas(?string $search = '', int $per_page = 10)
     {
         $search = strtolower($search ?? '');
+        $usuario = Auth::user();
+
+        $esAdministrador = $usuario && optional($usuario->rol)->nombre === 'Administrador';
 
         $query = Reservas::query()
             ->with([
@@ -101,8 +104,13 @@ class ReservaService
                 'configuracion.franjas_horarias',
                 'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
             ])
-            ->whereNull('eliminado_en')
-            ->orderBy('fecha', 'desc')
+            ->whereNull('eliminado_en');
+
+        if (!$esAdministrador) {
+            $query->where('id_usuario', $usuario->id_usuario);
+        }
+
+        $query->orderBy('fecha', 'desc')
             ->orderBy('hora_inicio', 'desc');
 
         if ($search) {
