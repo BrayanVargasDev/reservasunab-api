@@ -21,15 +21,6 @@ class AppServiceProvider extends ServiceProvider
     private $password_unab;
     private $tarea = 1;
 
-    public function __construct()
-    {
-        $this->unab_host = config('app.unab_host');
-        $this->unab_endpoint = config('app.unab_endpoint');
-        $this->usuario_unab = config('app.unab_usuario');
-        $this->password_unab = config('app.unab_password');
-        $this->tarea = config('app.unab_tarea');
-    }
-
     /**
      * Register any application services.
      */
@@ -45,6 +36,12 @@ class AppServiceProvider extends ServiceProvider
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
+
+            $this->unab_host = config('app.unab_host');
+            $this->unab_endpoint = config('app.unab_endpoint');
+            $this->usuario_unab = config('app.unab_usuario');
+            $this->password_unab = config('app.unab_password');
+            $this->tarea = config('app.unab_tarea');
 
             try {
                 $samlUser = $event->auth->getSaml2User();
