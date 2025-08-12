@@ -127,4 +127,10 @@ return [
     'key_pagos' => env('KEY_PAGOS', 'e-collect'),
     'entity_code' => env('ENTITY_CODE', 10139),
     'service_code' => env('SERVICE_CODE', 21000),
+
+    'unab_host' => env('UNAB_HOST', 'portalpprd.unab.edu.co'),
+    'unab_endpoint' => env('UNAB_ENDPOINT', '/app-content/modulos/servicios/api/reservas/'),
+    'unab_usuario' => env('UNAB_USUARIO', 'RESERVASPPRD'),
+    'unab_password' => env('UNAB_PASSWORD'),
+    'unab_tarea' => env('UNAB_TAREA', 1),
 ];

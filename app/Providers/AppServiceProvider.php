@@ -5,8 +5,6 @@ namespace App\Providers;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 use App\Models\Usuario;
-use App\Services\ReservaService;
-use App\Services\PagoService;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -14,6 +12,24 @@ use Illuminate\Support\Facades\Log;
 
 class AppServiceProvider extends ServiceProvider
 {
+
+    const TIME_OUT = 30;
+
+    private $unab_host = 'portalpprd.unab.edu.co';
+    private $unab_endpoint = '/app-content/modulos/servicios/api/reservas/';
+    private $usuario_unab = 'RESERVASPPRD';
+    private $password_unab;
+    private $tarea = 1;
+
+    public function __construct()
+    {
+        $this->unab_host = config('app.unab_host');
+        $this->unab_endpoint = config('app.unab_endpoint');
+        $this->usuario_unab = config('app.unab_usuario');
+        $this->password_unab = config('app.unab_password');
+        $this->tarea = config('app.unab_tarea');
+    }
+
     /**
      * Register any application services.
      */
@@ -59,8 +75,33 @@ class AppServiceProvider extends ServiceProvider
                     return;
                 }
 
-                // $usuarioEnUnab = Http::get();
+                $datos = [
+                    'tarea' => $this->tarea,
+                    'correo_unab' => $email,
+                ];
 
+
+                $url = "https://{$this->unab_host}{$this->unab_endpoint}";
+                $response = Http::timeout(30)
+                    ->connectTimeout(30)
+                    ->withBasicAuth($this->usuario_unab, $this->password_unab)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ])
+                    ->post($url, $datos);
+
+                if (!$response->successful()) {
+                    Log::error('Error en la comunicación con UNAB', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    return;
+                }
+
+                $usuarioEnUnab = $response->json();
+
+                Log::debug($usuarioEnUnab);
 
                 // Buscar o crear usuario
                 $user = Usuario::where('email', $email)->first();
@@ -71,12 +112,9 @@ class AppServiceProvider extends ServiceProvider
                         'ldap_uid' => $samlUser->getUserId(),
                         'tipo_usuario' => 'saml',
                         'activo' => true,
-                        // 'id_rol' => 3,
                     ]);
 
-                    // Asignar el permiso de reservar a todos los usuarios nuevos
                     $user->asignarPermisoReservar();
-
                     Log::info('Nuevo usuario google creado', ['user_id' => $user->id_usuario, 'email' => $email]);
                 } else {
                     $user->update([
