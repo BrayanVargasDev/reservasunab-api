@@ -117,6 +117,10 @@ class AppServiceProvider extends ServiceProvider
 
 
                 $url = "https://{$this->unab_host}{$this->unab_endpoint}";
+                Log::info('Enviando solicitud a UNAB', [
+                    'url' => $url,
+                    'datos' => $datos,
+                ]);
                 $response = Http::timeout(self::TIME_OUT)
                     ->connectTimeout(self::TIME_OUT)
                     ->withBasicAuth($this->usuario_unab, $this->password_unab)
