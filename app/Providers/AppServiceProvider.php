@@ -141,7 +141,7 @@ class AppServiceProvider extends ServiceProvider
 
                 $usuarioEnUnab = $response->json();
 
-                Log::debug($usuarioEnUnab);
+                Log::debug($usuarioEnUnab['datos']);
 
                 // Buscar o crear usuario
                 $user = Usuario::where('email', $email)->first();
