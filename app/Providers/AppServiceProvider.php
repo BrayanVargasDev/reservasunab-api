@@ -43,6 +43,13 @@ class AppServiceProvider extends ServiceProvider
             $this->password_unab = config('app.unab_password');
             $this->tarea = config('app.unab_tarea');
 
+            Log::info('Configuración UNAB', [
+                'host' => $this->unab_host,
+                'endpoint' => $this->unab_endpoint,
+                'usuario' => $this->usuario_unab,
+                'tarea' => $this->tarea,
+            ]);
+
             try {
                 $samlUser = $event->auth->getSaml2User();
                 $attributes = $samlUser->getAttributes();
