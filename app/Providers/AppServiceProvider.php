@@ -121,12 +121,13 @@ class AppServiceProvider extends ServiceProvider
                     'url' => $url,
                     'datos' => $datos,
                 ]);
-                $response = Http::timeout(self::TIME_OUT)
-                    ->connectTimeout(self::TIME_OUT)
+                $response = Http::timeout(30)
+                    ->connectTimeout(5)
                     ->withBasicAuth($this->usuario_unab, $this->password_unab)
                     ->withHeaders([
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
+                        'Connection' => 'keep-alive' // Indica al servidor que mantenga la conexión abierta
                     ])
                     ->post($url, $datos);
 
