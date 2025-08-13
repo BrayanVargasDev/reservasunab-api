@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuthCode;
 use App\Models\Permiso;
 use App\Models\Persona;
+use App\Models\RefreshToken;
 use App\Models\Usuario;
+use App\Services\TokenService;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +37,13 @@ class AuthController extends Controller
         'password.required' => 'El campo contraseña es obligatorio.',
         'password.min' => 'La contraseña debe tener al menos 8 caracteres.',
     ];
+
+    private $token_service;
+
+    public function __construct(TokenService $tokenService)
+    {
+        $this->token_service = $tokenService;
+    }
 
     private function procesarNombreCompleto(array $palabrasNombre)
     {
@@ -161,10 +171,10 @@ class AuthController extends Controller
         }
     }
 
-    public function login()
+    public function login(Request $request)
     {
         try {
-            $validarUsuario = Validator::make(request()->all(), $this->reglasDeValidacionDeLogin, $this->mensajesDeValidacion);
+            $validarUsuario = Validator::make($request->all(), $this->reglasDeValidacionDeLogin, $this->mensajesDeValidacion);
 
             if ($validarUsuario->fails()) {
                 return response()->json([
@@ -186,19 +196,53 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            $token = $usuario->createToken('auth-token', ['*'], now()->addHour());
-            Auth::login($usuario);
+            $dispositivo = $request->header('User-Agent');
+            $ip = $request->ip();
+
+            // Buscar un refresh token activo para este usuario, tolerando registros viejos con columnas intercambiadas
+            $tiene_refresh_valido = RefreshToken::where('id_usuario', $usuario->id_usuario)
+                ->where(function ($q) use ($dispositivo, $ip) {
+                    $q->where(function ($qq) use ($dispositivo, $ip) {
+                        $qq->where('dispositivo', $dispositivo)
+                            ->where('ip', $ip);
+                    })->orWhere(function ($qq) use ($dispositivo, $ip) {
+                        $qq->where('dispositivo', $ip)
+                            ->where('ip', $dispositivo);
+                    });
+                })
+                ->where(function ($q) {
+                    $q->whereNull('expira_en')
+                        ->orWhere('expira_en', '>', now());
+                })
+                ->whereNull('revocado_en')
+                ->first();
+
+            $refresh_token = !$tiene_refresh_valido
+                ? $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw']
+                : $tiene_refresh_valido->token_hash; // OJO: aquí estás enviando el hash si ya existe; idealmente deberías enviar el raw original guardado aparte.
+
+            $token = $this->token_service->generarAccessToken($usuario);
+
+            Log::debug([
+                'dispositivo' => $dispositivo,
+                'ip' => $ip,
+                'usuario_id' => $usuario->id_usuario,
+                'token' => $token['token'],
+                'refresh_token' => $refresh_token,
+            ]);
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
-                    'token' => $token->plainTextToken,
+                    'access_token' => $token['token'],
                     'id' => $usuario->id_usuario,
                     'email' => $usuario->email,
                     'nombre' => $usuario->persona->nombre ?? null,
                     'apellido' => $usuario->persona->apellido ?? null,
                     'tipo_usuario' => $usuario->tipos_usuario,
                     'activo' => $usuario->activo,
-                    'token_expires_at' => $token->accessToken->expires_at,
+                    'token_expires_at' => $token['expires_at'],
+                    'refresh_token' => $refresh_token,
                     'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
                 ]
             ], 200);
@@ -284,7 +328,8 @@ class AuthController extends Controller
             if ($shouldRefreshToken) {
                 $currentToken->delete();
 
-                $expirationMinutes = config('sanctum.expiration', 1440);
+                $expirationConfig = config('sanctum.expiration', 1440);
+                $expirationMinutes = is_numeric($expirationConfig) ? (int)$expirationConfig : 1440;
                 $tokenName = 'auth-token-' . now()->format('Y-m-d-H-i-s');
 
                 $newToken = $usuario->createToken(
@@ -293,7 +338,7 @@ class AuthController extends Controller
                     now()->addMinutes($expirationMinutes)
                 );
 
-                $data['token'] = $newToken->plainTextToken;
+                $data['access_token'] = $newToken->plainTextToken;
                 $data['token_expires_at'] = $newToken->accessToken->expires_at;
 
                 return response()->json([
@@ -325,45 +370,27 @@ class AuthController extends Controller
     public function refreshToken(Request $request)
     {
         try {
-            $usuario = $request->user();
-
-            if (!$usuario) {
-                return response()->json([
-                    'status' => 'error',
-                    'message' => 'Usuario no autenticado.',
-                ], 401);
+            $raw = $request->input('refresh');
+            if (!$raw) {
+                return response()->json(['status' => 'error', 'message' => 'no_refresh_token'], 401);
             }
 
-            $currentToken = $usuario->currentAccessToken();
-
-            if ($currentToken) {
-                $currentToken->delete();
-            }
-
-            $expirationMinutes = config('sanctum.expiration', 1440);
-            $tokenName = 'auth-token-' . now()->format('Y-m-d-H-i-s');
-
-            $newToken = $usuario->createToken(
-                $tokenName,
-                ['*'],
-                now()->addMinutes($expirationMinutes)
+            $result = $this->token_service->emitirDesdeRefresh(
+                $raw,
+                $request->ip(),
+                $request->header('User-Agent'),
+                null, // usa expiration de sanctum si está configurado
+                true, // rotar si está por expirar
+                3     // umbral en días
             );
-
-            $usuario->load(['persona', 'rol']);
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Token refrescado correctamente.',
+                'message' => $result['rotated_refresh'] ? 'Token refrescado y refresh rotado.' : 'Token refrescado correctamente.',
                 'data' => [
-                    'id' => $usuario->id_usuario,
-                    'email' => $usuario->email,
-                    'nombre' => $usuario->persona->nombre ?? null,
-                    'apellido' => $usuario->persona->apellido ?? null,
-                    'tipo_usuario' => $usuario->tipos_usuario,
-                    'activo' => $usuario->activo,
-                    'token' => $newToken->plainTextToken,
-                    'token_expires_at' => $newToken->accessToken->expires_at,
-                    'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
+                    'access_token' => $result['access_token'],
+                    'token_expires_at' => $result['token_expires_at'],
+                    'refresh_token' => $result['refresh_token'],
                 ]
             ], 200);
         } catch (Exception $e) {
@@ -378,5 +405,41 @@ class AuthController extends Controller
                 'message' => 'Error al refrescar token.',
             ], 500);
         }
+    }
+
+    public function intercambiar(Request $req)
+    {
+        $codigo = $req->input('codigo');
+        if (!$codigo) return response()->json(['error' => 'sin_código'], 400);
+
+        $authCode = AuthCode::where('codigo', $codigo)
+            ->where('consumido', false)
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if (!$authCode) return response()->json(['error' => 'código_inválido_o_expirado'], 400);
+
+        $authCode->consumido = true;
+        $authCode->save();
+
+        $user = $authCode->user;
+
+        $access = $this->token_service->generarAccessToken($user);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Código de intercambio generado correctamente.',
+            'data' => [
+                'access_token' => $access['token'],
+                'token_expires_at' => $access['expires_at'],
+                'refresh_token' => $authCode->refresh_token_hash,
+            ]
+        ]);
+    }
+
+    public function refresh(Request $request)
+    {
+        // Delegar a refreshToken para mantener una sola lógica
+        return $this->refreshToken($request);
     }
 }

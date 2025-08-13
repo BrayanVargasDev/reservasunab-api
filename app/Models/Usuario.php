@@ -263,4 +263,14 @@ class Usuario extends Authenticatable
     {
         return '{' . implode(',', $array) . '}';
     }
+
+    public function authCodes(): HasMany
+    {
+        return $this->hasMany(AuthCode::class, 'id_usuario', 'id_usuario');
+    }
+
+    public function refreshTokens(): HasMany
+    {
+        return $this->hasMany(RefreshToken::class, 'id_usuario', 'id_usuario');
+    }
 }

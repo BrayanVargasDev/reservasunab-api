@@ -2,13 +2,17 @@
 
 namespace App\Providers;
 
+use App\Models\AuthCode;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 use App\Models\Usuario;
+use App\Services\UsuarioService;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\TokenService;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -87,8 +91,6 @@ class AppServiceProvider extends ServiceProvider
                 $samlUser = $event->auth->getSaml2User();
                 $attributes = $samlUser->getAttributes();
 
-                Log::info('Atributos del usuario de Google', ['attributes' => $attributes]);
-
                 $email = null;
                 $possibleEmailFields = ['emailaddress', 'email', 'mail', 'Email', 'EmailAddress'];
 
@@ -117,10 +119,7 @@ class AppServiceProvider extends ServiceProvider
 
 
                 $url = "https://{$this->unab_host}{$this->unab_endpoint}";
-                Log::info('Enviando solicitud a UNAB', [
-                    'url' => $url,
-                    'datos' => $datos,
-                ]);
+
                 $response = Http::timeout(30)
                     ->connectTimeout(5)
                     ->withBasicAuth($this->usuario_unab, $this->password_unab)
@@ -141,31 +140,93 @@ class AppServiceProvider extends ServiceProvider
 
                 $usuarioEnUnab = $response->json();
 
-                Log::debug($usuarioEnUnab['datos']);
+                $datosUnab = null;
+                try {
+                    $datosUnab = $usuarioEnUnab['datos'];
+                } catch (\Throwable $th) {
+                    Log::error('Error al obtener datos de UNAB', [
+                        'error' => $th->getMessage(),
+                        'file' => $th->getFile(),
+                        'line' => $th->getLine()
+                    ]);
+                    return;
+                }
 
-                // Buscar o crear usuario
+                if (empty($datosUnab)) {
+                    Log::error('Datos de UNAB están vacíos');
+                    return;
+                }
+
+                if (!is_array($datosUnab)) {
+                    Log::error('Datos de UNAB no son un array');
+                    return;
+                }
+
+                $tipoMap = [
+                    'ESTUDIANTE' => 'estudiante',
+                    'EMPLEADO' => 'administrativo',
+                    'EGRESADO' => 'egresado',
+                ];
+
+                $tipoUnabUpper = strtoupper($datosUnab['tipo'] ?? '');
+                $tipoUsuario = $tipoMap[$tipoUnabUpper] ?? 'externo';
+
+                $payload = [
+                    'email' => $email,
+                    'ldap_uid' => $datosUnab['id_banner'] ?? $samlUser->getUserId(),
+                    'tipos_usuario' => [$tipoUsuario],
+                    'nombre' => $datosUnab['nombres'] ?? null,
+                    'apellido' => $datosUnab['apellidos'] ?? null,
+                    'telefono' => $datosUnab['celular'] ?? null,
+                    'documento' => $datosUnab['numero_documento'] ?? null,
+                    'activo' => true,
+                ];
+
+                $usuarioService = app(UsuarioService::class);
+
                 $user = Usuario::where('email', $email)->first();
 
                 if (!$user) {
-                    $user = Usuario::create([
+                    $user = $usuarioService->create($payload, true);
+                    Log::info('Usuario UNAB creado vía SAML', [
+                        'user_id' => $user->id_usuario,
                         'email' => $email,
-                        'ldap_uid' => $samlUser->getUserId(),
-                        'tipo_usuario' => 'saml',
-                        'activo' => true,
+                        'tipo_usuario' => $tipoUsuario,
                     ]);
-
-                    $user->asignarPermisoReservar();
-                    Log::info('Nuevo usuario google creado', ['user_id' => $user->id_usuario, 'email' => $email]);
                 } else {
-                    $user->update([
-                        'ldap_uid' => $samlUser->getUserId(),
-                        'activo' => true,
+                    $user = $usuarioService->update($user->id_usuario, $payload);
+                    Log::info('Usuario UNAB actualizado vía SAML', [
+                        'user_id' => $user->id_usuario,
+                        'email' => $email,
+                        'tipo_usuario' => $tipoUsuario,
                     ]);
-                    Log::info('Usuario existente actualizado', ['user_id' => $user->id_usuario, 'email' => $email]);
                 }
 
-                Auth::login($user, true);
-                Log::info('Usuario autenticado a través de Google', ['user_id' => $user->id_usuario]);
+                // Crear refresh token y vincularlo a un AuthCode que expira en 90 segundos
+                $frontendUrl = config('app.frontend_url');
+
+                /** @var TokenService $tokenService */
+                $tokenService = app(TokenService::class);
+                $ip = request()->ip();
+                $device = request()->header('User-Agent');
+
+                $refresh = $tokenService->crearRefreshTokenParaUsuario($user, $ip, $device);
+
+                $codigo = Str::random(64);
+                AuthCode::create([
+                    'id_usuario' => $user->id_usuario,
+                    'codigo' => $codigo,
+                    'refresh_token_hash' => $refresh['model']->token_hash,
+                    'expira_en' => now()->addSeconds(90),
+                    'consumido' => false,
+                ]);
+
+                Log::info('Usuario autenticado a través de SSO, código de intercambio generado', [
+                    'user_id' => $user->id_usuario,
+                    'code_len' => strlen($codigo),
+                ]);
+
+                return redirect()->away("{$frontendUrl}/auth/callback?code={$codigo}");
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [
                     'error' => $e->getMessage(),

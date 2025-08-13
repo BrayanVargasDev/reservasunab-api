@@ -27,6 +27,7 @@ Route::post('/registrar', [AuthController::class, 'registrar']);
 Route::get('/validate-email/{email}', [UsuarioController::class, 'validarEmailTomado']);
 Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
     ->where('ruta', '.*');
+Route::post('/refresh', [AuthController::class, 'refresh']);
 
 Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
