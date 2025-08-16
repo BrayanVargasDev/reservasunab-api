@@ -170,7 +170,7 @@ class AppServiceProvider extends ServiceProvider
 
                 $tipoUnabUpper = strtoupper($datosUnab['tipo'] ?? '');
                 $tipoUsuario = $tipoMap[$tipoUnabUpper] ?? 'externo';
-                Log::debug('datos unab:',  $datosUnab);
+                Log::debug('datos unab:',  $datosUnab[0]);
                 $payload = [
                     'email' => $email,
                     'ldap_uid' => $datosUnab['id_banner'] ?? $samlUser->getUserId(),
