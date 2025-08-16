@@ -414,7 +414,7 @@ class AuthController extends Controller
 
         $authCode = AuthCode::where('codigo', $codigo)
             ->where('consumido', false)
-            ->where('expires_at', '>', now())
+            ->where('expira_en', '>', now())
             ->first();
 
         if (!$authCode) return response()->json(['error' => 'código_inválido_o_expirado'], 400);
@@ -422,7 +422,7 @@ class AuthController extends Controller
         $authCode->consumido = true;
         $authCode->save();
 
-        $user = $authCode->user;
+        $user = $authCode->usuario;
 
         $access = $this->token_service->generarAccessToken($user);
 

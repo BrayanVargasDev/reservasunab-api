@@ -9,6 +9,8 @@ class AuthCode extends Model
     protected $table = 'auth_codes';
     protected $primaryKey = 'id';
 
+    public $timestamps = false;
+
     protected $fillable = [
         'id_usuario',
         'codigo',
