@@ -168,17 +168,34 @@ class AppServiceProvider extends ServiceProvider
                     'EGRESADO' => 'egresado',
                 ];
 
-                $tipoUnabUpper = strtoupper($datosUnab['tipo'] ?? '');
-                $tipoUsuario = $tipoMap[$tipoUnabUpper] ?? 'externo';
-                Log::debug('datos unab:',  $datosUnab[0]);
+
+                $primerElemento = is_array($datosUnab) && isset($datosUnab[0]) && is_array($datosUnab[0])
+                    ? $datosUnab[0]
+                    : [];
+
+                $tiposUsuario = [];
+                if (is_array($datosUnab)) {
+                    foreach ($datosUnab as $entrada) {
+                        if (!is_array($entrada)) continue;
+                        $tipoUpper = strtoupper($entrada['tipo'] ?? '');
+                        if ($tipoUpper === '') continue;
+                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
+                    }
+                }
+
+                $tiposUsuario = array_values(array_unique($tiposUsuario));
+                if (empty($tiposUsuario)) {
+                    $tiposUsuario = ['externo'];
+                }
+
                 $payload = [
                     'email' => $email,
-                    'ldap_uid' => $datosUnab['id_banner'] ?? $samlUser->getUserId(),
-                    'tipos_usuario' => [$tipoUsuario],
-                    'nombre' => $datosUnab['nombres'] ?? null,
-                    'apellido' => $datosUnab['apellidos'] ?? null,
-                    'telefono' => $datosUnab['celular'] ?? null,
-                    'documento' => $datosUnab['numero_documento'] ?? null,
+                    'ldap_uid' => $primerElemento['id_banner'] ?? $samlUser->getUserId(),
+                    'tipos_usuario' => $tiposUsuario,
+                    'nombre' => $primerElemento['nombres'] ?? null,
+                    'apellido' => $primerElemento['apellidos'] ?? null,
+                    'telefono' => $primerElemento['celular'] ?? null,
+                    'documento' => $primerElemento['numero_documento'] ?? null,
                     'activo' => true,
                 ];
 
@@ -191,18 +208,17 @@ class AppServiceProvider extends ServiceProvider
                     Log::info('Usuario UNAB creado vía SAML', [
                         'user_id' => $user->id_usuario,
                         'email' => $email,
-                        'tipo_usuario' => $tipoUsuario,
+                        'tipos_usuario' => $tiposUsuario,
                     ]);
                 } else {
                     $user = $usuarioService->update($user->id_usuario, $payload);
                     Log::info('Usuario UNAB actualizado vía SAML', [
                         'user_id' => $user->id_usuario,
                         'email' => $email,
-                        'tipo_usuario' => $tipoUsuario,
+                        'tipos_usuario' => $tiposUsuario,
                     ]);
                 }
 
-                // Crear refresh token y vincularlo a un AuthCode que expira en 90 segundos
                 $frontendUrl = config('app.frontend_url');
 
                 /** @var TokenService $tokenService */
