@@ -139,7 +139,7 @@ class AppServiceProvider extends ServiceProvider
                 }
 
                 $usuarioEnUnab = $response->json();
-
+                Log::debug('datos unab:', ['datos' => $usuarioEnUnab]);
                 $datosUnab = null;
                 try {
                     $datosUnab = $usuarioEnUnab['datos'];
