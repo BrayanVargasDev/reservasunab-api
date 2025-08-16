@@ -139,7 +139,7 @@ class AppServiceProvider extends ServiceProvider
                 }
 
                 $usuarioEnUnab = $response->json();
-                Log::debug('datos unab:', ['datos' => $usuarioEnUnab]);
+
                 $datosUnab = null;
                 try {
                     $datosUnab = $usuarioEnUnab['datos'];
@@ -170,7 +170,7 @@ class AppServiceProvider extends ServiceProvider
 
                 $tipoUnabUpper = strtoupper($datosUnab['tipo'] ?? '');
                 $tipoUsuario = $tipoMap[$tipoUnabUpper] ?? 'externo';
-                Log::debug('datos unab:', ['datos' => $datosUnab]);
+                Log::debug('datos unab:',  $datosUnab);
                 $payload = [
                     'email' => $email,
                     'ldap_uid' => $datosUnab['id_banner'] ?? $samlUser->getUserId(),
