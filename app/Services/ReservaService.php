@@ -514,6 +514,10 @@ class ReservaService
                 $idConfiguracion = $this->obtenerIdConfiguracion($configuracion, $data['base']['id'], $fecha);
 
                 $estado = (is_array($usuario->tipos_usuario) && in_array('estudiante', $usuario->tipos_usuario)) ? 'completada' : 'inicial';
+                // Si el espacio requiere aprobación, siempre se guarda como 'pendienteap'
+                if ($espacio->aprobar_reserva) {
+                    $estado = 'pendienteap';
+                }
 
                 $reserva = Reservas::create([
                     'id_usuario' => $usuario->id_usuario,
@@ -528,7 +532,8 @@ class ReservaService
                 ]);
 
                 $reserva->load([
-                    'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
+                    // Incluir aprobar_reserva para saber si requiere aprobación
+                    'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
                     'espacio.sede:id,nombre',
                     'usuarioReserva:id_usuario,email',
                     'configuracion',
@@ -540,6 +545,7 @@ class ReservaService
                 $valoresReserva = $this->obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin);
                 $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
                 $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona);
+                $requiereAprobacion = (bool) ($reserva->espacio->aprobar_reserva ?? false);
 
                 $resumenReserva = [
                     'id' => $reserva->id,
@@ -552,6 +558,7 @@ class ReservaService
                     'valor_descuento' => $valor,
                     'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
                     'estado' => $valor > 0 ? 'inicial' : $estado,
+                    'requiere_aprobacion' => $requiereAprobacion,
                     'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
                     'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
                     'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
@@ -600,6 +607,19 @@ class ReservaService
     public function obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin)
     {
         if (isset($data['valor'])) {
+            try {
+                if ($data && isset($data['base']['id'])) {
+                    $espacioTmp = Espacio::find($data['base']['id']);
+                    if ($espacioTmp && $espacioTmp->aprobar_reserva) {
+                        return [
+                            'valor_real' => 0,
+                            'valor_descuento' => 0,
+                        ];
+                    }
+                }
+            } catch (Exception $e) {
+                Log::warning('Error verificando aprobación en valor explícito', ['error' => $e->getMessage()]);
+            }
             return [
                 'valor_real' => $data['valor'],
                 'valor_descuento' => $data['valor']
@@ -679,6 +699,22 @@ class ReservaService
 
             if ($valorReal === null) {
                 return null;
+            }
+
+            // Si el espacio requiere aprobación, el valor siempre es 0 (sin cobro hasta aprobar)
+            try {
+                $espacioAsociado = Espacio::find($configuracionCompleta->id_espacio);
+                if ($espacioAsociado && $espacioAsociado->aprobar_reserva) {
+                    return [
+                        'valor_real' => 0,
+                        'valor_descuento' => 0,
+                    ];
+                }
+            } catch (Exception $e) {
+                Log::warning('Error verificando aprobar_reserva del espacio', [
+                    'configuracion_id' => $idConfiguracion,
+                    'error' => $e->getMessage()
+                ]);
             }
 
             // Aplicar descuento por tipo de usuario si existe
@@ -1069,7 +1105,8 @@ class ReservaService
             'usuarioReserva.persona' => function ($q) {
                 $q->select('id_persona', 'id_usuario', 'primer_nombre', 'primer_apellido', 'numero_documento');
             },
-            'espacio:id,nombre,id_sede,id_categoria',
+            // incluir aprobar_reserva para saber si necesita aprobación
+            'espacio:id,nombre,id_sede,id_categoria,aprobar_reserva',
             'espacio.sede:id,nombre',
             'espacio.categoria:id,nombre',
             'espacio.imagen:id_espacio,ubicacion',
@@ -1119,6 +1156,9 @@ class ReservaService
             $reserva->es_pasada = $this->esReservaPasada($reserva);
             $reserva->puede_cancelar = $reserva->puedeSerCancelada();
             $reserva->porcentaje_descuento = $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario);
+            // Campos solicitados
+            $reserva->necesita_aprobacion = (bool) ($reserva->espacio->aprobar_reserva ?? false);
+            $reserva->reserva_aprobada = $reserva->estado === 'aprobada';
         });
 
         return $reservas;
@@ -1151,7 +1191,8 @@ class ReservaService
 
         try {
             $reserva = Reservas::with([
-                'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
+                // agregar aprobar_reserva
+                'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
                 'espacio.sede:id,nombre',
                 'usuarioReserva:id_usuario,email',
                 'configuracion',
@@ -1270,6 +1311,8 @@ class ReservaService
                 'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
                     (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
                         count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
+                'necesita_aprobacion' => (bool) ($reserva->espacio->aprobar_reserva ?? false),
+                'reserva_aprobada' => $reserva->estado === 'aprobada',
             ];
 
             return $resumenReserva;
