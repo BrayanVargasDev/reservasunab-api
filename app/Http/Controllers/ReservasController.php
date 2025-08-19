@@ -162,6 +162,41 @@ class ReservasController extends Controller
         }
     }
 
+    public function cancelar($id)
+    {
+        try {
+            $usuarioId = Auth::id();
+            $resultado = $this->reserva_service->cancelarReserva((int)$id, (int)$usuarioId);
+
+            if (!$resultado['exito']) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => $resultado['mensaje'] ?? 'No se pudo cancelar la reserva'
+                ], 422);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => $resultado['mensaje'] ?? 'Reserva cancelada',
+                'data' => [
+                    'creo_movimiento' => $resultado['creo_movimiento'] ?? false,
+                    'movimiento' => $resultado['movimiento'] ?? null,
+                ]
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al cancelar reserva', [
+                'reserva_id' => $id,
+                'usuario_id' => Auth::id(),
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al cancelar la reserva',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
     public function misReservas(Request $request)
     {
         try {

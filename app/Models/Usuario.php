@@ -1,7 +1,6 @@
 <?php
 
 namespace App\Models;
-
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +17,11 @@ class Usuario extends Authenticatable
 
     protected $table = 'usuarios';
     protected $primaryKey = 'id_usuario';
+
+    public function movimientos(): HasMany
+    {
+        return $this->hasMany(Movimientos::class, 'id_usuario', 'id_usuario');
+    }
     protected $keyType = 'integer';
 
     const CREATED_AT = 'creado_en';

@@ -80,6 +80,11 @@ class Reservas extends Model
         return $this->hasMany(JugadorReserva::class, 'id_reserva');
     }
 
+    public function movimientos()
+    {
+        return $this->hasMany(Movimientos::class, 'id_reserva');
+    }
+
     /**
      * Scope para obtener reservas que pueden ser canceladas
      */

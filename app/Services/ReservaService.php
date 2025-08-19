@@ -7,6 +7,7 @@ use App\Models\EspacioConfiguracion;
 use App\Models\EspacioTipoUsuarioConfig;
 use App\Models\FranjaHoraria;
 use App\Models\Reservas;
+use App\Models\Movimientos;
 use App\Models\Usuario;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
@@ -1339,6 +1340,81 @@ class ReservaService
             return $this->getMiReserva($idReserva);
         } catch (Exception $e) {
             throw $e;
+        }
+    }
+
+    public function cancelarReserva(int $idReserva, int $usuarioAuthId): array
+    {
+        DB::beginTransaction();
+        try {
+            $reserva = Reservas::with(['pago', 'usuarioReserva'])
+                ->lockForUpdate()
+                ->find($idReserva);
+
+            if (!$reserva) {
+                throw new Exception('Reserva no encontrada');
+            }
+
+            $usuarioAuth = Usuario::find($usuarioAuthId);
+            $puedeCancelarTerceros = $usuarioAuth && $usuarioAuth->tienePermiso('cancelar_reservas');
+            $esPropietario = $reserva->id_usuario === $usuarioAuthId;
+
+            if (!$esPropietario && !$puedeCancelarTerceros) {
+                throw new Exception('No tienes permisos para cancelar esta reserva');
+            }
+
+            if (!$reserva->puedeSerCancelada()) {
+                throw new Exception('La reserva no puede ser cancelada según la política de tiempos');
+            }
+
+            if (in_array($reserva->estado, ['cancelada', 'rechazada'])) {
+                throw new Exception('La reserva ya está cancelada/rechazada');
+            }
+
+            $crearMovimiento = false;
+            $valorMovimiento = 0;
+
+            if ((float)$reserva->valor > 0 && $reserva->pago && strtoupper($reserva->pago->estado) === 'OK' && $reserva->estado === 'pagada') {
+                $crearMovimiento = true;
+                $valorMovimiento = (float)$reserva->valor;
+            }
+
+            $reserva->estado = 'cancelada';
+            $reserva->cancelado_por = $usuarioAuthId;
+            $reserva->save();
+
+            $movimiento = null;
+            if ($crearMovimiento) {
+                $movimiento = Movimientos::create([
+                    'id_usuario' => $reserva->id_usuario,
+                    'id_reserva' => $reserva->id,
+                    'fecha' => now(),
+                    'valor' => $valorMovimiento,
+                    'tipo' => Movimientos::TIPO_INGRESO,
+                    'creado_por' => $usuarioAuthId,
+                ]);
+            }
+
+            DB::commit();
+
+            return [
+                'exito' => true,
+                'mensaje' => 'Reserva cancelada correctamente',
+                'creo_movimiento' => $crearMovimiento,
+                'movimiento' => $movimiento,
+                'cancelado_por' => $usuarioAuthId,
+            ];
+        } catch (Exception $e) {
+            DB::rollBack();
+            Log::error('Error cancelando reserva', [
+                'reserva_id' => $idReserva,
+                'usuario_auth' => $usuarioAuthId,
+                'error' => $e->getMessage(),
+            ]);
+            return [
+                'exito' => false,
+                'mensaje' => $e->getMessage(),
+            ];
         }
     }
 

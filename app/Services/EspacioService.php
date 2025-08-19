@@ -231,17 +231,42 @@ class EspacioService
             $updateData = [
                 'nombre' => $data['nombre'] ?? $espacio->nombre,
                 'descripcion' => $data['descripcion'] ?? $espacio->descripcion,
-                'agregar_jugadores' => $data['permitirJugadores'],
+                'agregar_jugadores' => array_key_exists('permitirJugadores', $data) ? (bool)$data['permitirJugadores'] : $espacio->agregar_jugadores,
                 'minimo_jugadores' => $data['minimoJugadores'] ?? $espacio->minimo_jugadores,
                 'maximo_jugadores' => $data['maximoJugadores'] ?? $espacio->maximo_jugadores,
-                'permite_externos' => $data['permitirExternos'],
+                'permite_externos' => array_key_exists('permitirExternos', $data) ? (bool)$data['permitirExternos'] : $espacio->permite_externos,
                 'id_sede' => $data['sede'] ?? $espacio->id_sede,
                 'id_categoria' => $data['categoria'] ?? $espacio->id_categoria,
                 'actualizado_por' => Auth::id(),
                 'reservas_simultaneas' => $data['reservasSimultaneas'] ?? $espacio->reservas_simultaneas,
+                'aprobar_reserva' => array_key_exists('aprobarReservas', $data) ? (bool)$data['aprobarReservas'] : $espacio->aprobar_reserva,
             ];
 
             $espacio->update($updateData);
+
+            if ($espacio->getOriginal('aprobar_reserva')) {
+                try {
+                    $today = now()->startOfDay();
+
+                    $configIds = DB::table('espacios_configuracion')
+                        ->where('id_espacio', $espacio->id)
+                        ->whereNull('eliminado_en')
+                        ->where(function ($q) use ($today) {
+                            $q->whereNull('fecha')
+                                ->orWhere('fecha', '>=', $today->toDateString());
+                        })
+                        ->pluck('id');
+
+                    if ($configIds->count()) {
+                        $franjas = DB::table('franjas_horarias')
+                            ->whereIn('id_config', $configIds)
+                            ->whereNull('eliminado_en');
+                        $franjas->update(['valor' => 0, 'actualizado_en' => now()]);
+                    }
+                } catch (\Exception $inner) {
+                    $this->logError('Error al actualizar franjas horarias tras aprobar reserva', $inner, ['id_espacio' => $espacio->id]);
+                }
+            }
             DB::commit();
 
             return $espacio->load('sede', 'categoria');
