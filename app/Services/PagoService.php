@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Pago;
 use App\Models\PagoConsulta;
 use Exception;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -55,21 +56,19 @@ class PagoService
         }
 
         if (!empty($search)) {
-            $fechaNormalizada = null;
-            if (preg_match('/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/', $search, $m)) {
-                $fechaNormalizada = $m[3] . '-' . $m[2] . '-' . $m[1];
-            } elseif (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $search, $m)) {
-                $fechaNormalizada = $m[1] . '-' . $m[2] . '-' . $m[3];
-            }
-
-            $query->where(function ($q) use ($search, $fechaNormalizada) {
+            $query->where(function ($q) use ($search) {
+                // Campos directos del pago
                 $q->where('codigo', 'ilike', "%$search%")
-                    ->orWhere('ticket_id', 'ilike', "%$search%");
+                    ->orWhere('ticket_id', 'ilike', "%$search%")
+                    // Coincidencias parciales sobre la fecha de creación (formateos comunes)
+                    ->orWhereRaw("to_char(creado_en, 'YYYY-MM-DD') ILIKE ?", ["%$search%"])
+                    ->orWhereRaw("to_char(creado_en, 'DD/MM/YYYY') ILIKE ?", ["%$search%"])
+                    ->orWhereRaw("to_char(creado_en, 'YYYYMMDD') ILIKE ?", ["%$search%"])
+                    // Permite buscar por año (ej: 2025) o año-mes (ej: 2025-08)
+                    ->orWhereRaw("to_char(creado_en, 'YYYY-MM') ILIKE ?", ["%$search%"])
+                    ->orWhereRaw("to_char(creado_en, 'MM/YYYY') ILIKE ?", ["%$search%"]);
 
-                if ($fechaNormalizada) {
-                    $q->orWhereDate('creado_en', $fechaNormalizada);
-                }
-
+                // Datos del usuario asociado a la reserva
                 $q->orWhereHas('reserva.usuarioReserva.persona', function ($userQuery) use ($search) {
                     $userQuery->where('numero_documento', 'ilike', "%$search%")
                         ->orWhere('primer_nombre', 'ilike', "%$search%")
@@ -81,6 +80,14 @@ class PagoService
                 // Filtro adicional: nombre del espacio de la reserva
                 $q->orWhereHas('reserva.espacio', function ($espacioQ) use ($search) {
                     $espacioQ->where('nombre', 'ilike', "%$search%");
+                });
+
+                // Coincidencias parciales sobre la fecha de la reserva si aplica
+                $q->orWhereHas('reserva', function ($reservaQ) use ($search) {
+                    $reservaQ->whereRaw("to_char(fecha, 'YYYY-MM-DD') ILIKE ?", ["%$search%"])
+                        ->orWhereRaw("to_char(fecha, 'DD/MM/YYYY') ILIKE ?", ["%$search%"])
+                        ->orWhereRaw("to_char(fecha, 'YYYY-MM') ILIKE ?", ["%$search%"])
+                        ->orWhereRaw("to_char(fecha, 'MM/YYYY') ILIKE ?", ["%$search%"]);
                 });
             });
         }
