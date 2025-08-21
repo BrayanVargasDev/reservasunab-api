@@ -219,17 +219,9 @@ class AuthController extends Controller
 
             $refresh_token = !$tiene_refresh_valido
                 ? $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw']
-                : $tiene_refresh_valido->token_hash; // OJO: aquí estás enviando el hash si ya existe; idealmente deberías enviar el raw original guardado aparte.
+                : $tiene_refresh_valido->token_hash;
 
             $token = $this->token_service->generarAccessToken($usuario);
-
-            Log::debug([
-                'dispositivo' => $dispositivo,
-                'ip' => $ip,
-                'usuario_id' => $usuario->id_usuario,
-                'token' => $token['token'],
-                'refresh_token' => $refresh_token,
-            ]);
 
             return response()->json([
                 'status' => 'success',

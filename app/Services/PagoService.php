@@ -77,6 +77,11 @@ class PagoService
                         ->orWhere('primer_apellido', 'ilike', "%$search%")
                         ->orWhere('segundo_apellido', 'ilike', "%$search%");
                 });
+
+                // Filtro adicional: nombre del espacio de la reserva
+                $q->orWhereHas('reserva.espacio', function ($espacioQ) use ($search) {
+                    $espacioQ->where('nombre', 'ilike', "%$search%");
+                });
             });
         }
 

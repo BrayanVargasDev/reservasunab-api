@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\ConfirmacionReservaEmail;
 use App\Models\Espacio;
 use App\Models\EspacioConfiguracion;
 use App\Models\EspacioTipoUsuarioConfig;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Uid\Ulid;
 use Throwable;
 
@@ -573,6 +575,13 @@ class ReservaService
                         (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
                             0 < ($reserva->espacio->maximo_jugadores ?? 0)),
                 ];
+
+                Mail::to($reserva->usuarioReserva->email)
+                    ->send(new ConfirmacionReservaEmail(
+                        $reserva,
+                        $valoresReserva['valor_real'] ?? 0,
+                        $valoresReserva['valor_descuento'] ?? 0
+                    ));
 
                 return $resumenReserva;
             });
