@@ -84,6 +84,7 @@ class AppServiceProvider extends ServiceProvider
             Log::info('Evento SignedIn recibido');
             Log::debug('Detalles del evento SignedIn', [
                 'event' => $event,
+                'agent' => request()->header('User-Agent'),
                 'auth' => $event->getAuth(),
                 'saml2User' => $event->getSaml2User(),
             ]);
