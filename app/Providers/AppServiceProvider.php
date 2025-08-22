@@ -82,6 +82,30 @@ class AppServiceProvider extends ServiceProvider
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
+            Log::debug('Detalles del evento SignedIn', [
+                'event' => $event,
+                'auth' => $event->getAuth(),
+                'saml2User' => $event->getSaml2User(),
+            ]);
+            $messageId = $event->getAuth()->getLastMessageId();
+
+            // your own code preventing reuse of a $messageId to stop replay attacks
+            // $existingSession = Session::where('message_id', $messageId)->first();
+            // if ($existingSession) {
+            //     Log::warning('Repetición de mensaje detectada', ['message_id' => $messageId]);
+            //     return;
+            // }
+
+            $samlUser = $event->getSaml2User();
+            $userData = [
+                'id' => $samlUser->getUserId(),
+                'attributes' => $samlUser->getAttributes(),
+                'assertion' => $samlUser->getRawSamlAssertion()
+            ];
+
+            Log::info('SAML2 SignedIn event processed', [
+                'userData' => $userData,
+            ]);
 
             if (!$this->loadUnabConfig()) {
                 return;
@@ -190,7 +214,7 @@ class AppServiceProvider extends ServiceProvider
 
                 $payload = [
                     'email' => $email,
-                    'ldap_uid' => $primerElemento['id_banner'] ?? $samlUser->getUserId(),
+                    'ldap_uid' => $primerElemento['id_banner'] ?? null,
                     'tipos_usuario' => $tiposUsuario,
                     'nombre' => $primerElemento['nombres'] ?? null,
                     'apellido' => $primerElemento['apellidos'] ?? null,
