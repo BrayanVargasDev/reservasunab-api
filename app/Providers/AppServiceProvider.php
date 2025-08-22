@@ -82,13 +82,8 @@ class AppServiceProvider extends ServiceProvider
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
-            Log::debug('Detalles del evento SignedIn', [
-                'event' => $event,
-                'agent' => request()->header('User-Agent'),
-                'auth' => $event->getAuth(),
-                'saml2User' => $event->getSaml2User(),
-            ]);
-            $messageId = $event->getAuth()->getLastMessageId();
+
+            // $messageId = $event->getAuth()->getLastMessageId();
 
             // your own code preventing reuse of a $messageId to stop replay attacks
             // $existingSession = Session::where('message_id', $messageId)->first();
@@ -97,9 +92,9 @@ class AppServiceProvider extends ServiceProvider
             //     return;
             // }
 
-            Log::info('SAML2 SignedIn event processed', [
-                'messageId' => $messageId,
-            ]);
+            // Log::info('SAML2 SignedIn event processed', [
+            //     'messageId' => $messageId,
+            // ]);
 
             if (!$this->loadUnabConfig()) {
                 return;
@@ -251,6 +246,7 @@ class AppServiceProvider extends ServiceProvider
                     'id_usuario' => $user->id_usuario,
                     'codigo' => $codigo,
                     'refresh_token_hash' => $refresh['model']->token_hash,
+                    'user_agent' => $device,
                     'expira_en' => now()->addSeconds(90),
                     'consumido' => false,
                 ]);

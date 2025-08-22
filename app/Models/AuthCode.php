@@ -15,6 +15,7 @@ class AuthCode extends Model
         'id_usuario',
         'codigo',
         'refresh_token_hash',
+        'user_agent',
         'expira_en',
         'consumido',
     ];
