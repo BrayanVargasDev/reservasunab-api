@@ -402,14 +402,18 @@ class AuthController extends Controller
     public function intercambiar(Request $req)
     {
         $codigo = $req->input('codigo');
-        if (!$codigo) return response()->json(['error' => 'sin_código'], 400);
 
-        $authCode = AuthCode::where('codigo', $codigo)
-            ->where('consumido', false)
+        $authCode = AuthCode::where('consumido', false)
             ->where('expira_en', '>', now())
+            ->where('user_agent', $req->header('User-Agent'))
+            ->when($codigo, function ($query, $codigo) {
+                return $query->where('codigo', $codigo);
+            })
             ->first();
 
-        if (!$authCode) return response()->json(['error' => 'código_inválido_o_expirado'], 400);
+        if (!$authCode) return response()->json([
+            'error' => 'código no encontrado o expirado, o el dispositivo no coincide.'
+        ], 400);
 
         $authCode->consumido = true;
         $authCode->save();
