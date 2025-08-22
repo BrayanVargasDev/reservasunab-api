@@ -6,7 +6,7 @@ return [
     'routesPrefix' => '/api/saml',
     'routesMiddleware' => ['web'],
     'retrieveParametersFromServer' => false,
-    'loginRoute' => 'https://reservasunab.wgsoluciones.com/auth/login',
+    'loginRoute' => null,
     'logoutRoute' => 'https://reservasunab.wgsoluciones.com/auth/logout',
     'errorRoute' => 'https://reservasunab.wgsoluciones.com/auth/error',
     'baseUrl' => env('APP_URL') . '',
