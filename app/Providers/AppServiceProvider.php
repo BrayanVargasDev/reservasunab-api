@@ -96,15 +96,8 @@ class AppServiceProvider extends ServiceProvider
             //     return;
             // }
 
-            $samlUser = $event->getSaml2User();
-            $userData = [
-                'id' => $samlUser->getUserId(),
-                'attributes' => $samlUser->getAttributes(),
-                'assertion' => $samlUser->getRawSamlAssertion()
-            ];
-
             Log::info('SAML2 SignedIn event processed', [
-                'userData' => $userData,
+                'messageId' => $messageId,
             ]);
 
             if (!$this->loadUnabConfig()) {
