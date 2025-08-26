@@ -44,6 +44,13 @@ class ConfirmacionReservaEmail extends Mailable
      */
     public function content(): Content
     {
+        // Asegurar relaciones necesarias cargadas para el correo
+        $this->reserva->load([
+            'espacio.sede',
+            'usuarioReserva.persona',
+            'jugadores.usuario.persona',
+        ]);
+
         $usuarioModel = $this->reserva->usuarioReserva; // modelo relacionado (no el BelongsTo)
         $persona = $usuarioModel?->persona;
         $nombreUsuario = collect([
@@ -55,6 +62,27 @@ class ConfirmacionReservaEmail extends Mailable
 
         if (empty($nombreUsuario)) {
             $nombreUsuario = $usuarioModel?->email ?? 'Usuario';
+        }
+
+        // Construir lista de participantes
+        $participantes = [];
+        if ($this->reserva->jugadores && $this->reserva->jugadores->count() > 0) {
+            $participantes = $this->reserva->jugadores->map(function ($jugador) {
+                $u = $jugador->usuario;
+                $p = $u?->persona;
+                $nombre = collect([
+                    $p?->primer_nombre,
+                    $p?->segundo_nombre,
+                    $p?->primer_apellido,
+                    $p?->segundo_apellido,
+                ])->filter()->implode(' ');
+
+                return [
+                    'nombre' => $nombre ?: ($u?->email ?? 'Usuario'),
+                    'documento' => $p?->numero_documento,
+                    'email' => $u?->email,
+                ];
+            })->values()->all();
         }
 
         return new Content(
@@ -70,6 +98,7 @@ class ConfirmacionReservaEmail extends Mailable
                 'codigo' => $this->reserva->codigo,
                 'valor_real' => $this->valor_real,
                 'valor_descuento' => $this->valor_descuento,
+                    'participantes' => $participantes,
             ],
         );
     }

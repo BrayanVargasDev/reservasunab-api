@@ -443,154 +443,292 @@ class ReservaService
     public function iniciarReserva($data)
     {
         try {
-            return DB::transaction(function () use ($data) {
-                $fecha = Carbon::createFromFormat('Y-m-d', $data['fecha'], config('app.timezone'));
-                $horaInicio = Carbon::createFromFormat('h:i A', $data['horaInicio'], config('app.timezone'));
-                $horaFin = Carbon::createFromFormat('h:i A', $data['horaFin'], config('app.timezone'));
+            // Preparar y validar, sin realizar escrituras en BD (solo lectura)
+            $fecha = Carbon::createFromFormat('Y-m-d', $data['fecha'], config('app.timezone'));
+            $horaInicio = Carbon::createFromFormat('h:i A', $data['horaInicio'], config('app.timezone'));
+            $horaFin = Carbon::createFromFormat('h:i A', $data['horaFin'], config('app.timezone'));
 
-                $usuario = Auth::user();
-                if (!$usuario) {
-                    throw new Exception('Usuario no autenticado.');
-                }
+            $usuario = Auth::user();
+            if (!$usuario) {
+                throw new Exception('Usuario no autenticado.');
+            }
 
-                $this->validarTipoUsuarioParaReserva($data['base']['id'], $usuario->tipos_usuario);
+            $espacioId = $data['base']['id'] ?? null;
+            if (!$espacioId) {
+                throw new Exception('Espacio no especificado.');
+            }
 
-                $this->validarTiempoAperturaReserva($data['base']['id'], $usuario->tipos_usuario, $fecha);
+            $this->validarTipoUsuarioParaReserva($espacioId, $usuario->tipos_usuario);
+            $this->validarTiempoAperturaReserva($espacioId, $usuario->tipos_usuario, $fecha);
+            $this->validarLimitesReservasPorCategoria($espacioId, $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
 
-                $this->validarLimitesReservasPorCategoria($data['base']['id'], $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
+            $espacio = Espacio::with(['sede'])->find($espacioId);
+            if (!$espacio) {
+                throw new Exception('Espacio no encontrado.');
+            }
 
-                $espacio = Espacio::find($data['base']['id']);
-                if (!$espacio) {
-                    throw new Exception('Espacio no encontrado.');
-                }
+            $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
 
-                $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
+            $reservasConflicto = Reservas::where('id_espacio', $espacioId)
+                ->whereDate('fecha', $fecha)
+                ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+                ->whereNull('eliminado_en')
+                ->where(function ($query) use ($horaInicio, $horaFin) {
+                    $query->where(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_inicio', '>=', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_inicio', '<', $horaFin->format('H:i:s'));
+                    })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_fin', '>', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_fin', '<=', $horaFin->format('H:i:s'));
+                    })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_inicio', '<=', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_fin', '>=', $horaFin->format('H:i:s'));
+                    });
+                })
+                ->get();
 
-                $reservasConflicto = Reservas::where('id_espacio', $data['base']['id'])
-                    ->whereDate('fecha', $fecha)
-                    ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
-                    ->whereNull('eliminado_en')
-                    ->where(function ($query) use ($horaInicio, $horaFin) {
-                        $query->where(function ($q) use ($horaInicio, $horaFin) {
-                            $q->whereTime('hora_inicio', '>=', $horaInicio->format('H:i:s'))
-                                ->whereTime('hora_inicio', '<', $horaFin->format('H:i:s'));
-                        })->orWhere(function ($q) use ($horaInicio, $horaFin) {
-                            $q->whereTime('hora_fin', '>', $horaInicio->format('H:i:s'))
-                                ->whereTime('hora_fin', '<=', $horaFin->format('H:i:s'));
-                        })->orWhere(function ($q) use ($horaInicio, $horaFin) {
-                            $q->whereTime('hora_inicio', '<=', $horaInicio->format('H:i:s'))
-                                ->whereTime('hora_fin', '>=', $horaFin->format('H:i:s'));
-                        });
-                    })
-                    ->get();
-
-                $numeroReservasEnHorario = $reservasConflicto->count();
-
-                if ($numeroReservasEnHorario >= $reservasSimultaneasPermitidas) {
-                    Log::warning('Límite de reservas simultáneas alcanzado', [
-                        'espacio_id' => $data['base']['id'],
-                        'fecha' => $fecha->toDateString(),
-                        'hora_solicitada_inicio' => $horaInicio->format('H:i:s'),
-                        'hora_solicitada_fin' => $horaFin->format('H:i:s'),
-                        'reservas_actuales' => $numeroReservasEnHorario,
-                        'reservas_maximas' => $reservasSimultaneasPermitidas,
-                        'reservas_conflicto' => $reservasConflicto->map(function ($r) {
-                            return [
-                                'id' => $r->id,
-                                'hora_inicio' => $r->hora_inicio,
-                                'hora_fin' => $r->hora_fin,
-                                'estado' => $r->estado,
-                                'id_usuario' => $r->id_usuario
-                            ];
-                        })->toArray()
-                    ]);
-
-                    $mensaje = $reservasSimultaneasPermitidas === 1
-                        ? 'Horario ocupado.'
-                        : "Límite de reservas: {$reservasSimultaneasPermitidas}. Ocupadas: {$numeroReservasEnHorario}.";
-
-                    throw new Exception($mensaje);
-                }
-
-                $configuracion = $data['base']['configuracion'];
-                $idConfiguracion = $this->obtenerIdConfiguracion($configuracion, $data['base']['id'], $fecha);
-
-                $estado = (is_array($usuario->tipos_usuario) && in_array('estudiante', $usuario->tipos_usuario)) ? 'completada' : 'inicial';
-                // Si el espacio requiere aprobación, siempre se guarda como 'pendienteap'
-                if ($espacio->aprobar_reserva) {
-                    $estado = 'pendienteap';
-                }
-
-                $reserva = Reservas::create([
-                    'id_usuario' => $usuario->id_usuario,
-                    'id_espacio' => $data['base']['id'],
-                    'fecha' => $fecha,
-                    'id_configuracion' => $idConfiguracion,
-                    'estado' => $estado,
-                    'hora_inicio' => $horaInicio->format('H:i:s'),
-                    'hora_fin' => $horaFin->format('H:i:s'),
-                    'check_in' => false,
-                    'codigo' => Ulid::generate(),
+            $numeroReservasEnHorario = $reservasConflicto->count();
+            if ($numeroReservasEnHorario >= $reservasSimultaneasPermitidas) {
+                Log::warning('Límite de reservas simultáneas alcanzado (preview)', [
+                    'espacio_id' => $espacioId,
+                    'fecha' => $fecha->toDateString(),
+                    'hora_solicitada_inicio' => $horaInicio->format('H:i:s'),
+                    'hora_solicitada_fin' => $horaFin->format('H:i:s'),
+                    'reservas_actuales' => $numeroReservasEnHorario,
+                    'reservas_maximas' => $reservasSimultaneasPermitidas,
                 ]);
+                $mensaje = $reservasSimultaneasPermitidas === 1
+                    ? 'Horario ocupado.'
+                    : "Límite de reservas: {$reservasSimultaneasPermitidas}. Ocupadas: {$numeroReservasEnHorario}.";
+                throw new Exception($mensaje);
+            }
 
-                $reserva->load([
-                    // Incluir aprobar_reserva para saber si requiere aprobación
-                    'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
-                    'espacio.sede:id,nombre',
-                    'usuarioReserva:id_usuario,email',
-                    'configuracion',
-                    'configuracion.franjas_horarias',
-                    'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
-                ]);
+            // Sólo lectura: obtener configuración efectiva sin crear copias
+            $configuracionEfectiva = $this->obtenerConfiguracionEspacio($espacioId, $fecha);
+            if (!$configuracionEfectiva) {
+                throw new Exception('Sin configuración.');
+            }
 
-                $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
-                $valoresReserva = $this->obtenerValorReserva($data, $idConfiguracion, $horaInicio, $horaFin);
-                $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
-                $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona);
-                $requiereAprobacion = (bool) ($reserva->espacio->aprobar_reserva ?? false);
+            $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
+            $valoresReserva = $this->obtenerValorReserva(null, $configuracionEfectiva->id, $horaInicio, $horaFin);
+            $valor = $valoresReserva ? ($valoresReserva['valor_descuento'] ?? 0) : 0;
 
-                $resumenReserva = [
-                    'id' => $reserva->id,
-                    'nombre_espacio' => $reserva->espacio->nombre,
-                    'duracion' => $duracionMinutos,
-                    'sede' => $reserva->espacio->sede->nombre,
-                    'fecha' => $fecha->format('Y-m-d'),
-                    'hora_inicio' => $horaInicio->format('h:i A'),
-                    'valor' => $valoresReserva ? $valoresReserva['valor_real'] : 0,
-                    'valor_descuento' => $valor,
-                    'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
-                    'estado' => $valor > 0 ? 'inicial' : $estado,
-                    'requiere_aprobacion' => $requiereAprobacion,
-                    'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
-                    'codigo_usuario' => $reserva->usuarioReserva->persona->numero_documento ?? 'Sin código',
-                    'agrega_jugadores' => $reserva->espacio->agregar_jugadores ?? false,
-                    'permite_externos' => $reserva->espacio->permite_externos ?? false,
-                    'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
-                    'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
-                    'jugadores' => [], // Sin jugadores al crear la reserva
-                    'total_jugadores' => 0,
-                    'es_pasada' => $this->esReservaPasada($reserva),
-                    'puede_cancelar' => $reserva->puedeSerCancelada(),
-                    'puede_agregar_jugadores' => ($reserva->espacio->agregar_jugadores ?? false) &&
-                        (($reserva->espacio->maximo_jugadores ?? 0) == 0 ||
-                            0 < ($reserva->espacio->maximo_jugadores ?? 0)),
-                ];
+            $requiereAprobacion = (bool) ($espacio->aprobar_reserva ?? false);
+            $estadoPreview = (is_array($usuario->tipos_usuario) && in_array('estudiante', $usuario->tipos_usuario)) ? 'completada' : 'inicial';
+            if ($requiereAprobacion) {
+                $estadoPreview = 'pendienteap';
+            }
 
+            // Usuario/persona
+            $usuarioConPersona = Usuario::with('persona')->find($usuario->id_usuario) ?: $usuario;
+            $nombreCompleto = $this->construirNombreCompleto($usuarioConPersona->persona ?? null);
+
+            // Cálculo de flags informativos
+            $fechaHoraReserva = Carbon::createFromFormat('Y-m-d H:i:s', $fecha->format('Y-m-d') . ' ' . $horaInicio->format('H:i:s'));
+            $esPasada = $fechaHoraReserva->copy()->addMinutes(10)->isPast();
+
+            $tiempoCancelacion = $configuracionEfectiva->tiempo_cancelacion ?? self::TIEMPO_CANCELACION_DEFAULT;
+            $limiteCancelacion = $fechaHoraReserva->copy()->subMinutes($tiempoCancelacion);
+            $puedeCancelar = Carbon::now()->lessThan($limiteCancelacion);
+
+            $jugadoresEntrada = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
+
+            $resumenReserva = [
+                'id' => null,
+                'id_espacio' => $espacio->id,
+                'id_configuracion_base' => $configuracionEfectiva->id,
+                'nombre_espacio' => $espacio->nombre,
+                'duracion' => $duracionMinutos,
+                'sede' => $espacio->sede->nombre ?? null,
+                'fecha' => $fecha->format('Y-m-d'),
+                'hora_inicio' => $horaInicio->format('h:i A'),
+                'hora_fin' => $horaFin->format('h:i A'),
+                'valor' => $valoresReserva ? ($valoresReserva['valor_real'] ?? 0) : 0,
+                'valor_descuento' => $valor,
+                'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($espacio->id, $usuario->id_usuario),
+                'estado' => $valor > 0 ? 'inicial' : $estadoPreview,
+                'necesita_aprobacion' => $requiereAprobacion,
+                'reserva_aprobada' => false,
+                'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
+                'codigo_usuario' => $usuarioConPersona->persona->numero_documento ?? 'Sin código',
+                'agrega_jugadores' => (bool) ($espacio->agregar_jugadores ?? false),
+                'permite_externos' => (bool) ($espacio->permite_externos ?? false),
+                'minimo_jugadores' => $espacio->minimo_jugadores ?? null,
+                'maximo_jugadores' => $espacio->maximo_jugadores ?? null,
+                'jugadores' => $jugadoresEntrada,
+                'total_jugadores' => count($jugadoresEntrada),
+                'es_pasada' => $esPasada,
+                'puede_cancelar' => $puedeCancelar,
+                'puede_agregar_jugadores' => ($espacio->agregar_jugadores ?? false) &&
+                    (($espacio->maximo_jugadores ?? 0) == 0 || count($jugadoresEntrada) < ($espacio->maximo_jugadores ?? 0)),
+            ];
+
+            return $resumenReserva;
+        } catch (Throwable $th) {
+            Log::error('Error al iniciar la reserva (preview)', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'data_received' => $data,
+                'error' => $th->getMessage(),
+            ]);
+            throw new Exception($th->getMessage());
+        }
+    }
+
+    public function confirmarReserva(array $data)
+    {
+        DB::beginTransaction();
+        try {
+            $usuario = Auth::user();
+            if (!$usuario) {
+                throw new Exception('Usuario no autenticado.');
+            }
+
+            $espacioId = $data['id_espacio'] ?? ($data['base']['id'] ?? null);
+            if (!$espacioId) {
+                throw new Exception('Espacio no especificado.');
+            }
+
+            $fechaStr = $data['fecha'] ?? null;
+            $horaInicioStr = $data['hora_inicio'] ?? null;
+            $horaFinStr = $data['hora_fin'] ?? null;
+            $duracion = isset($data['duracion']) ? (int)$data['duracion'] : null;
+
+            if (!$fechaStr || !$horaInicioStr) {
+                throw new Exception('Fecha u hora de inicio no válidas.');
+            }
+
+            $fecha = Carbon::createFromFormat('Y-m-d', $fechaStr, config('app.timezone'));
+            $horaInicio = Carbon::createFromFormat('h:i A', $horaInicioStr, config('app.timezone'));
+            if ($horaFinStr) {
+                $horaFin = Carbon::createFromFormat('h:i A', $horaFinStr, config('app.timezone'));
+            } elseif ($duracion) {
+                $horaFin = $horaInicio->copy()->addMinutes($duracion);
+            } else {
+                throw new Exception('Hora fin o duración requerida.');
+            }
+
+            // Revalidaciones
+            $this->validarTipoUsuarioParaReserva($espacioId, $usuario->tipos_usuario);
+            $this->validarTiempoAperturaReserva($espacioId, $usuario->tipos_usuario, $fecha);
+            $this->validarLimitesReservasPorCategoria($espacioId, $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
+
+            $espacio = Espacio::with(['sede'])->find($espacioId);
+            if (!$espacio) {
+                throw new Exception('Espacio no encontrado.');
+            }
+
+            // Conflictos al confirmar (carrera)
+            $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
+            $reservasConflicto = Reservas::where('id_espacio', $espacioId)
+                ->whereDate('fecha', $fecha)
+                ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
+                ->whereNull('eliminado_en')
+                ->where(function ($query) use ($horaInicio, $horaFin) {
+                    $query->where(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_inicio', '>=', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_inicio', '<', $horaFin->format('H:i:s'));
+                    })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_fin', '>', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_fin', '<=', $horaFin->format('H:i:s'));
+                    })->orWhere(function ($q) use ($horaInicio, $horaFin) {
+                        $q->whereTime('hora_inicio', '<=', $horaInicio->format('H:i:s'))
+                            ->whereTime('hora_fin', '>=', $horaFin->format('H:i:s'));
+                    });
+                })
+                ->lockForUpdate()
+                ->get();
+
+            if ($reservasConflicto->count() >= $reservasSimultaneasPermitidas) {
+                throw new Exception('Horario ocupado al confirmar.');
+            }
+
+            // Determinar configuración (crear copia si es necesaria)
+            $configBaseId = $data['id_configuracion_base'] ?? null;
+            $configFecha = EspacioConfiguracion::where('id_espacio', $espacioId)
+                ->whereDate('fecha', $fecha)
+                ->first();
+
+            if ($configFecha) {
+                $idConfiguracion = $configFecha->id;
+            } else {
+                if (!$configBaseId) {
+                    // fallback a configuración efectiva sólo para leer
+                    $configEfectiva = $this->obtenerConfiguracionEspacio($espacioId, $fecha);
+                    if (!$configEfectiva) {
+                        throw new Exception('Sin configuración.');
+                    }
+                    $configBaseId = $configEfectiva->id;
+                }
+
+                $configBase = EspacioConfiguracion::with('franjas_horarias')->find($configBaseId);
+                if (!$configBase) {
+                    throw new Exception('Configuración base no encontrada.');
+                }
+
+                if ($configBase->fecha && $configBase->fecha->toDateString() === $fecha->toDateString()) {
+                    $idConfiguracion = $configBase->id;
+                } else {
+                    // Crear copia para la fecha solicitada
+                    $idConfiguracion = $this->copiarConfiguracion($configBase->toArray(), $fecha);
+                }
+            }
+
+            // Crear la reserva en estado inicial (requerimiento)
+            $reserva = Reservas::create([
+                'id_usuario' => $usuario->id_usuario,
+                'id_espacio' => $espacioId,
+                'fecha' => $fecha,
+                'id_configuracion' => $idConfiguracion,
+                'estado' => 'inicial',
+                'hora_inicio' => $horaInicio->format('H:i:s'),
+                'hora_fin' => $horaFin->format('H:i:s'),
+                'check_in' => false,
+                'codigo' => Ulid::generate(),
+            ]);
+
+            // Agregar jugadores si vienen en la data
+            $jugadores = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
+            if (!empty($jugadores)) {
+                // Evitar incluir al propietario
+                $jugadores = array_values(array_diff(array_unique($jugadores), [$usuario->id_usuario]));
+                if (!empty($jugadores)) {
+                    $jugadoresData = [];
+                    $ahora = now();
+                    foreach ($jugadores as $idUsuario) {
+                        $jugadoresData[] = [
+                            'id_reserva' => $reserva->id,
+                            'id_usuario' => $idUsuario,
+                            'creado_en' => $ahora,
+                            'actualizado_en' => $ahora,
+                        ];
+                    }
+                    DB::table('jugadores_reserva')->insert($jugadoresData);
+                }
+            }
+
+            try {
+                $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
+                $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
                 Mail::to($reserva->usuarioReserva->email)
                     ->send(new ConfirmacionReservaEmail(
                         $reserva,
                         $valoresReserva['valor_real'] ?? 0,
                         $valoresReserva['valor_descuento'] ?? 0
                     ));
+            } catch (Throwable $mailTh) {
+                Log::warning('Error enviando correo de confirmación', ['reserva_id' => $reserva->id, 'error' => $mailTh->getMessage()]);
+            }
 
-                return $resumenReserva;
-            });
+            DB::commit();
+
+            // Responder con el resumen ya persistido
+            return $this->getMiReserva($reserva->id);
         } catch (Throwable $th) {
-            Log::error('Error al iniciar la reserva', [
+            DB::rollBack();
+            Log::error('Error al confirmar la reserva', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
                 'data_received' => $data,
                 'error' => $th->getMessage(),
-                'trace' => $th->getTraceAsString()
             ]);
             throw new Exception($th->getMessage());
         }
@@ -1203,13 +1341,14 @@ class ReservaService
                 // agregar aprobar_reserva
                 'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
                 'espacio.sede:id,nombre',
-                'usuarioReserva:id_usuario,email',
+                'usuarioReserva',
                 'configuracion',
                 'configuracion.franjas_horarias',
                 'pago',
-                'jugadores:id,id_reserva,id_usuario',
-                'jugadores.usuario:id_usuario,email',
-                'jugadores.usuario.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento',
+                'jugadores',
+                'jugadores.usuario',
+                'jugadores.usuario.persona',
+                'jugadores.usuario.persona.tipoDocumento',
                 'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
             ])->find($id_reserva);
 
@@ -1273,7 +1412,7 @@ class ReservaService
 
             // Procesar información de jugadores
             $jugadores = [];
-
+            Log::debug($reserva->jugadores);
             if ($reserva->jugadores->isNotEmpty()) {
                 foreach ($reserva->jugadores as $jugador) {
                     $jugadorInfo = [
@@ -1281,16 +1420,13 @@ class ReservaService
                         'id_usuario' => $jugador->id_usuario,
                     ];
 
-                    // Obtener información del usuario
-                    if ($jugador->usuario && $jugador->usuario->persona) {
-                        $jugadorInfo['nombre'] = $this->construirNombreCompleto($jugador->usuario->persona);
-                        $jugadorInfo['email'] = $jugador->usuario->email;
-                        $jugadorInfo['documento'] = $jugador->usuario->persona->numero_documento ?? null;
-                    } else {
-                        $jugadorInfo['nombre'] = 'Usuario no encontrado';
-                        $jugadorInfo['email'] = null;
-                        $jugadorInfo['documento'] = null;
-                    }
+
+                    $jugadorInfo['nombre'] = trim($jugador->usuario->persona->primer_nombre . ' ' . $jugador->usuario->persona->segundo_nombre);
+                    $jugadorInfo['apellido'] = trim($jugador->usuario->persona->primer_apellido . ' ' . $jugador->usuario->persona->segundo_apellido);
+                    $jugadorInfo['email'] = $jugador->usuario->email;
+                    $jugadorInfo['ldap_uid'] = $jugador->usuario->ldap_uid ?? null;
+                    $jugadorInfo['documento'] = $jugador->usuario->persona->numero_documento ?? null;
+                    $jugadorInfo['codigo_tipo_documento'] = $jugador->usuario->persona->tipoDocumento->codigo ?? null;
 
                     $jugadores[] = $jugadorInfo;
                 }

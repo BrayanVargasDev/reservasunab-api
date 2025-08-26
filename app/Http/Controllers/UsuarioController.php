@@ -558,7 +558,7 @@ class UsuarioController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'data' => $jugadores,
+                'data' => UsuariosResource::collection($jugadores),
                 'message' => 'Jugadores obtenidos correctamente',
             ], 200);
         } catch (Exception $e) {

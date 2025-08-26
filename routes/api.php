@@ -192,6 +192,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/', [ReservasController::class, 'index']);
         Route::get('/me', [ReservasController::class, 'misReservas']);
         Route::post('/', [ReservasController::class, 'store']);
+        Route::post('/confirmar', [ReservasController::class, 'confirmar']);
         Route::get('/mi-reserva/{reserva}', [ReservasController::class, 'miReserva']);
         Route::post('/{reserva}/agregar-jugadores', [ReservasController::class, 'agregarJugadores']);
         Route::post('/{reserva}/cancelar', [ReservasController::class, 'cancelar']);

@@ -16,6 +16,8 @@ class UsuariosResource extends JsonResource
             'telefono' => $this->persona?->celular ?? '',
             'rol' => $this->rol->nombre ?? null,
             'tipoDocumento' => $this->persona?->tipo_documento_id ?? null,
+            'codigo_tipo_documento' => $this->persona?->tipoDocumento?->codigo ?? null,
+            'ldap_uid' => $this->ldap_uid ?? null,
             'documento' => $this->persona?->numero_documento ?? null,
             'nombre' => trim(($this->persona?->primer_nombre ?? '') . ' ' . ($this->persona?->segundo_nombre ?? '')),
             'apellido' =>

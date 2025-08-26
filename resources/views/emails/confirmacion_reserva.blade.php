@@ -129,6 +129,28 @@
                 </tr>
             </table>
 
+            @if(!empty($participantes))
+            <h3 style="margin-top: 24px;">Participantes</h3>
+            <table class="details" role="presentation" aria-label="Participantes de la reserva">
+                <thead>
+                    <tr>
+                        <td><strong>Nombre</strong></td>
+                        <td><strong>Documento</strong></td>
+                        <td><strong>Email</strong></td>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($participantes as $p)
+                    <tr>
+                        <td>{{ $p['nombre'] ?? 'N/D' }}</td>
+                        <td>{{ $p['documento'] ?? 'N/D' }}</td>
+                        <td>{{ $p['email'] ?? 'N/D' }}</td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+            @endif
+
             <p style="margin-top: 20px;">
                 Si tienes alguna duda, por favor contacta a nuestro equipo de soporte.
             </p>

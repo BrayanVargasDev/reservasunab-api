@@ -660,8 +660,10 @@ class UsuarioService
     {
         $termino = trim(strtolower($termino));
 
-        return Usuario::with('persona')
-            ->select([
+        return Usuario::with(['persona', 'persona.tipoDocumento'])
+            ->leftJoin('personas', 'usuarios.id_usuario', '=', 'personas.id_usuario')
+            ->select(
+                'usuarios.id_usuario',
                 'usuarios.id_usuario as id',
                 'usuarios.email',
                 'usuarios.tipos_usuario',
@@ -671,23 +673,26 @@ class UsuarioService
                 'usuarios.perfil_completado',
                 'usuarios.terminos_condiciones',
                 'usuarios.creado_en',
-                'usuarios.actualizado_en',
-                'usuarios.eliminado_en'
-            ])
+                'personas.primer_nombre',
+                'personas.segundo_nombre',
+                'personas.primer_apellido',
+                'personas.segundo_apellido',
+                'personas.numero_documento',
+            )
             ->where(function ($query) use ($termino) {
-                $query->where('email', 'ILIKE', "%{$termino}%")
-                    // ->orWhere('ldap_uid', 'LIKE', "%{$termino}%")
-                    ->orWhere('tipos_usuario', 'LIKE', "%{$termino}%")
-                    ->orWhereHas('persona', function ($personaQuery) use ($termino) {
-                        $personaQuery->where('primer_nombre', 'ILIKE', "%{$termino}%")
-                            ->orWhere('segundo_nombre', 'ILIKE', "%{$termino}%")
-                            ->orWhere('primer_apellido', 'ILIKE', "%{$termino}%")
-                            ->orWhere('segundo_apellido', 'ILIKE', "%{$termino}%")
-                            ->orWhere('numero_documento', 'LIKE', "%{$termino}%");
+                $query->where('usuarios.email', 'ILIKE', "%{$termino}%")
+                    ->orWhere('usuarios.ldap_uid', 'ILIKE', "%{$termino}%")
+                    ->orWhere(DB::raw("array_to_string(usuarios.tipos_usuario, ',')"), 'ILIKE', "%{$termino}%")
+                    ->orWhere(function ($q) use ($termino) {
+                        $q->where('personas.primer_nombre', 'ILIKE', "%{$termino}%")
+                            ->orWhere('personas.segundo_nombre', 'ILIKE', "%{$termino}%")
+                            ->orWhere('personas.primer_apellido', 'ILIKE', "%{$termino}%")
+                            ->orWhere('personas.segundo_apellido', 'ILIKE', "%{$termino}%")
+                            ->orWhere('personas.numero_documento', 'LIKE', "%{$termino}%");
                     });
             })
-            ->where('id_usuario', '!=', Auth::id())
-            ->where('eliminado_en', null)
+            ->where('usuarios.id_usuario', '!=', Auth::id())
+            ->whereNull('usuarios.eliminado_en')
             ->get();
     }
 

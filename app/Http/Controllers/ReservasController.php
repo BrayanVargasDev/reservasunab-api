@@ -3,12 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreReservasRequest;
-use App\Http\Requests\UpdateReservasRequest;
 use App\Http\Requests\AgregarJugadoresReservaRequest;
+use App\Http\Requests\ConfirmarReservaRequest;
 use App\Http\Resources\EspacioReservaResource;
-use App\Http\Resources\ReservaConJugadoresResource;
 use App\Http\Resources\ReservaResource;
-use App\Models\Reservas;
 use App\Services\ReservaService;
 use Exception;
 use Illuminate\Http\Request;
@@ -291,6 +289,31 @@ class ReservasController extends Controller
                 ],
                 500,
             );
+        }
+    }
+
+    public function confirmar(ConfirmarReservaRequest $request)
+    {
+        try {
+            $payload = $request->validated();
+            $resumen = $this->reserva_service->confirmarReserva($payload);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $resumen,
+                'message' => 'Reserva confirmada correctamente.',
+            ], 201);
+        } catch (Exception $e) {
+            Log::error('Error al confirmar la reserva', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al confirmar la reserva',
+                'error' => $e->getMessage(),
+            ], 422);
         }
     }
 }
