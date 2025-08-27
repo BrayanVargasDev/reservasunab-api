@@ -90,12 +90,14 @@ class Reservas extends Model
      */
     public function scopePuedeCancelar($query)
     {
-        return $query->whereHas('configuracion', function ($q) {
-            $q->whereRaw('
-                reservas.fecha > NOW()
-                AND TIMESTAMPDIFF(MINUTE, NOW(), CONCAT(reservas.fecha, " ", reservas.hora_inicio)) >= espacios_configuracion.tiempo_cancelacion
-            ');
-        });
+        return $query
+            ->whereDoesntHave('movimientos')
+            ->whereHas('configuracion', function ($q) {
+                $q->whereRaw('
+                    reservas.fecha > NOW()
+                    AND TIMESTAMPDIFF(MINUTE, NOW(), CONCAT(reservas.fecha, " ", reservas.hora_inicio)) >= espacios_configuracion.tiempo_cancelacion
+                ');
+            });
     }
 
     /**
@@ -104,6 +106,10 @@ class Reservas extends Model
     public function puedeSerCancelada()
     {
         if (!$this->configuracion) {
+            return false;
+        }
+
+        if ($this->movimientos()->exists()) {
             return false;
         }
 

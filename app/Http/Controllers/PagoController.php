@@ -81,6 +81,32 @@ class PagoController extends Controller
         }
     }
 
+    public function pagarConSaldo(Request $request)
+    {
+        try {
+            $idReserva = (int)($request->input('id_reserva'));
+            $resultado = $this->pago_service->pagarConSaldo($idReserva);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => $resultado,
+                'message' => 'Pago con saldo realizado correctamente.',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al pagar con saldo', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al pagar con saldo.',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
     /**
      * Store a newly created resource in storage.
      */

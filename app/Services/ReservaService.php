@@ -99,6 +99,7 @@ class ReservaService
         $esAdministrador = is_string($rolNombre) && strtolower($rolNombre) === 'administrador';
 
         $query = Reservas::query()
+            ->withTrashed()
             ->with([
                 'espacio:id,nombre,id_sede,id_categoria,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
                 'espacio.sede:id,nombre',
@@ -107,8 +108,7 @@ class ReservaService
                 'configuracion',
                 'configuracion.franjas_horarias',
                 'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
-            ])
-            ->whereNull('eliminado_en');
+            ]);
 
         if (!$esAdministrador) {
             $query->where('id_usuario', $usuario->id_usuario);
@@ -139,7 +139,24 @@ class ReservaService
             });
         }
 
-        return $query->paginate($per_page);
+        $reservas = $query->paginate($per_page);
+
+        // Agregar bandera puede_cancelar a cada reserva sin alterar la consulta base
+        $reservas->getCollection()->transform(function ($reserva) {
+            try {
+                $reserva->puede_cancelar = $reserva->puedeSerCancelada();
+            } catch (\Throwable $e) {
+                // En caso de error en el cálculo, por seguridad marcamos como no cancelable
+                $reserva->puede_cancelar = false;
+                Log::warning('Error calculando puede_cancelar para la reserva', [
+                    'reserva_id' => $reserva->id ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+            return $reserva;
+        });
+
+        return $reservas;
     }
 
     public function getAllEspacios(
@@ -607,7 +624,6 @@ class ReservaService
                 throw new Exception('Hora fin o duración requerida.');
             }
 
-            // Revalidaciones
             $this->validarTipoUsuarioParaReserva($espacioId, $usuario->tipos_usuario);
             $this->validarTiempoAperturaReserva($espacioId, $usuario->tipos_usuario, $fecha);
             $this->validarLimitesReservasPorCategoria($espacioId, $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
@@ -617,7 +633,6 @@ class ReservaService
                 throw new Exception('Espacio no encontrado.');
             }
 
-            // Conflictos al confirmar (carrera)
             $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
             $reservasConflicto = Reservas::where('id_espacio', $espacioId)
                 ->whereDate('fecha', $fecha)
@@ -642,7 +657,6 @@ class ReservaService
                 throw new Exception('Horario ocupado al confirmar.');
             }
 
-            // Determinar configuración (crear copia si es necesaria)
             $configBaseId = $data['id_configuracion_base'] ?? null;
             $configFecha = EspacioConfiguracion::where('id_espacio', $espacioId)
                 ->whereDate('fecha', $fecha)
@@ -652,7 +666,6 @@ class ReservaService
                 $idConfiguracion = $configFecha->id;
             } else {
                 if (!$configBaseId) {
-                    // fallback a configuración efectiva sólo para leer
                     $configEfectiva = $this->obtenerConfiguracionEspacio($espacioId, $fecha);
                     if (!$configEfectiva) {
                         throw new Exception('Sin configuración.');
@@ -668,12 +681,49 @@ class ReservaService
                 if ($configBase->fecha && $configBase->fecha->toDateString() === $fecha->toDateString()) {
                     $idConfiguracion = $configBase->id;
                 } else {
-                    // Crear copia para la fecha solicitada
                     $idConfiguracion = $this->copiarConfiguracion($configBase->toArray(), $fecha);
                 }
             }
 
-            // Crear la reserva en estado inicial (requerimiento)
+            try {
+                $configActual = EspacioConfiguracion::find($idConfiguracion);
+                $necesitaCopiaPorFecha = !$configActual || is_null($configActual->fecha) || $configActual->fecha->toDateString() !== $fecha->toDateString();
+
+                if ($necesitaCopiaPorFecha) {
+                    $configPorFecha = EspacioConfiguracion::where('id_espacio', $espacioId)
+                        ->whereDate('fecha', $fecha)
+                        ->first();
+
+                    if ($configPorFecha) {
+                        $idConfiguracion = $configPorFecha->id;
+                    } else {
+                        $fuente = $configActual ?: EspacioConfiguracion::with('franjas_horarias')
+                            ->where('id_espacio', $espacioId)
+                            ->whereNull('fecha')
+                            ->where('dia_semana', $fecha->dayOfWeekIso)
+                            ->first();
+
+                        if (!$fuente) {
+                            throw new Exception('Sin configuración para copiar.');
+                        }
+
+                        if (!$fuente->relationLoaded('franjas_horarias')) {
+                            $fuente->load('franjas_horarias');
+                        }
+
+                        $idConfiguracion = $this->copiarConfiguracion($fuente->toArray(), $fecha);
+                    }
+                }
+            } catch (\Throwable $th) {
+                Log::error('Error asegurando configuración por fecha al confirmar', [
+                    'espacio_id' => $espacioId,
+                    'fecha' => $fecha->toDateString(),
+                    'config_id_inicial' => $idConfiguracion ?? null,
+                    'error' => $th->getMessage(),
+                ]);
+                throw $th;
+            }
+
             $reserva = Reservas::create([
                 'id_usuario' => $usuario->id_usuario,
                 'id_espacio' => $espacioId,
@@ -686,10 +736,11 @@ class ReservaService
                 'codigo' => Ulid::generate(),
             ]);
 
-            // Agregar jugadores si vienen en la data
+            $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
+            $valorAPagar = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
+
             $jugadores = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
             if (!empty($jugadores)) {
-                // Evitar incluir al propietario
                 $jugadores = array_values(array_diff(array_unique($jugadores), [$usuario->id_usuario]));
                 if (!empty($jugadores)) {
                     $jugadoresData = [];
@@ -708,7 +759,6 @@ class ReservaService
 
             try {
                 $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
-                $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
                 Mail::to($reserva->usuarioReserva->email)
                     ->send(new ConfirmacionReservaEmail(
                         $reserva,
@@ -721,8 +771,20 @@ class ReservaService
 
             DB::commit();
 
-            // Responder con el resumen ya persistido
-            return $this->getMiReserva($reserva->id);
+            $ingresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
+                ->where('tipo', Movimientos::TIPO_INGRESO)
+                ->sum('valor');
+            $egresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
+                ->where('tipo', Movimientos::TIPO_EGRESO)
+                ->sum('valor');
+            $saldoFavor = $ingresos - $egresos;
+            $puedePagarConSaldo = $valorAPagar > 0 && $saldoFavor > 0 && $valorAPagar <= $saldoFavor;
+
+            $resumen = $this->getMiReserva($reserva->id);
+            if (is_array($resumen)) {
+                $resumen['pagar_con_saldo'] = $puedePagarConSaldo;
+            }
+            return $resumen;
         } catch (Throwable $th) {
             DB::rollBack();
             Log::error('Error al confirmar la reserva', [
@@ -781,7 +843,6 @@ class ReservaService
                 return null;
             }
 
-            // Convertir las horas a string H:i:s format
             if ($horaInicio instanceof \Carbon\Carbon || $horaInicio instanceof \DateTime) {
                 $horaInicioReserva = $horaInicio->format('H:i:s');
             } else {
@@ -794,7 +855,6 @@ class ReservaService
                 $horaFinReserva = $horaFin;
             }
 
-            // Asegurar que las horas tengan el formato H:i:s
             if (strlen($horaInicioReserva) === 5) {
                 $horaInicioReserva .= ':00';
             }
@@ -848,7 +908,6 @@ class ReservaService
                 return null;
             }
 
-            // Si el espacio requiere aprobación, el valor siempre es 0 (sin cobro hasta aprobar)
             try {
                 $espacioAsociado = Espacio::find($configuracionCompleta->id_espacio);
                 if ($espacioAsociado && $espacioAsociado->aprobar_reserva) {
@@ -864,7 +923,6 @@ class ReservaService
                 ]);
             }
 
-            // Aplicar descuento por tipo de usuario si existe
             $valorDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio);
 
             return [
@@ -890,7 +948,6 @@ class ReservaService
                 return $valorBase;
             }
 
-            // Obtener la configuración con mayor descuento de todos los tipos del usuario
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
                 ->whereIn('tipo_usuario', $usuario->tipos_usuario)
                 ->whereNull('eliminado_en')
@@ -979,39 +1036,6 @@ class ReservaService
         }
     }
 
-    private function usuarioTieneReservaEnFecha($usuarioId, $fecha)
-    {
-        return Reservas::where('id_usuario', $usuarioId)
-            ->whereDate('fecha', $fecha)
-            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
-            ->whereNull('eliminado_en')
-            ->with(['espacio:id,nombre'])
-            ->first();
-    }
-
-    public function getReservasUsuario($usuarioId, $fechaInicio = null, $fechaFin = null)
-    {
-        $query = Reservas::where('id_usuario', $usuarioId)
-            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
-            ->whereNull('eliminado_en')
-            ->with([
-                'espacio:id,nombre,id_sede',
-                'espacio.sede:id,nombre'
-            ])
-            ->orderBy('fecha', 'desc')
-            ->orderBy('hora_inicio', 'desc');
-
-        if ($fechaInicio) {
-            $query->whereDate('fecha', '>=', $fechaInicio);
-        }
-
-        if ($fechaFin) {
-            $query->whereDate('fecha', '<=', $fechaFin);
-        }
-
-        return $query->get();
-    }
-
     private function validarTipoUsuarioParaReserva(int $espacioId, array $tiposUsuario): void
     {
         $configsPermitidas = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
@@ -1065,15 +1089,18 @@ class ReservaService
         }
     }
 
-    private function validarLimitesReservasPorCategoria(int $espacioId, int $usuarioId, array $tiposUsuario, Carbon $fechaReserva): void
-    {
+    private function validarLimitesReservasPorCategoria(
+        int $espacioId,
+        int $usuarioId,
+        array $tiposUsuario,
+        Carbon $fechaReserva
+    ): void {
         $espacio = Espacio::with('categoria')->find($espacioId);
 
         if (!$espacio || !$espacio->categoria) {
             throw new Exception("Sin categoría.");
         }
 
-        // Verificar límites para cada tipo de usuario que tiene el usuario
         foreach ($tiposUsuario as $tipoUsuario) {
             $campoLimite = "reservas_{$tipoUsuario}";
             $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
@@ -1252,7 +1279,6 @@ class ReservaService
             'usuarioReserva.persona' => function ($q) {
                 $q->select('id_persona', 'id_usuario', 'primer_nombre', 'primer_apellido', 'numero_documento');
             },
-            // incluir aprobar_reserva para saber si necesita aprobación
             'espacio:id,nombre,id_sede,id_categoria,aprobar_reserva',
             'espacio.sede:id,nombre',
             'espacio.categoria:id,nombre',
@@ -1298,14 +1324,17 @@ class ReservaService
 
         $reservas = $query->get();
 
-        // Agregar validaciones de reservas pasadas y cancelación
-        $reservas->each(function ($reserva) {
+        $saldoFavorUsuario = $this->obtenerSaldoFavorUsuario($usuarioId);
+
+        $reservas->each(function ($reserva) use ($saldoFavorUsuario) {
             $reserva->es_pasada = $this->esReservaPasada($reserva);
             $reserva->puede_cancelar = $reserva->puedeSerCancelada();
             $reserva->porcentaje_descuento = $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario);
             // Campos solicitados
             $reserva->necesita_aprobacion = (bool) ($reserva->espacio->aprobar_reserva ?? false);
             $reserva->reserva_aprobada = $reserva->estado === 'aprobada';
+            // Nueva bandera de pago con saldo
+            $reserva->pagar_con_saldo = $this->puedePagarConSaldoReserva($reserva, $saldoFavorUsuario);
         });
 
         return $reservas;
@@ -1337,7 +1366,7 @@ class ReservaService
         $resumenReserva = null;
 
         try {
-            $reserva = Reservas::with([
+            $reserva = Reservas::withTrashed()->with([
                 // agregar aprobar_reserva
                 'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
                 'espacio.sede:id,nombre',
@@ -1412,7 +1441,7 @@ class ReservaService
 
             // Procesar información de jugadores
             $jugadores = [];
-            Log::debug($reserva->jugadores);
+
             if ($reserva->jugadores->isNotEmpty()) {
                 foreach ($reserva->jugadores as $jugador) {
                     $jugadorInfo = [
@@ -1458,6 +1487,7 @@ class ReservaService
                         count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
                 'necesita_aprobacion' => (bool) ($reserva->espacio->aprobar_reserva ?? false),
                 'reserva_aprobada' => $reserva->estado === 'aprobada',
+                'pagar_con_saldo' => $this->puedePagarConSaldoReserva($reserva),
             ];
 
             return $resumenReserva;
@@ -1543,8 +1573,14 @@ class ReservaService
                 throw new Exception('Reserva no encontrada');
             }
 
+            if (method_exists($reserva, 'trashed') && $reserva->trashed()) {
+                throw new Exception('La reserva ya fue cancelada');
+            }
+
             $usuarioAuth = Usuario::find($usuarioAuthId);
-            $puedeCancelarTerceros = $usuarioAuth && $usuarioAuth->tienePermiso('cancelar_reservas');
+            $puedeCancelarTerceros = $usuarioAuth && method_exists($usuarioAuth, 'tienePermiso')
+                ? $usuarioAuth->tienePermiso('cancelar_reservas')
+                : false;
             $esPropietario = $reserva->id_usuario === $usuarioAuthId;
 
             if (!$esPropietario && !$puedeCancelarTerceros) {
@@ -1559,23 +1595,21 @@ class ReservaService
                 throw new Exception('La reserva ya está cancelada/rechazada');
             }
 
-            $crearMovimiento = false;
-            $valorMovimiento = 0;
-
-            if ((float)$reserva->valor > 0 && $reserva->pago && strtoupper($reserva->pago->estado) === 'OK' && $reserva->estado === 'pagada') {
-                $crearMovimiento = true;
-                $valorMovimiento = (float)$reserva->valor;
-            }
+            $tienePagoOk = $reserva->pago && strtoupper($reserva->pago->estado) === 'OK';
+            $valorMovimiento = (float)($reserva->pago->valor ?? $reserva->valor ?? 0);
 
             $reserva->estado = 'cancelada';
             $reserva->cancelado_por = $usuarioAuthId;
             $reserva->save();
 
+            $reserva->delete();
+
             $movimiento = null;
-            if ($crearMovimiento) {
+            if ($tienePagoOk && $valorMovimiento > 0) {
                 $movimiento = Movimientos::create([
                     'id_usuario' => $reserva->id_usuario,
                     'id_reserva' => $reserva->id,
+                    'id_movimiento_principal' => null,
                     'fecha' => now(),
                     'valor' => $valorMovimiento,
                     'tipo' => Movimientos::TIPO_INGRESO,
@@ -1588,7 +1622,7 @@ class ReservaService
             return [
                 'exito' => true,
                 'mensaje' => 'Reserva cancelada correctamente',
-                'creo_movimiento' => $crearMovimiento,
+                'creo_movimiento' => $movimiento !== null,
                 'movimiento' => $movimiento,
                 'cancelado_por' => $usuarioAuthId,
             ];
@@ -1642,6 +1676,72 @@ class ReservaService
                 'usuario_id' => $usuarioId,
             ]);
             return 0;
+        }
+    }
+
+    /**
+     * Obtiene el saldo a favor del usuario basado en movimientos (ingresos - egresos)
+     */
+    private function obtenerSaldoFavorUsuario(int $usuarioId): float
+    {
+        try {
+            $ingresos = (float) Movimientos::where('id_usuario', $usuarioId)
+                ->where('tipo', Movimientos::TIPO_INGRESO)
+                ->sum('valor');
+            $egresos = (float) Movimientos::where('id_usuario', $usuarioId)
+                ->where('tipo', Movimientos::TIPO_EGRESO)
+                ->sum('valor');
+            return $ingresos - $egresos;
+        } catch (\Throwable $th) {
+            Log::warning('Error calculando saldo a favor', [
+                'usuario_id' => $usuarioId,
+                'error' => $th->getMessage(),
+            ]);
+            return 0.0;
+        }
+    }
+
+    /**
+     * Valida si una reserva puede pagarse con saldo a favor del usuario.
+     * Permite pasar el saldo precomputado para optimizar.
+     */
+    private function puedePagarConSaldoReserva($reserva, ?float $saldoFavor = null): bool
+    {
+        try {
+            if (!$reserva) {
+                return false;
+            }
+            $usuarioId = $reserva->id_usuario ?? null;
+            if (!$usuarioId) {
+                return false;
+            }
+
+            // Calcular el valor a pagar según franja/configuración
+            $horaInicio = $reserva->hora_inicio instanceof Carbon
+                ? $reserva->hora_inicio
+                : Carbon::createFromFormat('H:i:s', (string)$reserva->hora_inicio);
+            $horaFin = $reserva->hora_fin instanceof Carbon
+                ? $reserva->hora_fin
+                : Carbon::createFromFormat('H:i:s', (string)$reserva->hora_fin);
+
+            $valores = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
+            $valorAPagar = $valores ? (float)($valores['valor_descuento'] ?? 0) : 0.0;
+            if ($valorAPagar <= 0) {
+                return false;
+            }
+
+            // Obtener saldo si no se pasa
+            if ($saldoFavor === null) {
+                $saldoFavor = $this->obtenerSaldoFavorUsuario((int)$usuarioId);
+            }
+
+            return $saldoFavor > 0 && $valorAPagar <= $saldoFavor;
+        } catch (\Throwable $th) {
+            Log::warning('Error validando pago con saldo', [
+                'reserva_id' => $reserva->id ?? null,
+                'error' => $th->getMessage(),
+            ]);
+            return false;
         }
     }
 }

@@ -164,7 +164,7 @@ class ReservasController extends Controller
     {
         try {
             $usuarioId = Auth::id();
-            $resultado = $this->reserva_service->cancelarReserva((int)$id, (int)$usuarioId);
+            $resultado = $this->reserva_service->cancelarReserva((int)$id, $usuarioId);
 
             if (!$resultado['exito']) {
                 return response()->json([

@@ -263,4 +263,30 @@ class SharedController extends Controller
             );
         }
     }
+
+    public function creditos()
+    {
+        try {
+            $creditos = $this->shared_service->obtener_creditos();
+            return response()->json([
+                'success' => true,
+                'data' => $creditos,
+            ], 200);
+        } catch (\Throwable $th) {
+            Log::error('Error al obtener créditos', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $th->getMessage(),
+                'trace' => $th->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener los créditos',
+                    'error' => $th->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }

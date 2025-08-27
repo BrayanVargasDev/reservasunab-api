@@ -22,10 +22,11 @@ class Movimientos extends Model
     protected $fillable = [
         'id_usuario',
         'id_reserva',
+        'id_movimiento_principal',
         'fecha',
         'valor',
         'tipo',
-    'creado_por',
+        'creado_por',
     ];
 
     // Tipos permitidos
@@ -42,6 +43,7 @@ class Movimientos extends Model
     protected $casts = [
         'id_usuario' => 'integer',
         'id_reserva' => 'integer',
+        'id_movimiento_principal' => 'integer',
         'valor' => 'decimal:2',
         'fecha' => 'datetime',
         'creado_en' => 'datetime',
@@ -64,6 +66,16 @@ class Movimientos extends Model
         return $this->belongsTo(Usuario::class, 'creado_por', 'id_usuario');
     }
 
+    public function movimientoPrincipal()
+    {
+        return $this->belongsTo(Movimientos::class, 'id_movimiento_principal');
+    }
+
+    public function movimientosRelacionados()
+    {
+        return $this->hasMany(Movimientos::class, 'id_movimiento_principal');
+    }
+
     // Mutator para validar tipo
     public function setTipoAttribute($value)
     {
@@ -75,7 +87,16 @@ class Movimientos extends Model
     }
 
     // Helpers
-    public function esIngreso(): bool { return $this->tipo === self::TIPO_INGRESO; }
-    public function esEgreso(): bool { return $this->tipo === self::TIPO_EGRESO; }
-    public function esAjuste(): bool { return $this->tipo === self::TIPO_AJUSTE; }
+    public function esIngreso(): bool
+    {
+        return $this->tipo === self::TIPO_INGRESO;
+    }
+    public function esEgreso(): bool
+    {
+        return $this->tipo === self::TIPO_EGRESO;
+    }
+    public function esAjuste(): bool
+    {
+        return $this->tipo === self::TIPO_AJUSTE;
+    }
 }

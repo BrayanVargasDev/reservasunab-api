@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Fecha;
 use App\Models\Grupo;
+use App\Models\Movimientos;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -52,8 +53,8 @@ class SharedService
     {
         try {
             $query = Grupo::when($perPage, function ($query) {
-                    $query->withTrashed();
-                })
+                $query->withTrashed();
+            })
                 ->when(!empty($search), function ($query) use ($search) {
                     $query->where('nombre', 'like', '%' . $search . '%');
                 })
@@ -141,5 +142,13 @@ class SharedService
             Log::error('Error al restaurar grupo', ['id' => $id, 'error' => $e->getMessage()]);
             throw new Exception('Error al restaurar el grupo: ' . $e->getMessage());
         }
+    }
+
+    public function obtener_creditos()
+    {
+        // Consultar movimientos restar los ingresos y los egresos y hacer la resta
+        $ingresos = Movimientos::where('tipo', 'ingreso')->sum('valor');
+        $egresos = Movimientos::where('tipo', 'egreso')->sum('valor');
+        return $ingresos - $egresos;
     }
 }

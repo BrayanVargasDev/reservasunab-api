@@ -34,6 +34,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'user']);
     Route::post('/refresh-token', [AuthController::class, 'refreshToken']);
+    Route::get('/creditos', [SharedController::class, 'creditos']);
 
     Route::group(['prefix' => 'usuarios'], function () {
         Route::get('/', [UsuarioController::class, 'index']);
@@ -195,7 +196,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::post('/confirmar', [ReservasController::class, 'confirmar']);
         Route::get('/mi-reserva/{reserva}', [ReservasController::class, 'miReserva']);
         Route::post('/{reserva}/agregar-jugadores', [ReservasController::class, 'agregarJugadores']);
-        Route::post('/{reserva}/cancelar', [ReservasController::class, 'cancelar']);
+        Route::delete('/{reserva}/cancelar', [ReservasController::class, 'cancelar']);
         Route::post('/{reserva}/aprobar', [ReservasController::class, 'aprobar']);
     });
 
@@ -211,6 +212,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
     Route::group(['prefix' => 'pagos'], function () {
         Route::get('/', [PagoController::class, 'index']);
         Route::post('/reservas', [PagoController::class, 'reservas']);
+        Route::post('/saldos', [PagoController::class, 'pagarConSaldo']);
         Route::get('/info', [PagoController::class, 'info']);
     });
 });

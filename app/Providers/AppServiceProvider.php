@@ -255,8 +255,7 @@ class AppServiceProvider extends ServiceProvider
                     'user_id' => $user->id_usuario,
                     'code_len' => strlen($codigo),
                 ]);
-                Log::debug('Código de intercambio generado', ['code' => $codigo]);
-                Log::debug('Url a la que se redirige', ['url' => "{$frontendUrl}/auth/callback?code={$codigo}"]);
+
                 return redirect()->away("{$frontendUrl}/auth/callback?code={$codigo}");
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [

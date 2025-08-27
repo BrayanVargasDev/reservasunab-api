@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Pago;
 use App\Models\PagoConsulta;
+use App\Models\Movimientos;
 use Exception;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -32,6 +33,100 @@ class PagoService
         $this->session_token = null;
     }
 
+    public function pagarConSaldo(int $id_reserva): array
+    {
+        DB::beginTransaction();
+        try {
+            $reserva = $this->reserva_service->getReservaById($id_reserva);
+
+            if (!$reserva) {
+                throw new Exception('Reserva no encontrada');
+            }
+
+            $estadosPagada = ['completada', 'pagada'];
+            if (in_array(strtolower((string) $reserva->estado), array_map('strtolower', $estadosPagada), true)) {
+                throw new Exception('La reserva ya se encuentra pagada o completada');
+            }
+
+            $valoresReserva = $this->reserva_service->obtenerValorReserva(
+                null,
+                $reserva->configuracion->id ?? null,
+                $reserva->hora_inicio,
+                $reserva->hora_fin
+            );
+
+            $valorAPagar = 0.0;
+            if (is_array($valoresReserva) && isset($valoresReserva['valor_descuento'])) {
+                $valorAPagar = (float) $valoresReserva['valor_descuento'];
+            } elseif (isset($reserva->valor)) {
+                $valorAPagar = (float) $reserva->valor;
+            }
+
+            if ($valorAPagar <= 0) {
+                throw new Exception('No hay valor por pagar para esta reserva');
+            }
+
+            $idUsuarioReserva = (int) ($reserva->usuarioReserva->id_usuario ?? $reserva->id_usuario);
+            $saldoFavor = $this->obtenerSaldoFavorUsuario($idUsuarioReserva);
+
+            if ($saldoFavor <= 0 || $saldoFavor < $valorAPagar) {
+                throw new Exception('Saldo insuficiente para pagar la reserva');
+            }
+
+            $ultimoIngreso = Movimientos::where('id_usuario', $idUsuarioReserva)
+                ->where('tipo', Movimientos::TIPO_INGRESO)
+                ->orderBy('fecha', 'desc')
+                ->first();
+
+            $movimiento = Movimientos::create([
+                'id_usuario' => $idUsuarioReserva,
+                'id_reserva' => $reserva->id,
+                'id_movimiento_principal' => $ultimoIngreso->id ?? null,
+                'fecha' => Carbon::now(),
+                'valor' => $valorAPagar,
+                'tipo' => Movimientos::TIPO_EGRESO,
+                'creado_por' => Auth::id(),
+            ]);
+
+            $reserva->estado = 'completada';
+            $reserva->save();
+
+            DB::commit();
+
+            $saldoRestante = max(0, $saldoFavor - $valorAPagar);
+            $resumen = $this->reserva_service->getMiReserva($reserva->id);
+
+            return [
+                'status' => 'success',
+                'message' => 'Reserva pagada con saldo a favor',
+                'movimiento_id' => $movimiento->id,
+                'saldo_restante' => $saldoRestante,
+                'reserva' => $resumen,
+            ];
+        } catch (Throwable $th) {
+            DB::rollBack();
+            Log::error('Error al pagar con saldo a favor', [
+                'id_reserva' => $id_reserva,
+                'usuario_auth' => Auth::id(),
+                'error' => $th->getMessage(),
+            ]);
+            throw new Exception($th->getMessage());
+        }
+    }
+
+    private function obtenerSaldoFavorUsuario(int $idUsuario): float
+    {
+        $ingresos = (float) Movimientos::where('id_usuario', $idUsuario)
+            ->where('tipo', Movimientos::TIPO_INGRESO)
+            ->sum('valor');
+
+        $egresos = (float) Movimientos::where('id_usuario', $idUsuario)
+            ->where('tipo', Movimientos::TIPO_EGRESO)
+            ->sum('valor');
+
+        return $ingresos - $egresos;
+    }
+
     public function obtenerPagos(int $perPage = 10, string $search = '')
     {
         $search = trim((string) $search);
@@ -39,7 +134,7 @@ class PagoService
 
         $esAdministrador = $usuario && optional($usuario->rol)->nombre === 'Administrador';
 
-        $query = Pago::with([
+        $query = Pago::withTrashed()->with([
             'reserva',
             'reserva.espacio',
             'reserva.configuracion',

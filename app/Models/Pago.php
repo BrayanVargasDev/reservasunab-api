@@ -38,6 +38,6 @@ class Pago extends Model
 
     public function reserva()
     {
-        return $this->belongsTo(Reservas::class, 'id_reserva');
+        return $this->belongsTo(Reservas::class, 'id_reserva')->withTrashed();
     }
 }
