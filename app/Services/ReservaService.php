@@ -740,9 +740,14 @@ class ReservaService
             $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
             $valorAPagar = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
 
+            // Si no hay valor por pagar, la reserva debe quedar como 'completada'
+            if ($valorAPagar <= 0) {
+                $reserva->estado = 'completada';
+                $reserva->save();
+            }
+
             $jugadores = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
             if (!empty($jugadores)) {
-                // Soportar jugadores con estructura {id_usuario} o {id_beneficiario}
                 $jugadoresData = [];
                 $ahora = now();
                 foreach ($jugadores as $jug) {
@@ -768,7 +773,6 @@ class ReservaService
                         }
                     }
 
-                    // Evitar agregarse como usuario repetido
                     if ($idUsuarioJugador && $idUsuarioJugador == $usuario->id_usuario) {
                         continue;
                     }
