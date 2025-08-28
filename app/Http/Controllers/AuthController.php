@@ -211,32 +211,34 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         try {
-            $validarUsuario = Validator::make($request->all(), $this->reglasDeValidacionDeLogin, $this->mensajesDeValidacion);
+            $validarUsuario = Validator::make(
+                $request->all(),
+                $this->reglasDeValidacionDeLogin,
+                $this->mensajesDeValidacion
+            );
 
             if ($validarUsuario->fails()) {
                 return response()->json([
-                    'status' => 'error',
-                    'errors' => $validarUsuario->errors(),
+                    'status'  => 'error',
+                    'errors'  => $validarUsuario->errors(),
                     'message' => 'El usuario o la contraseña son incorrectos.',
                 ], 409);
             }
 
-            $email = request('email');
-            $password = request('password');
-
-            $usuario = Usuario::where('email', $email)->first();
+            $email    = $request->input('email');
+            $password = $request->input('password');
+            $usuario  = Usuario::where('email', $email)->first();
 
             if (!$usuario || !password_verify($password, $usuario->password_hash)) {
                 return response()->json([
-                    'status' => 'error',
+                    'status'  => 'error',
                     'message' => 'El usuario o la contraseña son incorrectos.',
                 ], 401);
             }
 
             $dispositivo = $request->header('User-Agent');
-            $ip = $request->ip();
+            $ip          = $request->ip();
 
-            // Buscar un refresh token activo para este usuario, tolerando registros viejos con columnas intercambiadas
             $tiene_refresh_valido = RefreshToken::where('id_usuario', $usuario->id_usuario)
                 ->where(function ($q) use ($dispositivo, $ip) {
                     $q->where(function ($qq) use ($dispositivo, $ip) {
@@ -261,109 +263,101 @@ class AuthController extends Controller
             $token = $this->token_service->generarAccessToken($usuario);
 
             if ($this->loadUnabConfig()) {
-
-                $datos = [
-                    'tarea' => $this->tarea,
-                    'correo_unab' => $email,
-                ];
-
-
-                $url = "https://{$this->unab_host}{$this->unab_endpoint}";
-
-                $response = Http::timeout(30)
-                    ->connectTimeout(5)
-                    ->withBasicAuth($this->usuario_unab, $this->password_unab)
-                    ->withHeaders([
-                        'Content-Type' => 'application/json',
-                        'Accept' => 'application/json',
-                        'Connection' => 'keep-alive'
-                    ])
-                    ->post($url, $datos);
-
-                if (!$response->successful()) {
-                    Log::error('Error en la comunicación con UNAB', [
-                        'status' => $response->status(),
-                        'body' => $response->body()
-                    ]);
-                    return;
-                }
-
-                $usuarioEnUnab = $response->json();
-
-                $datosUnab = null;
-                try {
-                    $datosUnab = $usuarioEnUnab['datos'];
-                } catch (\Throwable $th) {
-                    Log::error('Error al obtener datos de UNAB', [
-                        'error' => $th->getMessage(),
-                        'file' => $th->getFile(),
-                        'line' => $th->getLine()
-                    ]);
-                    return;
-                }
-
-                if (empty($datosUnab)) {
-                    Log::error('Datos de UNAB están vacíos');
-                    return;
-                }
-
-                if (!is_array($datosUnab)) {
-                    Log::error('Datos de UNAB no son un array');
-                    return;
-                }
-
-                $tipoMap = [
-                    'ESTUDIANTE' => 'estudiante',
-                    'EMPLEADO' => 'administrativo',
-                    'EGRESADO' => 'egresado',
-                ];
-
-
-                $tiposUsuario = [];
-                if (is_array($datosUnab)) {
-                    foreach ($datosUnab as $entrada) {
-                        if (!is_array($entrada)) continue;
-                        $tipoUpper = strtoupper($entrada['tipo'] ?? '');
-                        if ($tipoUpper === '') continue;
-                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
-                    }
-                }
-
-                $tiposUsuario = array_values(array_unique($tiposUsuario));
-                if (empty($tiposUsuario)) {
-                    $tiposUsuario = ['externo'];
-                }
-
-                $this->actualizarTiposUsuario($usuario, $tiposUsuario);
+                $this->consultarYActualizarTiposUsuario($usuario, $email);
             }
 
             return response()->json([
                 'status' => 'success',
-                'data' => [
-                    'access_token' => $token['token'],
-                    'id' => $usuario->id_usuario,
-                    'email' => $usuario->email,
-                    'nombre' => $usuario->persona->nombre ?? null,
-                    'apellido' => $usuario->persona->apellido ?? null,
-                    'tipo_usuario' => $usuario->tipos_usuario,
-                    'activo' => $usuario->activo,
+                'data'   => [
+                    'access_token'     => $token['token'],
+                    'id'               => $usuario->id_usuario,
+                    'email'            => $usuario->email,
+                    'nombre'           => $usuario->persona->nombre ?? null,
+                    'apellido'         => $usuario->persona->apellido ?? null,
+                    'tipo_usuario'     => $usuario->tipos_usuario,
+                    'activo'           => $usuario->activo,
                     'token_expires_at' => $token['expires_at'],
-                    'refresh_token' => $refresh_token,
-                    'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
+                    'refresh_token'    => $refresh_token,
+                    'permisos'         => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
                 ]
             ], 200);
         } catch (Exception $e) {
             Log::error('Error inesperado en el proceso de login', [
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
                 'archivo' => $e->getFile(),
-                'linea' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
+                'linea'   => $e->getLine(),
+                'trace'   => $e->getTraceAsString()
             ]);
 
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => 'Ha ocurrido un error inesperado. Por favor, intente nuevamente más tarde.',
             ], 500);
+        }
+    }
+
+    private function consultarYActualizarTiposUsuario($usuario, string $email): void
+    {
+        try {
+            $url = "https://{$this->unab_host}{$this->unab_endpoint}";
+
+            $response = Http::timeout(30)
+                ->connectTimeout(5)
+                ->withBasicAuth($this->usuario_unab, $this->password_unab)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept'       => 'application/json',
+                    'Connection'   => 'keep-alive'
+                ])
+                ->post($url, [
+                    'tarea'       => $this->tarea,
+                    'correo_unab' => $email,
+                ]);
+
+            Log::debug($response);
+
+            if ($response->failed()) {
+                Log::error('Error en la comunicación con UNAB', [
+                    'status' => $response->status(),
+                    'body'   => $response->body()
+                ]);
+                return; // guard clause: salimos sin afectar login
+            }
+
+            $usuarioEnUnab = $response->json();
+            $datosUnab     = $usuarioEnUnab['datos'] ?? null;
+
+            if (empty($datosUnab) || !is_array($datosUnab)) {
+                Log::error('Datos de UNAB inválidos o vacíos', ['datos' => $datosUnab]);
+                return;
+            }
+
+            $tipoMap = [
+                'ESTUDIANTE' => 'estudiante',
+                'EMPLEADO'   => 'administrativo',
+                'EGRESADO'   => 'egresado',
+            ];
+
+            $tiposUsuario = [];
+            foreach ($datosUnab as $entrada) {
+                if (!is_array($entrada)) continue;
+                $tipoUpper = strtoupper($entrada['tipo'] ?? '');
+                if ($tipoUpper === '') continue;
+                $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
+            }
+
+            $tiposUsuario = array_values(array_unique($tiposUsuario));
+            if (empty($tiposUsuario)) {
+                $tiposUsuario = ['externo'];
+            }
+
+            $this->actualizarTiposUsuario($usuario, $tiposUsuario);
+        } catch (\Throwable $th) {
+            Log::error('Error al procesar datos de UNAB', [
+                'error' => $th->getMessage(),
+                'file'  => $th->getFile(),
+                'line'  => $th->getLine()
+            ]);
         }
     }
 
