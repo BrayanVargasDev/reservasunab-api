@@ -147,8 +147,8 @@ class SharedService
     public function obtener_creditos()
     {
         // Consultar movimientos restar los ingresos y los egresos y hacer la resta
-        $ingresos = Movimientos::where('tipo', 'ingreso')->sum('valor');
-        $egresos = Movimientos::where('tipo', 'egreso')->sum('valor');
+        $ingresos = Movimientos::where('tipo', 'ingreso')->where('id_usuario', Auth::id())->sum('valor');
+        $egresos = Movimientos::where('tipo', 'egreso')->where('id_usuario', Auth::id())->sum('valor');
         return $ingresos - $egresos;
     }
 }
