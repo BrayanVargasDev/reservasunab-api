@@ -554,7 +554,10 @@ class UsuarioController extends Controller
         try {
             $termino = $request->query('term', '');
 
-            $permiteExternos = filter_var($request->query('permiteExternos', false), FILTER_VALIDATE_BOOLEAN);
+            $permiteExternos = filter_var(
+                $request->query('permiteExternos', false),
+                FILTER_VALIDATE_BOOLEAN
+            ) && Auth::user()->tiposUsuario->contains('egresado');
 
             $jugadores = $this->usuarioService->buscarJugadores($termino, $permiteExternos);
 
