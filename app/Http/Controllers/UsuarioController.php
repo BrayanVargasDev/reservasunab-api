@@ -554,7 +554,9 @@ class UsuarioController extends Controller
         try {
             $termino = $request->query('term', '');
 
-            $jugadores = $this->usuarioService->buscarJugadores($termino);
+            $permiteExternos = filter_var($request->query('permiteExternos', false), FILTER_VALIDATE_BOOLEAN);
+
+            $jugadores = $this->usuarioService->buscarJugadores($termino, $permiteExternos);
 
             return response()->json([
                 'status' => 'success',
@@ -620,23 +622,28 @@ class UsuarioController extends Controller
     public function validarCamposFacturacion($id)
     {
         try {
-            $usuario = Usuario::findOrFail($id);
+            $usuario = Usuario::with(['persona.personasFacturacion'])->findOrFail($id);
 
             $puede_pagar = true;
 
-            if (!$usuario->persona) {
+            $persona = $usuario->persona;
+            if ($persona && $persona->relationLoaded('personasFacturacion')) {
+                $persona = $persona->personasFacturacion->first() ?? $persona;
+            }
+
+            if (!$persona) {
                 $puede_pagar = false;
             }
 
-            if (!$usuario->persona->tipo_documento_id || !$usuario->persona->numero_documento) {
+            if ($persona && (!$persona->tipo_documento_id || !$persona->numero_documento)) {
                 $puede_pagar = false;
             }
 
-            if (!$usuario->persona->direccion || !$usuario->persona->ciudad_residencia_id) {
+            if ($persona && (!$persona->direccion || !$persona->ciudad_residencia_id)) {
                 $puede_pagar = false;
             }
 
-            if (!$usuario->persona->regimen_tributario_id || !$usuario->persona->ciudad_expedicion_id) {
+            if ($persona && (!$persona->regimen_tributario_id || !$persona->ciudad_expedicion_id)) {
                 $puede_pagar = false;
             }
 
@@ -644,6 +651,7 @@ class UsuarioController extends Controller
                 'status' => 'success',
                 'data' => [
                     'usuario' => $usuario,
+                    'persona_usada_para_facturacion' => $persona,
                     'puede_pagar' => $puede_pagar,
                 ],
                 'message' => 'Campos de facturación validados correctamente',

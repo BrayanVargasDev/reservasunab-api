@@ -19,6 +19,7 @@ use App\Http\Controllers\SedeController;
 use App\Http\Controllers\SharedController;
 use App\Http\Controllers\TipoDocumentoController;
 use App\Http\Controllers\UsuarioController;
+use App\Http\Controllers\BeneficiarioController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
@@ -54,6 +55,12 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::patch('/dsbd/{usuario}', [UsuarioController::class, 'updateFromDashboard']);
 
         Route::patch('/{usuario}/permisos', [UsuarioController::class, 'updatePermisos']);
+    });
+
+    Route::group(['prefix' => 'beneficiarios'], function () {
+        Route::get('/', [BeneficiarioController::class, 'index']);
+        Route::post('/', [BeneficiarioController::class, 'store']);
+        Route::delete('/{id}', [BeneficiarioController::class, 'destroy']);
     });
 
     Route::group(['prefix' => 'personas'], function () {

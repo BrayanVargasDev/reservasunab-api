@@ -10,11 +10,13 @@ class UsuariosResource extends JsonResource
     {
         return [
             'id' => $this->id_usuario,
+            'es_beneficiario' => data_get($this->resource, 'es_beneficiario', false),
+            'id_beneficiario' => data_get($this->resource, 'id_beneficiario'),
             'avatar' => $this->avatar,
             'email' => $this->email,
             'tipoUsuario' => $this->tipos_usuario ?? null,
             'telefono' => $this->persona?->celular ?? '',
-            'rol' => $this->rol->nombre ?? null,
+            'rol' => data_get($this->resource, 'rol.nombre'),
             'tipoDocumento' => $this->persona?->tipo_documento_id ?? null,
             'codigo_tipo_documento' => $this->persona?->tipoDocumento?->codigo ?? null,
             'ldap_uid' => $this->ldap_uid ?? null,
@@ -22,7 +24,7 @@ class UsuariosResource extends JsonResource
             'nombre' => trim(($this->persona?->primer_nombre ?? '') . ' ' . ($this->persona?->segundo_nombre ?? '')),
             'apellido' =>
             trim(($this->persona?->primer_apellido ?? '') . ' ' . ($this->persona?->segundo_apellido ?? '')),
-            'ultimoAcceso' => $this->ultimo_acceso,
+            'ultimoAcceso' => data_get($this->resource, 'ultimo_acceso'),
             'estado' => $this->activo ? 'Activo' : 'Inactivo',
             'fechaCreacion' => $this->creado_en,
             'viendoDetalles' => false,

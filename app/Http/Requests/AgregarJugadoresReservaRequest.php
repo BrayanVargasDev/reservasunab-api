@@ -21,7 +21,10 @@ class AgregarJugadoresReservaRequest extends FormRequest
     {
         return [
             'jugadores' => 'required|array|min:1|max:10',
-            'jugadores.*' => 'required|integer|distinct|exists:usuarios,id_usuario',
+            // Permite elementos como entero (id_usuario) o arreglo con id_usuario o id_beneficiario
+            'jugadores.*' => 'required',
+            'jugadores.*.id_usuario' => 'nullable|integer|exists:usuarios,id_usuario',
+            'jugadores.*.id_beneficiario' => 'nullable|integer',
         ];
     }
 
@@ -36,9 +39,8 @@ class AgregarJugadoresReservaRequest extends FormRequest
             'jugadores.min' => 'Debe agregar al menos un jugador.',
             'jugadores.max' => 'No puede agregar más de 10 jugadores a la vez.',
             'jugadores.*.required' => 'Cada jugador es requerido.',
-            'jugadores.*.integer' => 'El ID del jugador debe ser un número entero.',
-            'jugadores.*.distinct' => 'No se pueden duplicar jugadores en la lista.',
-            'jugadores.*.exists' => 'Uno o más jugadores no existen en el sistema.',
+            'jugadores.*.id_usuario.integer' => 'El ID del jugador debe ser un número entero.',
+            'jugadores.*.id_usuario.exists' => 'Uno o más jugadores no existen en el sistema.',
         ];
     }
 }

@@ -22,6 +22,7 @@ class JugadorReserva extends Model
     protected $fillable = [
         'id_reserva',
         'id_usuario',
+    'id_beneficiario',
     ];
 
     protected $casts = [
@@ -39,5 +40,10 @@ class JugadorReserva extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');
+    }
+
+    public function beneficiario()
+    {
+        return $this->belongsTo(Beneficiario::class, 'id_beneficiario', 'id');
     }
 }

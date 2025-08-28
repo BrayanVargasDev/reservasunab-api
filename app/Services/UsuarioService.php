@@ -188,6 +188,8 @@ class UsuarioService
 
             $this->updateUsuarioFields($usuario, $data);
             $this->handlePersonaUpdate($usuario, $data);
+            // Manejar datos de facturación si vienen en la actualización de perfil
+            $this->handlePersonaFacturacion($usuario, $data);
 
             DB::commit();
             return $usuario->load('persona');
@@ -208,6 +210,83 @@ class UsuarioService
                 $e,
             );
         }
+    }
+
+    /**
+     * Crea o actualiza la persona de facturación asociada a la persona titular del usuario.
+     * Espera un payload en $data['facturacion'] con campos equivalentes a Persona.
+     */
+    private function handlePersonaFacturacion(Usuario $usuario, array $data): void
+    {
+        if (!isset($data['facturacion']) || !is_array($data['facturacion'])) {
+            return;
+        }
+
+        $payload = $data['facturacion'];
+
+        // Se requiere que el usuario tenga persona titular para asociar facturación
+        $personaTitular = $usuario->persona;
+        if (!$personaTitular) {
+            // Si no existe, crear persona básica a partir de los datos generales si existen
+            if ($this->hasPersonaData($data)) {
+                $personaTitular = $this->createPersonaFromData($data, $usuario->id_usuario);
+            } else {
+                // No hay forma de asociar facturación sin persona base
+                return;
+            }
+        }
+
+        // Si envían un id para actualizar la factura, respetarlo
+        $personaFact = null;
+        $idFact = $payload['id'] ?? $payload['id_persona'] ?? null;
+        if ($idFact) {
+            $personaFact = Persona::find($idFact);
+        }
+
+        if (!$personaFact) {
+            // Crear nueva persona de facturación
+            $personaFact = $this->createPersonaFacturacionFromData($payload, $personaTitular->id_persona);
+        } else {
+            // Asegurar flags e integridad de referencia
+            $personaFact->es_persona_facturacion = true;
+            $personaFact->persona_facturacion_id = $personaTitular->id_persona;
+            $this->updatePersonaFields($personaFact, $payload);
+        }
+
+        // Garantizar persistencia final
+        $personaFact->es_persona_facturacion = true;
+        $personaFact->persona_facturacion_id = $personaTitular->id_persona;
+        $personaFact->save();
+    }
+
+    /**
+     * Construye una Persona de facturación con los mapeos habituales, sin asociar id_usuario.
+     */
+    private function createPersonaFacturacionFromData(array $data, int $personaPadreId): Persona
+    {
+        $personaData = [];
+
+        $this->setNombreApellidoData($personaData, $data);
+        $this->setFechaNacimientoData($personaData, $data);
+
+        foreach (self::PERSONA_FIELDS_MAPPING as $dataKey => $modelField) {
+            if (isset($data[$dataKey])) {
+                $personaData[$modelField] = $data[$dataKey];
+            }
+        }
+
+        if (!isset($personaData['tipo_documento_id'])) {
+            $personaData['tipo_documento_id'] = self::DEFAULT_TIPO_DOCUMENTO_ID;
+        }
+        if (!isset($personaData['tipo_persona'])) {
+            $personaData['tipo_persona'] = 'natural';
+        }
+
+        // Flags de facturación y autorreferencia
+        $personaData['es_persona_facturacion'] = true;
+        $personaData['persona_facturacion_id'] = $personaPadreId;
+
+        return Persona::create($personaData);
     }
 
     private function updateUsuarioFields(Usuario $usuario, array $data): void
@@ -656,11 +735,11 @@ class UsuarioService
             ->toArray();
     }
 
-    public function buscarJugadores(string $termino)
+    public function buscarJugadores(string $termino, bool $incluirBeneficiarios = false)
     {
         $termino = trim(strtolower($termino));
 
-        return Usuario::with(['persona', 'persona.tipoDocumento'])
+        $usuarios = Usuario::with(['persona', 'persona.tipoDocumento'])
             ->leftJoin('personas', 'usuarios.id_usuario', '=', 'personas.id_usuario')
             ->select(
                 'usuarios.id_usuario',
@@ -694,6 +773,66 @@ class UsuarioService
             ->where('usuarios.id_usuario', '!=', Auth::id())
             ->whereNull('usuarios.eliminado_en')
             ->get();
+
+        if (!$incluirBeneficiarios) {
+            return $usuarios;
+        }
+
+        try {
+            $beneficiarios = \App\Models\Beneficiario::with('tipoDocumento')
+                ->where('id_usuario', Auth::id())
+                ->where(function ($q) use ($termino) {
+                    $q->whereRaw('LOWER(nombre) LIKE ?', ["%{$termino}%"])
+                        ->orWhereRaw('LOWER(apellido) LIKE ?', ["%{$termino}%"])
+                        ->orWhereRaw('LOWER(parentesco) LIKE ?', ["%{$termino}%"])
+                        ->orWhere('documento', 'LIKE', "%{$termino}%");
+                })
+                ->get();
+
+            $beneficiariosComoUsuarios = $beneficiarios->map(function ($b) {
+                $fake = new \stdClass();
+                $fake->id_usuario = -$b->id;
+                $fake->avatar = null;
+                $fake->email = null;
+                $fake->tipos_usuario = ['externo'];
+                $fake->ldap_uid = null;
+                $fake->activo = true;
+                $fake->id_rol = null;
+                $fake->perfil_completado = true;
+                $fake->terminos_condiciones = true;
+                $fake->creado_en = $b->creado_en;
+                // Alinear con UsuariosResource que espera 'ultimo_acceso'
+                $fake->ultimo_acceso = null;
+
+                $persona = new \stdClass();
+                $persona->celular = null;
+                $persona->direccion = null;
+                $persona->fecha_nacimiento = null;
+                $persona->regimen_tributario_id = null;
+                $persona->ciudad_expedicion_id = null;
+                $persona->ciudad_residencia_id = null;
+                $persona->tipo_persona = null;
+                $persona->primer_nombre = $b->nombre;
+                $persona->segundo_nombre = '';
+                $persona->primer_apellido = $b->apellido;
+                $persona->segundo_apellido = '';
+                $persona->numero_documento = $b->documento;
+                $persona->tipo_documento_id = $b->tipo_documento_id;
+                $persona->tipoDocumento = (object) [
+                    'codigo' => optional($b->tipoDocumento)->codigo,
+                ];
+                $fake->persona = $persona;
+
+                $fake->es_beneficiario = true;
+                $fake->id_beneficiario = $b->id;
+                return $fake;
+            });
+
+            return $usuarios->concat($beneficiariosComoUsuarios)->values();
+        } catch (\Throwable $e) {
+            // En caso de error, retornar solo usuarios
+            return $usuarios;
+        }
     }
 
     /**

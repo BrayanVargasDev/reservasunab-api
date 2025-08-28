@@ -214,14 +214,22 @@ class PersonaService
      */
     public function getDatosFacturacion(Persona $persona): array
     {
-        $persona->load(['regimenTributario', 'ciudadExpedicion', 'ciudadResidencia']);
+        // Si la persona tiene un registro de facturación asociado, usar ese; de lo contrario, usar la persona titular
+        $persona->load(['regimenTributario', 'ciudadExpedicion', 'ciudadResidencia', 'personasFacturacion']);
+        $fact = $persona->personasFacturacion->first() ?? $persona;
 
         return [
-            'tipo_persona' => $persona->tipo_persona,
-            'regimen_tributario' => $persona->regimenTributario?->nombre,
-            'ciudad_expedicion' => $persona->ciudadExpedicion?->nombre,
-            'ciudad_residencia' => $persona->ciudadResidencia?->nombre,
-            'puede_facturar' => $this->puedeFacturar($persona)
+            'id_persona' => $fact->id_persona,
+            'tipo_persona' => $fact->tipo_persona,
+            'regimen_tributario' => $fact->regimenTributario?->nombre,
+            'ciudad_expedicion' => $fact->ciudadExpedicion?->nombre,
+            'ciudad_residencia' => $fact->ciudadResidencia?->nombre,
+            'direccion' => $fact->direccion,
+            'numero_documento' => $fact->numero_documento,
+            'tipo_documento_id' => $fact->tipo_documento_id,
+            'es_persona_facturacion' => (bool)($fact->es_persona_facturacion ?? false),
+            'persona_facturacion_id' => $fact->persona_facturacion_id,
+            'puede_facturar' => $this->puedeFacturar($fact)
         ];
     }
 

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Mail\ConfirmacionReservaEmail;
+use App\Models\Beneficiario;
 use App\Models\Espacio;
 use App\Models\EspacioConfiguracion;
 use App\Models\EspacioTipoUsuarioConfig;
@@ -741,18 +742,46 @@ class ReservaService
 
             $jugadores = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
             if (!empty($jugadores)) {
-                $jugadores = array_values(array_diff(array_unique($jugadores), [$usuario->id_usuario]));
-                if (!empty($jugadores)) {
-                    $jugadoresData = [];
-                    $ahora = now();
-                    foreach ($jugadores as $idUsuario) {
-                        $jugadoresData[] = [
-                            'id_reserva' => $reserva->id,
-                            'id_usuario' => $idUsuario,
-                            'creado_en' => $ahora,
-                            'actualizado_en' => $ahora,
-                        ];
+                // Soportar jugadores con estructura {id_usuario} o {id_beneficiario}
+                $jugadoresData = [];
+                $ahora = now();
+                foreach ($jugadores as $jug) {
+                    if (is_array($jug)) {
+                        $idUsuarioJugador = $jug['id_usuario'] ?? null;
+                        $idBeneficiarioJugador = $jug['id_beneficiario'] ?? null;
+                    } else {
+                        $idUsuarioJugador = (int) $jug;
+                        $idBeneficiarioJugador = null;
                     }
+
+                    if (!is_null($idUsuarioJugador) && $idUsuarioJugador < 0) {
+                        $idBeneficiarioJugador = abs($idUsuarioJugador);
+                        $idUsuarioJugador = null;
+                    }
+
+                    if (!is_null($idBeneficiarioJugador)) {
+                        $beneficiarioExiste = Beneficiario::where('id', $idBeneficiarioJugador)
+                            ->where('id_usuario', $usuario->id_usuario)
+                            ->exists();
+                        if (!$beneficiarioExiste) {
+                            continue;
+                        }
+                    }
+
+                    // Evitar agregarse como usuario repetido
+                    if ($idUsuarioJugador && $idUsuarioJugador == $usuario->id_usuario) {
+                        continue;
+                    }
+
+                    $jugadoresData[] = [
+                        'id_reserva' => $reserva->id,
+                        'id_usuario' => $idUsuarioJugador,
+                        'id_beneficiario' => $idBeneficiarioJugador,
+                        'creado_en' => $ahora,
+                        'actualizado_en' => $ahora,
+                    ];
+                }
+                if (!empty($jugadoresData)) {
                     DB::table('jugadores_reserva')->insert($jugadoresData);
                 }
             }
@@ -1378,6 +1407,8 @@ class ReservaService
                 'jugadores.usuario',
                 'jugadores.usuario.persona',
                 'jugadores.usuario.persona.tipoDocumento',
+                'jugadores.beneficiario',
+                'jugadores.beneficiario.tipoDocumento',
                 'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
             ])->find($id_reserva);
 
@@ -1447,15 +1478,34 @@ class ReservaService
                     $jugadorInfo = [
                         'id' => $jugador->id,
                         'id_usuario' => $jugador->id_usuario,
+                        'id_beneficiario' => $jugador->id_beneficiario,
                     ];
 
-
-                    $jugadorInfo['nombre'] = trim($jugador->usuario->persona->primer_nombre . ' ' . $jugador->usuario->persona->segundo_nombre);
-                    $jugadorInfo['apellido'] = trim($jugador->usuario->persona->primer_apellido . ' ' . $jugador->usuario->persona->segundo_apellido);
-                    $jugadorInfo['email'] = $jugador->usuario->email;
-                    $jugadorInfo['ldap_uid'] = $jugador->usuario->ldap_uid ?? null;
-                    $jugadorInfo['documento'] = $jugador->usuario->persona->numero_documento ?? null;
-                    $jugadorInfo['codigo_tipo_documento'] = $jugador->usuario->persona->tipoDocumento->codigo ?? null;
+                    if ($jugador->id_usuario && $jugador->usuario && $jugador->usuario->persona) {
+                        $jugadorInfo['nombre'] = trim($jugador->usuario->persona->primer_nombre . ' ' . $jugador->usuario->persona->segundo_nombre);
+                        $jugadorInfo['apellido'] = trim($jugador->usuario->persona->primer_apellido . ' ' . $jugador->usuario->persona->segundo_apellido);
+                        $jugadorInfo['email'] = $jugador->usuario->email;
+                        $jugadorInfo['ldap_uid'] = $jugador->usuario->ldap_uid ?? null;
+                        $jugadorInfo['documento'] = $jugador->usuario->persona->numero_documento ?? null;
+                        $jugadorInfo['codigo_tipo_documento'] = $jugador->usuario->persona->tipoDocumento->codigo ?? null;
+                        $jugadorInfo['es_beneficiario'] = false;
+                    } elseif ($jugador->id_beneficiario && $jugador->beneficiario) {
+                        $jugadorInfo['nombre'] = $jugador->beneficiario->nombre;
+                        $jugadorInfo['apellido'] = $jugador->beneficiario->apellido;
+                        $jugadorInfo['email'] = null;
+                        $jugadorInfo['ldap_uid'] = null;
+                        $jugadorInfo['documento'] = $jugador->beneficiario->documento;
+                        $jugadorInfo['codigo_tipo_documento'] = optional($jugador->beneficiario->tipoDocumento)->codigo;
+                        $jugadorInfo['es_beneficiario'] = true;
+                    } else {
+                        $jugadorInfo['nombre'] = '';
+                        $jugadorInfo['apellido'] = '';
+                        $jugadorInfo['email'] = null;
+                        $jugadorInfo['ldap_uid'] = null;
+                        $jugadorInfo['documento'] = null;
+                        $jugadorInfo['codigo_tipo_documento'] = null;
+                        $jugadorInfo['es_beneficiario'] = false;
+                    }
 
                     $jugadores[] = $jugadorInfo;
                 }
@@ -1528,29 +1578,73 @@ class ReservaService
                 throw new Exception('No se pueden agregar jugadores a una reserva que ya ha pasado.');
             }
 
-            $usuariosExisten = Usuario::whereIn('id_usuario', $jugadoresIds)->count();
-            if ($usuariosExisten !== count($jugadoresIds)) {
-                throw new Exception('Uno o más usuarios no existen.');
-            }
-
-            $jugadoresExistentes = $reserva->jugadores->pluck('id_usuario')->toArray();
-
-            $jugadoresNuevos = array_diff($jugadoresIds, $jugadoresExistentes);
-
-            $jugadoresNuevos = array_diff($jugadoresNuevos, [$reserva->id_usuario]);
-
-            if (empty($jugadoresNuevos)) {
-                throw new Exception('Los jugadores ya están agregados a la reserva o son el usuario que hizo la reserva.');
-            }
-
+            // Soportar tanto enteros (id_usuario) como estructuras con id_usuario o id_beneficiario
             $jugadoresData = [];
-            foreach ($jugadoresNuevos as $idUsuario) {
+            $idsUsuariosAValidar = [];
+            $idsBeneficiariosAValidar = [];
+            foreach ($jugadoresIds as $item) {
+                if (is_array($item)) {
+                    $u = $item['id_usuario'] ?? null;
+                    $b = $item['id_beneficiario'] ?? null;
+                } else {
+                    $u = (int) $item;
+                    $b = null;
+                }
+
+                if ($u) {
+                    $idsUsuariosAValidar[] = $u;
+                }
+                if ($b) {
+                    $idsBeneficiariosAValidar[] = $b;
+                }
+            }
+
+            if (!empty($idsUsuariosAValidar)) {
+                $usuariosExisten = Usuario::whereIn('id_usuario', $idsUsuariosAValidar)->count();
+                if ($usuariosExisten !== count(array_unique($idsUsuariosAValidar))) {
+                    throw new Exception('Uno o más usuarios no existen.');
+                }
+            }
+            if (!empty($idsBeneficiariosAValidar)) {
+                $beneficiariosExisten = \App\Models\Beneficiario::where('id_usuario', $reserva->id_usuario)
+                    ->whereIn('id', $idsBeneficiariosAValidar)
+                    ->count();
+                if ($beneficiariosExisten !== count(array_unique($idsBeneficiariosAValidar))) {
+                    throw new Exception('Uno o más beneficiarios no existen.');
+                }
+            }
+
+            // Evitar duplicados existentes
+            $existentesUsuarios = $reserva->jugadores->pluck('id_usuario')->filter()->toArray();
+            $existentesBeneficiarios = $reserva->jugadores->pluck('id_beneficiario')->filter()->toArray();
+
+            foreach ($jugadoresIds as $item) {
+                if (is_array($item)) {
+                    $idUsuario = $item['id_usuario'] ?? null;
+                    $idBeneficiario = $item['id_beneficiario'] ?? null;
+                } else {
+                    $idUsuario = (int) $item;
+                    $idBeneficiario = null;
+                }
+
+                if ($idUsuario && ($idUsuario == $reserva->id_usuario || in_array($idUsuario, $existentesUsuarios))) {
+                    continue;
+                }
+                if ($idBeneficiario && in_array($idBeneficiario, $existentesBeneficiarios)) {
+                    continue;
+                }
+
                 $jugadoresData[] = [
                     'id_reserva' => $idReserva,
                     'id_usuario' => $idUsuario,
+                    'id_beneficiario' => $idBeneficiario,
                     'creado_en' => now(),
                     'actualizado_en' => now(),
                 ];
+            }
+
+            if (empty($jugadoresData)) {
+                throw new Exception('Los jugadores ya están agregados a la reserva o no son válidos.');
             }
 
             DB::table('jugadores_reserva')->insert($jugadoresData);

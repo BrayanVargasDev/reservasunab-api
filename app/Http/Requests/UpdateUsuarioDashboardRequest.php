@@ -48,6 +48,20 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'ciudadExpedicion' => 'sometimes|exists:ciudades,id',
             'ciudadResidencia' => 'sometimes|exists:ciudades,id',
             'regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
+            // Datos de facturación
+            'facturacion' => 'sometimes|array',
+            'facturacion.nombre' => 'sometimes|string|max:255',
+            'facturacion.apellido' => 'sometimes|string|max:255',
+            'facturacion.tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',
+            'facturacion.documento' => 'sometimes|string|max:20',
+            'facturacion.fechaNacimiento' => 'sometimes|date',
+            'facturacion.telefono' => 'sometimes|string|max:15',
+            'facturacion.direccion' => 'sometimes|string|max:255',
+            'facturacion.ciudadExpedicion' => 'sometimes|exists:ciudades,id',
+            'facturacion.ciudadResidencia' => 'sometimes|exists:ciudades,id',
+            'facturacion.regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
+            'facturacion.tipoPersona' => 'sometimes|in:natural,juridica',
+            'facturacion.id' => 'sometimes|exists:personas,id_persona',
         ];
     }
 

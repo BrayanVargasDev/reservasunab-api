@@ -33,6 +33,9 @@ class Persona extends Model {
         'ciudad_residencia_id',
         'version',
         'id_usuario',
+    // Facturación
+    'es_persona_facturacion',
+    'persona_facturacion_id',
     ];
 
     protected $casts = [
@@ -40,6 +43,7 @@ class Persona extends Model {
         'tipo_persona' => 'string',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
+    'es_persona_facturacion' => 'boolean',
     ];
 
     public function usuario(): HasOne {
@@ -60,5 +64,20 @@ class Persona extends Model {
 
     public function ciudadResidencia(): BelongsTo {
         return $this->belongsTo(Ciudad::class, 'ciudad_residencia_id');
+    }
+
+    /**
+     * Persona titular a la que pertenecen estos datos de facturación (self reference)
+     */
+    public function personaFacturacionPadre(): BelongsTo {
+        return $this->belongsTo(Persona::class, 'persona_facturacion_id', 'id_persona');
+    }
+
+    /**
+     * Personas de facturación asociadas a esta persona (registros hijos)
+     */
+    public function personasFacturacion()
+    {
+        return $this->hasMany(Persona::class, 'persona_facturacion_id', 'id_persona');
     }
 }
