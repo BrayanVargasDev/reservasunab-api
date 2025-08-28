@@ -334,7 +334,7 @@ class PagoService
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
 
-                    $pago->reserva->estado = 'pagada';
+                    $pago->reserva->estado = 'completada';
                     $pago->reserva->save();
 
                     DB::commit();

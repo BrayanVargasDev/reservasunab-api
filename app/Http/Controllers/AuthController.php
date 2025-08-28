@@ -321,7 +321,7 @@ class AuthController extends Controller
                     'status' => $response->status(),
                     'body'   => $response->body()
                 ]);
-                return; // guard clause: salimos sin afectar login
+                return;
             }
 
             $usuarioEnUnab = $response->json();
