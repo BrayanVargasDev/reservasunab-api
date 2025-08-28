@@ -12,6 +12,7 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 
@@ -39,6 +40,42 @@ class AuthController extends Controller
     ];
 
     private $token_service;
+    private $unab_host = null;
+    private $unab_endpoint = null;
+    private $usuario_unab = null;
+    private $password_unab = null;
+    private $tarea = null;
+
+
+    private function loadUnabConfig(): bool
+    {
+        // Advertir si la configuración está en caché
+        if (function_exists('app') && app()->configurationIsCached()) {
+            Log::debug('Configuración de Laravel está en caché (config:cache activo).');
+        }
+
+        $this->unab_host = config('app.unab_host');
+        $this->unab_endpoint = config('app.unab_endpoint');
+        $this->usuario_unab = config('app.unab_usuario');
+        $this->password_unab = config('app.unab_password');
+        $this->tarea = config('app.unab_tarea');
+
+        $missing = [];
+        if (empty($this->unab_host)) $missing[] = 'UNAB_HOST (app.unab_host)';
+        if (empty($this->unab_endpoint)) $missing[] = 'UNAB_ENDPOINT (app.unab_endpoint)';
+        if (empty($this->usuario_unab)) $missing[] = 'UNAB_USUARIO (app.unab_usuario)';
+        if ($this->password_unab === null || $this->password_unab === '') $missing[] = 'UNAB_PASSWORD (app.unab_password)';
+        if ($this->tarea === null || $this->tarea === '') $missing[] = 'UNAB_TAREA (app.unab_tarea)';
+
+        if (!empty($missing)) {
+            Log::error('Faltan variables de entorno/configuración UNAB', [
+                'faltantes' => $missing,
+            ]);
+            return false;
+        }
+
+        return true;
+    }
 
     public function __construct(TokenService $tokenService)
     {
@@ -223,6 +260,83 @@ class AuthController extends Controller
 
             $token = $this->token_service->generarAccessToken($usuario);
 
+            if ($this->loadUnabConfig()) {
+
+                $datos = [
+                    'tarea' => $this->tarea,
+                    'correo_unab' => $email,
+                ];
+
+
+                $url = "https://{$this->unab_host}{$this->unab_endpoint}";
+
+                $response = Http::timeout(30)
+                    ->connectTimeout(5)
+                    ->withBasicAuth($this->usuario_unab, $this->password_unab)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                        'Connection' => 'keep-alive'
+                    ])
+                    ->post($url, $datos);
+
+                if (!$response->successful()) {
+                    Log::error('Error en la comunicación con UNAB', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    return;
+                }
+
+                $usuarioEnUnab = $response->json();
+
+                $datosUnab = null;
+                try {
+                    $datosUnab = $usuarioEnUnab['datos'];
+                } catch (\Throwable $th) {
+                    Log::error('Error al obtener datos de UNAB', [
+                        'error' => $th->getMessage(),
+                        'file' => $th->getFile(),
+                        'line' => $th->getLine()
+                    ]);
+                    return;
+                }
+
+                if (empty($datosUnab)) {
+                    Log::error('Datos de UNAB están vacíos');
+                    return;
+                }
+
+                if (!is_array($datosUnab)) {
+                    Log::error('Datos de UNAB no son un array');
+                    return;
+                }
+
+                $tipoMap = [
+                    'ESTUDIANTE' => 'estudiante',
+                    'EMPLEADO' => 'administrativo',
+                    'EGRESADO' => 'egresado',
+                ];
+
+
+                $tiposUsuario = [];
+                if (is_array($datosUnab)) {
+                    foreach ($datosUnab as $entrada) {
+                        if (!is_array($entrada)) continue;
+                        $tipoUpper = strtoupper($entrada['tipo'] ?? '');
+                        if ($tipoUpper === '') continue;
+                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
+                    }
+                }
+
+                $tiposUsuario = array_values(array_unique($tiposUsuario));
+                if (empty($tiposUsuario)) {
+                    $tiposUsuario = ['externo'];
+                }
+
+                $this->actualizarTiposUsuario($usuario, $tiposUsuario);
+            }
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -251,6 +365,32 @@ class AuthController extends Controller
                 'message' => 'Ha ocurrido un error inesperado. Por favor, intente nuevamente más tarde.',
             ], 500);
         }
+    }
+
+    private function actualizarTiposUsuario(Usuario $usuario, array $nuevosTipos)
+    {
+        $tiposValidos = ['externo', 'estudiante', 'administrativo', 'egresado'];
+        $tiposFiltrados = array_values(array_intersect($nuevosTipos, $tiposValidos));
+
+        if (empty($tiposFiltrados)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Debe proporcionar al menos un tipo de usuario válido.',
+            ], 400);
+        }
+
+        $usuario->tipos_usuario = $tiposFiltrados;
+        $usuario->save();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Tipos de usuario actualizados correctamente.',
+            'data' => [
+                'id' => $usuario->id_usuario,
+                'email' => $usuario->email,
+                'tipo_usuario' => $usuario->tipos_usuario,
+            ],
+        ], 200);
     }
 
     public function logout(Request $request)
