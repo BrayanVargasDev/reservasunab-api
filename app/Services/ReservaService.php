@@ -551,6 +551,9 @@ class ReservaService
 
             $jugadoresEntrada = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
 
+            $saldoFavorUsuario = $this->obtenerSaldoFavorUsuario(Auth::id());
+            $pagar_con_saldo = $saldoFavorUsuario >= $valor;
+
             $resumenReserva = [
                 'id' => null,
                 'id_espacio' => $espacio->id,
@@ -577,6 +580,7 @@ class ReservaService
                 'total_jugadores' => count($jugadoresEntrada),
                 'es_pasada' => $esPasada,
                 'puede_cancelar' => $puedeCancelar,
+                'pagar_con_saldo' => $pagar_con_saldo,
                 'puede_agregar_jugadores' => ($espacio->agregar_jugadores ?? false) &&
                     (($espacio->maximo_jugadores ?? 0) == 0 || count($jugadoresEntrada) < ($espacio->maximo_jugadores ?? 0)),
             ];

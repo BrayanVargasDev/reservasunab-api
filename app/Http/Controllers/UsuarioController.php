@@ -554,10 +554,18 @@ class UsuarioController extends Controller
         try {
             $termino = $request->query('term', '');
 
+            $tiposUsuario = Auth::user()->tipos_usuario;
+            $esEgresado = false;
+            if ($tiposUsuario instanceof \Illuminate\Support\Collection) {
+                $esEgresado = $tiposUsuario->contains('egresado');
+            } elseif (is_array($tiposUsuario)) {
+                $esEgresado = in_array('egresado', $tiposUsuario, true);
+            }
+
             $permiteExternos = filter_var(
                 $request->query('permiteExternos', false),
                 FILTER_VALIDATE_BOOLEAN
-            ) && Auth::user()->tiposUsuario->contains('egresado');
+            ) && $esEgresado;
 
             $jugadores = $this->usuarioService->buscarJugadores($termino, $permiteExternos);
 
