@@ -124,6 +124,7 @@ class UsuarioService
         try {
             return Usuario::with([
                 'persona',
+                'persona.personaFacturacion',
             ])->findOrFail($id);
         } catch (ModelNotFoundException $e) {
             throw new UsuarioException(
@@ -146,6 +147,14 @@ class UsuarioService
             DB::beginTransaction();
 
             $persona = $this->getOrCreatePersona($data);
+            if (!empty($persona->id_usuario)) {
+                throw new UsuarioException(
+                    'La persona seleccionada ya está asociada a otro usuario',
+                    'persona_asociada_otro_usuario',
+                    409,
+                );
+            }
+
             $usuario = $this->createUsuarioRecord($data, $persona, $desdeDashboard);
 
             $persona->id_usuario = $usuario->id_usuario;
@@ -212,10 +221,6 @@ class UsuarioService
         }
     }
 
-    /**
-     * Crea o actualiza la persona de facturación asociada a la persona titular del usuario.
-     * Espera un payload en $data['facturacion'] con campos equivalentes a Persona.
-     */
     private function handlePersonaFacturacion(Usuario $usuario, array $data): void
     {
         if (!isset($data['facturacion']) || !is_array($data['facturacion'])) {
@@ -223,20 +228,16 @@ class UsuarioService
         }
 
         $payload = $data['facturacion'];
-
-        // Se requiere que el usuario tenga persona titular para asociar facturación
+        $this->mapEmailFacturacionToDireccion($payload);
         $personaTitular = $usuario->persona;
         if (!$personaTitular) {
-            // Si no existe, crear persona básica a partir de los datos generales si existen
             if ($this->hasPersonaData($data)) {
                 $personaTitular = $this->createPersonaFromData($data, $usuario->id_usuario);
             } else {
-                // No hay forma de asociar facturación sin persona base
                 return;
             }
         }
 
-        // Si envían un id para actualizar la factura, respetarlo
         $personaFact = null;
         $idFact = $payload['id'] ?? $payload['id_persona'] ?? null;
         if ($idFact) {
@@ -244,30 +245,31 @@ class UsuarioService
         }
 
         if (!$personaFact) {
-            // Crear nueva persona de facturación
-            $personaFact = $this->createPersonaFacturacionFromData($payload, $personaTitular->id_persona);
-        } else {
-            // Asegurar flags e integridad de referencia
-            $personaFact->es_persona_facturacion = true;
-            $personaFact->persona_facturacion_id = $personaTitular->id_persona;
-            $this->updatePersonaFields($personaFact, $payload);
+            $personaFact = Persona::where('persona_facturacion_id', $personaTitular->id_persona)
+                ->where('es_persona_facturacion', true)
+                ->orderByDesc('id_persona')
+                ->first();
         }
 
-        // Garantizar persistencia final
-        $personaFact->es_persona_facturacion = true;
-        $personaFact->persona_facturacion_id = $personaTitular->id_persona;
-        $personaFact->save();
+        if ($personaFact) {
+            $this->mapEmailFacturacionToDireccion($payload);
+            $this->updatePersonaFields($personaFact, $payload);
+            $personaFact->es_persona_facturacion = true;
+            $personaFact->persona_facturacion_id = $personaTitular->id_persona;
+            $personaFact->save();
+        } else {
+            $personaFact = $this->createPersonaFacturacionFromData($payload, $personaTitular->id_persona);
+        }
     }
 
-    /**
-     * Construye una Persona de facturación con los mapeos habituales, sin asociar id_usuario.
-     */
     private function createPersonaFacturacionFromData(array $data, int $personaPadreId): Persona
     {
         $personaData = [];
 
         $this->setNombreApellidoData($personaData, $data);
         $this->setFechaNacimientoData($personaData, $data);
+
+        $this->mapEmailFacturacionToDireccion($data);
 
         foreach (self::PERSONA_FIELDS_MAPPING as $dataKey => $modelField) {
             if (isset($data[$dataKey])) {
@@ -282,11 +284,21 @@ class UsuarioService
             $personaData['tipo_persona'] = 'natural';
         }
 
-        // Flags de facturación y autorreferencia
         $personaData['es_persona_facturacion'] = true;
         $personaData['persona_facturacion_id'] = $personaPadreId;
 
         return Persona::create($personaData);
+    }
+
+    private function mapEmailFacturacionToDireccion(array &$payload): void
+    {
+        $emailKeys = ['email', 'correo', 'email_facturacion', 'emailFacturacion'];
+        foreach ($emailKeys as $k) {
+            if (!empty($payload[$k])) {
+                $payload['direccion'] = $payload[$k];
+                break;
+            }
+        }
     }
 
     private function updateUsuarioFields(Usuario $usuario, array $data): void
@@ -437,6 +449,15 @@ class UsuarioService
 
     private function createPersonaFromData(array $data, ?int $idUsuario): Persona
     {
+        // Si el usuario ya tiene una persona asociada, actualizarla en lugar de crear una nueva
+        if ($idUsuario !== null) {
+            $existente = Persona::where('id_usuario', $idUsuario)->first();
+            if ($existente) {
+                $this->updatePersonaFields($existente, $data);
+                return $existente;
+            }
+        }
+
         $personaData = [];
 
         $this->setNombreApellidoData($personaData, $data);
@@ -527,7 +548,11 @@ class UsuarioService
     {
         if (!$usuario->persona && $this->hasPersonaData($data)) {
             $persona = $this->createPersonaFromData($data, $usuario->id_usuario);
-            // No necesitamos hacer nada más porque la persona ya está vinculada al usuario
+            // Asegurar que el usuario apunte a su persona titular recién creada
+            if (empty($usuario->id_persona)) {
+                $usuario->id_persona = $persona->id_persona;
+                $usuario->save();
+            }
         } elseif ($usuario->persona) {
             $this->updatePersonaFields($usuario->persona, $data);
         }

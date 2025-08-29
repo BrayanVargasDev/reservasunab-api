@@ -34,6 +34,7 @@ class UsuariosResource extends JsonResource
             'ciudadExpedicion' => $this->persona?->ciudad_expedicion_id ?? null,
             'ciudadResidencia' => $this->persona?->ciudad_residencia_id ?? null,
             'tipoPersona' => $this->persona?->tipo_persona ?? null,
+            'facturacion' => $this->persona?->personaFacturacion?->toArray() ?? null,
         ];
     }
 }

@@ -66,25 +66,16 @@ class Usuario extends Authenticatable
         'email_verified_at' => 'datetime',
     ];
 
-    /**
-     * Get the password for the user.
-     */
     public function getAuthPassword()
     {
         return $this->password_hash;
     }
 
-    /**
-     * Get the name of the unique identifier for the user.
-     */
     public function getAuthIdentifierName()
     {
         return 'id_usuario';
     }
 
-    /**
-     * Get the unique identifier for the user.
-     */
     public function getAuthIdentifier()
     {
         return $this->getAttribute($this->getAuthIdentifierName());
@@ -179,7 +170,6 @@ class Usuario extends Authenticatable
         return $this->rol && strtolower($this->rol->nombre) === 'administrador';
     }
 
-
     public function obtenerTodosLosPermisos()
     {
         if ($this->esAdministrador()) {
@@ -224,11 +214,6 @@ class Usuario extends Authenticatable
         return !empty(array_intersect($codigosPermisos, $permisosUsuario));
     }
 
-    /**
-     * Asigna el permiso de reservar a este usuario
-     *
-     * @return bool Retorna true si se asignó correctamente, false si no se encontró el permiso
-     */
     public function asignarPermisoReservar(): bool
     {
         $permisoReservar = Permiso::where('codigo', 'reservar')->first();

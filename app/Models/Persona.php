@@ -7,7 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-class Persona extends Model {
+class Persona extends Model
+{
     use HasFactory;
 
     protected $table = 'personas';
@@ -33,9 +34,9 @@ class Persona extends Model {
         'ciudad_residencia_id',
         'version',
         'id_usuario',
-    // Facturación
-    'es_persona_facturacion',
-    'persona_facturacion_id',
+        // Facturación
+        'es_persona_facturacion',
+        'persona_facturacion_id',
     ];
 
     protected $casts = [
@@ -43,41 +44,41 @@ class Persona extends Model {
         'tipo_persona' => 'string',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
-    'es_persona_facturacion' => 'boolean',
+        'es_persona_facturacion' => 'boolean',
     ];
 
-    public function usuario(): HasOne {
+    public function usuario(): HasOne
+    {
         return $this->hasOne(Usuario::class, 'id_usuario', 'id_usuario');
     }
 
-    public function tipoDocumento(): BelongsTo {
+    public function tipoDocumento(): BelongsTo
+    {
         return $this->belongsTo(TipoDocumento::class, 'tipo_documento_id');
     }
 
-    public function regimenTributario(): BelongsTo {
+    public function regimenTributario(): BelongsTo
+    {
         return $this->belongsTo(RegimenTributario::class, 'codigo', 'regimen_tributario_id');
     }
 
-    public function ciudadExpedicion(): BelongsTo {
+    public function ciudadExpedicion(): BelongsTo
+    {
         return $this->belongsTo(Ciudad::class, 'ciudad_expedicion_id');
     }
 
-    public function ciudadResidencia(): BelongsTo {
+    public function ciudadResidencia(): BelongsTo
+    {
         return $this->belongsTo(Ciudad::class, 'ciudad_residencia_id');
     }
 
-    /**
-     * Persona titular a la que pertenecen estos datos de facturación (self reference)
-     */
-    public function personaFacturacionPadre(): BelongsTo {
+    public function personaFacturacionPadre(): BelongsTo
+    {
         return $this->belongsTo(Persona::class, 'persona_facturacion_id', 'id_persona');
     }
 
-    /**
-     * Personas de facturación asociadas a esta persona (registros hijos)
-     */
-    public function personasFacturacion()
+    public function personaFacturacion()
     {
-        return $this->hasMany(Persona::class, 'persona_facturacion_id', 'id_persona');
+        return $this->hasOne(Persona::class, 'persona_facturacion_id', 'id_persona');
     }
 }
