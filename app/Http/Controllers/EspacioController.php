@@ -58,7 +58,14 @@ class EspacioController extends Controller
     {
         try {
             $espacios = $this->espacios_service->getWithoutFilters();
-            return EspacioResource::collection($espacios);
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $espacios,
+                    'message' => 'Espacios obtenidos correctamente.',
+                ],
+                201,
+            );
         } catch (Exception $e) {
             Log::error('Error al consultar todos los espacios', [
                 'espacio_id' => Auth::id() ?? 'no autenticado',

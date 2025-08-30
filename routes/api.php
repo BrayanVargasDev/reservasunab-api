@@ -20,6 +20,8 @@ use App\Http\Controllers\SharedController;
 use App\Http\Controllers\TipoDocumentoController;
 use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\BeneficiarioController;
+use App\Http\Controllers\ElementoController;
+use App\Http\Controllers\MensualidadesController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
@@ -148,6 +150,15 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::patch('/{categoria}/restaurar', [CategoriaController::class, 'restore']);
     });
 
+    Route::group(['prefix' => 'elementos'], function () {
+        Route::get('/', [ElementoController::class, 'index']);
+        Route::post('/', [ElementoController::class, 'store']);
+        Route::get('/{elemento}', [ElementoController::class, 'show']);
+        Route::patch('/{elemento}', [ElementoController::class, 'update']);
+        Route::delete('/{elemento}', [ElementoController::class, 'destroy']);
+        Route::patch('/{id}/restaurar', [ElementoController::class, 'restore']);
+    });
+
     Route::group(['prefix' => 'espacios'], function () {
         Route::get('/', [EspacioController::class, 'index']);
         Route::get('/all', [EspacioController::class, 'indexAll']);
@@ -214,6 +225,14 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::patch('/{grupo}', [SharedController::class, 'actualizarGrupo']);
         Route::delete('/{grupo}', [SharedController::class, 'eliminarGrupo']);
         Route::patch('/{grupo}/restaurar', [SharedController::class, 'restaurarGrupo']);
+    });
+
+    Route::group(['prefix' => 'mensualidades'], function () {
+        Route::get('/', [MensualidadesController::class, 'index']);
+        Route::post('/', [MensualidadesController::class, 'store']);
+        Route::get('/{mensualidad}', [MensualidadesController::class, 'show']);
+        Route::patch('/{mensualidad}', [MensualidadesController::class, 'update']);
+        Route::delete('/{mensualidad}', [MensualidadesController::class, 'destroy']);
     });
 
     Route::group(['prefix' => 'pagos'], function () {

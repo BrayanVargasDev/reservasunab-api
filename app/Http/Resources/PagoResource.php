@@ -20,11 +20,23 @@ class PagoResource extends JsonResource
             'creado_en' => $this->creado_en,
             'eliminado_en' => $this->eliminado_en,
             'estado' => $this->estado,
-            'id_reserva' => $this->id_reserva,
-            'reserva' => $this->reserva,
             'ticket_id' => $this->ticket_id,
             'url_ecollect' => $this->url_ecollect,
             'valor' => $this->valor,
+            'detalles' => $this->whenLoaded('detalles', function () {
+                return $this->detalles->map(function ($d) {
+                    return [
+                        'id' => $d->id,
+                        'tipo_concepto' => $d->tipo_concepto,
+                        'cantidad' => $d->cantidad,
+                        'id_concepto' => $d->id_concepto,
+                        'total' => $d->total,
+                        'creado_en' => $d->creado_en,
+                        'actualizado_en' => $d->actualizado_en,
+                        'eliminado_en' => $d->eliminado_en,
+                    ];
+                });
+            }),
         ];
     }
 }

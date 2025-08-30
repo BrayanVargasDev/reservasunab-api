@@ -2,41 +2,40 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Pago extends Model
+class Mensualidades extends Model
 {
-    use HasFactory, SoftDeletes, HasUlids;
+    use HasFactory, SoftDeletes;
 
-    protected $table = 'pagos';
-    protected $primaryKey = 'codigo';
-    public $incrementing = false;
-    protected $keyType = 'ulid';
+    protected $table = 'mensualidades';
+    protected $primaryKey = 'id';
 
     const CREATED_AT = 'creado_en';
     const UPDATED_AT = 'actualizado_en';
     const DELETED_AT = 'eliminado_en';
 
     protected $fillable = [
-        'ticket_id',
+        'id_usuario',
+        'fecha_inicio',
+        'fecha_fin',
         'valor',
         'estado',
-        'url_ecollect',
     ];
 
     protected $casts = [
-        'ticket_id' => 'integer',
+        'fecha_inicio' => 'date',
+        'fecha_fin' => 'date',
         'valor' => 'decimal:2',
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
     ];
 
-    public function detalles()
+    public function usuario()
     {
-        return $this->hasMany(PagosDetalles::class, 'id_pago', 'codigo');
+        return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');
     }
 }
