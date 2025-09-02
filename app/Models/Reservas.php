@@ -70,9 +70,21 @@ class Reservas extends Model
         return $this->belongsTo(Usuario::class, 'id_usuario');
     }
 
+    public function detalles()
+    {
+        return $this->hasMany(DetalleReserva::class, 'id_reserva');
+    }
+
     public function pago()
     {
-        return $this->hasOne(Pago::class, 'id_reserva');
+        return $this->hasOneThrough(
+            Pago::class,
+            PagosDetalles::class,
+            'id_concepto',
+            'codigo',
+            'id',
+            'id_pago'
+        )->where('pagos_detalles.tipo_concepto', 'reserva');
     }
 
     public function jugadores()
@@ -85,9 +97,6 @@ class Reservas extends Model
         return $this->hasMany(Movimientos::class, 'id_reserva');
     }
 
-    /**
-     * Scope para obtener reservas que pueden ser canceladas
-     */
     public function scopePuedeCancelar($query)
     {
         return $query
@@ -100,9 +109,6 @@ class Reservas extends Model
             });
     }
 
-    /**
-     * Verifica si la reserva puede ser cancelada
-     */
     public function puedeSerCancelada()
     {
         if (!$this->configuracion) {

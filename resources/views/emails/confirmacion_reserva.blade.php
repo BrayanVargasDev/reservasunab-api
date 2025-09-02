@@ -151,6 +151,30 @@
             </table>
             @endif
 
+            @if(!empty($detalles_lista))
+            <h3 style="margin-top: 24px;">Detalles de la reserva</h3>
+            <table class="details" role="presentation" aria-label="Detalles de la reserva">
+                <thead>
+                    <tr>
+                        <td><strong>Elemento</strong></td>
+                        <td><strong>Cantidad</strong></td>
+                        <td><strong>Precio unitario</strong></td>
+                        <td><strong>Total</strong></td>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($detalles_lista as $d)
+                    <tr>
+                        <td>{{ $d['nombre'] ?? 'Elemento' }}</td>
+                        <td>{{ $d['cantidad'] ?? 0 }}</td>
+                        <td>${{ number_format($d['precio_unitario'] ?? 0, 0, ',', '.') }}</td>
+                        <td>${{ number_format(($d['total'] ?? 0), 0, ',', '.') }}</td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+            @endif
+
             <p style="margin-top: 20px;">
                 Si tienes alguna duda, por favor contacta a nuestro equipo de soporte.
             </p>

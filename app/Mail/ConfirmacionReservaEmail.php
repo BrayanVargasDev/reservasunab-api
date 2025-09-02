@@ -10,6 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class ConfirmacionReservaEmail extends Mailable
 {
@@ -44,14 +45,14 @@ class ConfirmacionReservaEmail extends Mailable
      */
     public function content(): Content
     {
-        // Asegurar relaciones necesarias cargadas para el correo
         $this->reserva->load([
             'espacio.sede',
             'usuarioReserva.persona',
             'jugadores.usuario.persona',
+            'detalles.elemento',
         ]);
 
-        $usuarioModel = $this->reserva->usuarioReserva; // modelo relacionado (no el BelongsTo)
+        $usuarioModel = $this->reserva->usuarioReserva;
         $persona = $usuarioModel?->persona;
         $nombreUsuario = collect([
             $persona?->primer_nombre,
@@ -64,7 +65,6 @@ class ConfirmacionReservaEmail extends Mailable
             $nombreUsuario = $usuarioModel?->email ?? 'Usuario';
         }
 
-        // Construir lista de participantes
         $participantes = [];
         if ($this->reserva->jugadores && $this->reserva->jugadores->count() > 0) {
             $participantes = $this->reserva->jugadores->map(function ($jugador) {
@@ -85,12 +85,54 @@ class ConfirmacionReservaEmail extends Mailable
             })->values()->all();
         }
 
+        $tiposUsuario = $usuarioModel?->tipos_usuario ?? [];
+        $prioridadTipos = ['estudiante', 'administrativo', 'egresado', 'externo'];
+        $tipoPrecio = collect($prioridadTipos)
+            ->first(fn($t) => in_array($t, $tiposUsuario)) ?? 'externo';
+
+        $detalles_lista = [];
+        if ($this->reserva->detalles && $this->reserva->detalles->count() > 0) {
+            $detalles_lista = $this->reserva->detalles->map(function ($d) use ($tipoPrecio) {
+                $elem = $d->elemento;
+                $nombre = $elem?->nombre ?? 'Elemento';
+                $cantidad = (int) ($d->cantidad ?? 0);
+
+                $precioUnitario = 0.0;
+                if ($elem) {
+                    switch ($tipoPrecio) {
+                        case 'estudiante':
+                            $precioUnitario = (float) ($elem->valor_estudiante ?? 0);
+                            break;
+                        case 'administrativo':
+                            $precioUnitario = (float) ($elem->valor_administrativo ?? 0);
+                            break;
+                        case 'egresado':
+                            $precioUnitario = (float) ($elem->valor_egresado ?? 0);
+                            break;
+                        case 'externo':
+                        default:
+                            $precioUnitario = (float) ($elem->valor_externo ?? 0);
+                            break;
+                    }
+                }
+
+                $total = $precioUnitario * $cantidad;
+
+                return [
+                    'id_elemento' => $d->id_elemento,
+                    'nombre' => $nombre,
+                    'cantidad' => $cantidad,
+                    'precio_unitario' => $precioUnitario,
+                    'total' => $total,
+                ];
+            })->values()->all();
+        }
+
         return new Content(
-            // Nombre correcto de la vista (carpeta resources/views/emails/confirmacion_reserva.blade.php)
             view: 'emails.confirmacion_reserva',
             with: [
                 'usuario' => $nombreUsuario,
-                'espacio' => $this->reserva->espacio, // modelo ya cargado
+                'espacio' => $this->reserva->espacio,
                 'fecha' => $this->reserva->fecha->format('d/m/Y'),
                 'hora_inicio' => $this->reserva->hora_inicio->format('g:i A'),
                 'hora_fin' => $this->reserva->hora_fin?->format('g:i A'),
@@ -98,7 +140,9 @@ class ConfirmacionReservaEmail extends Mailable
                 'codigo' => $this->reserva->codigo,
                 'valor_real' => $this->valor_real,
                 'valor_descuento' => $this->valor_descuento,
-                    'participantes' => $participantes,
+                'participantes' => $participantes,
+                'detalles_lista' => $detalles_lista,
+                'tipo_precio' => $tipoPrecio,
             ],
         );
     }

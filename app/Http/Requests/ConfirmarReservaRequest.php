@@ -23,6 +23,13 @@ class ConfirmarReservaRequest extends FormRequest
             'duracion' => ['nullable', 'integer', 'min:1'],
             'jugadores' => ['nullable', 'array'],
             'jugadores.*' => ['integer'],
+            'detalles' => ['nullable', 'array'],
+            'detalles.*.id' => ['integer', 'exists:elementos,id'],
+            'detalles.*.cantidad_seleccionada' => ['integer', 'min:0'],
+            'valor_elementos' => ['numeric', 'min:0'],
+            'valor' => ['numeric', 'min:0'],
+            'valor_descuento' => ['numeric', 'min:0'],
+            'valor_total_reserva' => ['numeric', 'min:0'],
         ];
     }
 
@@ -32,6 +39,7 @@ class ConfirmarReservaRequest extends FormRequest
             'id_espacio.required' => 'El espacio es requerido.',
             'fecha.required' => 'La fecha es requerida.',
             'hora_inicio.required' => 'La hora de inicio es requerida.',
+            'detalles.*.id.exists' => 'El elemento seleccionado no es válido.',
         ];
     }
 }

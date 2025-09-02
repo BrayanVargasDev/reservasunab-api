@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
+use App\Models\PagosDetalles;
 
 class PagoService
 {
@@ -48,6 +49,7 @@ class PagoService
                 throw new Exception('La reserva ya se encuentra pagada o completada');
             }
 
+            // Valor de la franja (con descuento por tipo de usuario)
             $valoresReserva = $this->reserva_service->obtenerValorReserva(
                 null,
                 $reserva->configuracion->id ?? null,
@@ -55,12 +57,17 @@ class PagoService
                 $reserva->hora_fin
             );
 
-            $valorAPagar = 0.0;
+            $valorReserva = 0.0;
             if (is_array($valoresReserva) && isset($valoresReserva['valor_descuento'])) {
-                $valorAPagar = (float) $valoresReserva['valor_descuento'];
+                $valorReserva = (float) $valoresReserva['valor_descuento'];
             } elseif (isset($reserva->valor)) {
-                $valorAPagar = (float) $reserva->valor;
+                $valorReserva = (float) $reserva->valor;
             }
+
+            // Valor de elementos (si los hay) multiplicando por cantidad
+            $reserva->loadMissing(['detalles.elemento', 'usuarioReserva']);
+            $valorElementos = $this->calcularValorElementos($reserva);
+            $valorAPagar = $valorReserva + $valorElementos;
 
             if ($valorAPagar <= 0) {
                 throw new Exception('No hay valor por pagar para esta reserva');
@@ -284,11 +291,66 @@ class PagoService
             $reserva->hora_fin
         );
 
+        $reserva->loadMissing(['detalles', 'detalles.elemento', 'usuarioReserva']);
+        $valorElementos = $this->calcularValorElementos($reserva);
+
+        $valorReserva = $valoresReserva ? (float) $valoresReserva['valor_descuento'] : 0.0;
+        $valorTotal = $valorReserva + $valorElementos;
+
+        if ($valorTotal <= 0) {
+            throw new Exception('Reserva sin costo: no requiere creación de pago.');
+        }
+
         $pago = Pago::create([
-            'id_reserva' => $reserva->id,
-            'valor' => $valoresReserva ? $valoresReserva['valor_descuento'] : 0,
+            'valor' => $valorTotal,
             'estado' => 'inicial',
         ]);
+
+        $detalles = [];
+        $detalles[] = [
+            'id_pago' => $pago->codigo,
+            'tipo_concepto' => 'reserva',
+            'cantidad' => 1,
+            'id_concepto' => $reserva->id,
+            'total' => $valorReserva,
+            'creado_en' => now(),
+            'actualizado_en' => now(),
+        ];
+
+        $tipos = (array) optional($reserva->usuarioReserva)->tipos_usuario ?: [];
+        foreach ($reserva->detalles ?? [] as $d) {
+            $elem = $d->elemento;
+            $cant = (int) ($d->cantidad ?? 0);
+            if (!$elem || $cant <= 0) {
+                continue;
+            }
+
+            if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) {
+                $valorUnit = (float) $elem->valor_estudiante;
+            } elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) {
+                $valorUnit = (float) $elem->valor_egresado;
+            } elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) {
+                $valorUnit = (float) $elem->valor_administrativo;
+            } elseif ($elem->valor_externo !== null) {
+                $valorUnit = (float) $elem->valor_externo;
+            } else {
+                $valorUnit = 0.0;
+            }
+
+            $detalles[] = [
+                'id_pago' => $pago->codigo,
+                'tipo_concepto' => 'elemento',
+                'cantidad' => $cant,
+                'id_concepto' => $elem->id,
+                'total' => $valorUnit * $cant,
+                'creado_en' => now(),
+                'actualizado_en' => now(),
+            ];
+        }
+
+        if (!empty($detalles)) {
+            PagosDetalles::insert($detalles);
+        }
 
         return $pago->load([
             'reserva',
@@ -298,6 +360,65 @@ class PagoService
             'reserva.usuarioReserva.persona',
             'reserva.usuarioReserva.persona.tipoDocumento',
         ]);
+    }
+
+    public function crearPagoMensualidad(
+        int $id_mensualidad,
+        float $valor,
+        int $cantidad = 1
+    ): Pago {
+        if ($valor <= 0) {
+            throw new Exception('Mensualidad sin costo: no requiere creación de pago.');
+        }
+
+        $pago = Pago::create([
+            'valor' => $valor * max(1, $cantidad),
+            'estado' => 'inicial',
+        ]);
+
+        PagosDetalles::create([
+            'id_pago' => $pago->codigo,
+            'tipo_concepto' => 'mensualidad',
+            'cantidad' => max(1, $cantidad),
+            'id_concepto' => $id_mensualidad,
+            'total' => $valor * max(1, $cantidad),
+        ]);
+
+        return $pago;
+    }
+
+    private function calcularValorElementos($reserva): float
+    {
+        if (!$reserva || !$reserva->relationLoaded('detalles') || !$reserva->detalles) {
+            return 0.0;
+        }
+
+        $tipos = (array) optional($reserva->usuarioReserva)->tipos_usuario ?: [];
+
+        $total = 0.0;
+        foreach ($reserva->detalles as $d) {
+            $elem = $d->elemento;
+            $cant = (int) ($d->cantidad ?? 0);
+            if (!$elem || $cant <= 0) {
+                continue;
+            }
+
+            $valorUnit = null;
+            if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) {
+                $valorUnit = (float) $elem->valor_estudiante;
+            } elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) {
+                $valorUnit = (float) $elem->valor_egresado;
+            } elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) {
+                $valorUnit = (float) $elem->valor_administrativo;
+            } elseif ($elem->valor_externo !== null) {
+                $valorUnit = (float) $elem->valor_externo;
+            } else {
+                $valorUnit = 0.0;
+            }
+
+            $total += $valorUnit * $cant;
+        }
+        return $total;
     }
 
     public function get_info_pago(string $codigo)

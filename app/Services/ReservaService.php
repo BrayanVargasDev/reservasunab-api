@@ -7,6 +7,7 @@ use App\Models\Beneficiario;
 use App\Models\Espacio;
 use App\Models\EspacioConfiguracion;
 use App\Models\EspacioTipoUsuarioConfig;
+use App\Models\Elemento;
 use App\Models\FranjaHoraria;
 use App\Models\Reservas;
 use App\Models\Movimientos;
@@ -742,10 +743,70 @@ class ReservaService
             ]);
 
             $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
-            $valorAPagar = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
+            $valorReserva = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
 
-            // Si no hay valor por pagar, la reserva debe quedar como 'completada'
-            if ($valorAPagar <= 0) {
+            // Validación y cálculo de elementos
+            $detalles = isset($data['detalles']) && is_array($data['detalles']) ? $data['detalles'] : [];
+            $valorElementos = 0.0;
+            $detallesData = [];
+            if (!empty($detalles)) {
+                // Traer precios de elementos del espacio para validar
+                $idsElementos = collect($detalles)->pluck('id')->filter()->unique()->values();
+                $elementos = Elemento::whereIn('id', $idsElementos)->where('id_espacio', $espacioId)->get()->keyBy('id');
+
+                foreach ($detalles as $detalle) {
+                    $idElem = (int)($detalle['id'] ?? 0);
+                    $cant = (int)($detalle['cantidad_seleccionada'] ?? 0);
+                    if ($idElem <= 0 || $cant <= 0) {
+                        continue;
+                    }
+                    $elem = $elementos->get($idElem);
+                    if (!$elem) {
+                        throw new Exception('Elemento no válido para este espacio.');
+                    }
+
+                    // Tomar el valor según tipo de usuario (si hay campos por tipo), por ahora usar valor_estudiante/externo/egresado/administrativo según prioridad simple
+                    $valorUnit = null;
+                    $tipos = (array)($usuario->tipos_usuario ?? []);
+                    if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) $valorUnit = (float)$elem->valor_estudiante;
+                    elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) $valorUnit = (float)$elem->valor_egresado;
+                    elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) $valorUnit = (float)$elem->valor_administrativo;
+                    elseif ($elem->valor_externo !== null) $valorUnit = (float)$elem->valor_externo;
+                    else $valorUnit = 0.0;
+
+                    $valorElementos += $valorUnit * $cant;
+
+                    $detallesData[] = [
+                        'id_reserva' => $reserva->id,
+                        'id_elemento' => $idElem,
+                        'cantidad' => $cant,
+                    ];
+                }
+            }
+
+            $margen = 0.01;
+            if (isset($data['valor_descuento'])) {
+                $valorDescEnviado = (float)$data['valor_descuento'];
+                if (abs($valorDescEnviado - $valorReserva) > $margen) {
+                    throw new Exception('Valor de reserva inválido.');
+                }
+            }
+            if (isset($data['valor_elementos'])) {
+                $valorElemEnviado = (float)$data['valor_elementos'];
+                if (abs($valorElemEnviado - $valorElementos) > $margen) {
+                    throw new Exception('Valor de elementos inválido.');
+                }
+            }
+
+            $valorTotal = $valorReserva + $valorElementos;
+            if (isset($data['valor_total_reserva'])) {
+                $valorTotalEnviado = (float)$data['valor_total_reserva'];
+                if (abs($valorTotalEnviado - $valorTotal) > $margen) {
+                    throw new Exception('Valor total de la reserva inválido.');
+                }
+            }
+
+            if ($valorTotal <= 0) {
                 $reserva->estado = 'completada';
                 $reserva->save();
             }
@@ -794,13 +855,17 @@ class ReservaService
                 }
             }
 
+            if (!empty($detallesData)) {
+                DB::table('reservas_detalles')->insert($detallesData);
+            }
+
             try {
                 $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
                 Mail::to($reserva->usuarioReserva->email)
                     ->send(new ConfirmacionReservaEmail(
                         $reserva,
                         $valoresReserva['valor_real'] ?? 0,
-                        $valoresReserva['valor_descuento'] ?? 0
+                        $valoresReserva['valor_descuento'] ?? 0,
                     ));
             } catch (Throwable $mailTh) {
                 Log::warning('Error enviando correo de confirmación', ['reserva_id' => $reserva->id, 'error' => $mailTh->getMessage()]);
@@ -815,11 +880,13 @@ class ReservaService
                 ->where('tipo', Movimientos::TIPO_EGRESO)
                 ->sum('valor');
             $saldoFavor = $ingresos - $egresos;
-            $puedePagarConSaldo = $valorAPagar > 0 && $saldoFavor > 0 && $valorAPagar <= $saldoFavor;
+            $puedePagarConSaldo = $valorTotal > 0 && $saldoFavor > 0 && $valorTotal <= $saldoFavor;
 
             $resumen = $this->getMiReserva($reserva->id);
             if (is_array($resumen)) {
                 $resumen['pagar_con_saldo'] = $puedePagarConSaldo;
+                $resumen['valor_elementos'] = $valorElementos;
+                $resumen['valor_total_reserva'] = $valorTotal;
             }
             return $resumen;
         } catch (Throwable $th) {
@@ -1187,7 +1254,7 @@ class ReservaService
             'espacio.sede:id,nombre',
             'configuracion',
             'configuracion.franjas_horarias',
-            'usuarioReserva:id_usuario,email',
+            'usuarioReserva:id_usuario,email,tipos_usuario',
             'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento,tipo_documento_id',
             'usuarioReserva.persona.tipoDocumento'
         ])->find($id);
@@ -1417,7 +1484,8 @@ class ReservaService
                 'jugadores.usuario.persona.tipoDocumento',
                 'jugadores.beneficiario',
                 'jugadores.beneficiario.tipoDocumento',
-                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento',
+                'detalles.elemento'
             ])->find($id_reserva);
 
             if (!$reserva) {
@@ -1519,6 +1587,73 @@ class ReservaService
                 }
             }
 
+            $detalles = [];
+            if ($reserva->relationLoaded('detalles') && $reserva->detalles) {
+                foreach ($reserva->detalles as $d) {
+
+                    $detalles[] = [
+                        'id' => $d->id_elemento,
+                        'nombre' => $d->elemento?->nombre,
+                        'cantidad' => (int) $d->cantidad,
+                        'valor_administrativo' => (float) $d->elemento?->valor_administrativo,
+                        'valor_egresado' => (float) $d->elemento?->valor_egresado,
+                        'valor_estudiante' => (float) $d->elemento?->valor_estudiante,
+                        'valor_externo' => (float) $d->elemento?->valor_externo,
+                        'cantidad_seleccionada' => (int) $d->cantidad,
+                    ];
+                }
+            }
+
+            $valorElementos = 0.0;
+            if ($reserva->pago && $reserva->pago->relationLoaded('detalles') && $reserva->pago->detalles) {
+                $valorElementos = (float) $reserva->pago->detalles
+                    ->where('tipo_concepto', 'elemento')
+                    ->sum('total');
+            }
+
+            if ($valorElementos == 0) {
+                $valorElementos = count($detalles) > 0
+                    ? array_reduce($detalles, function ($carry, $item) {
+                        return $carry + ($item['valor_administrativo'] * $item['cantidad']);
+                    }, 0.0)
+                    : 0.0;
+            }
+
+            $pagoResumen = null;
+            if ($reserva->pago) {
+                $pagoResumen = [
+                    'codigo' => $reserva->pago->codigo ?? null,
+                    'valor' => (float) ($reserva->pago->valor ?? 0),
+                    'estado' => $reserva->pago->estado ?? null,
+                    'detalles' => $reserva->pago->relationLoaded('detalles') && $reserva->pago->detalles
+                        ? $reserva->pago->detalles->map(function ($d) {
+                            return [
+                                'tipo_concepto' => $d->tipo_concepto,
+                                'id_concepto' => $d->id_concepto,
+                                'cantidad' => (int) $d->cantidad,
+                                'total' => (float) $d->total,
+                            ];
+                        })->values()->all() : [],
+                ];
+            }
+
+            if (!$pagoResumen) {
+                Log::debug([
+                    'reserva_id' => $reserva->id,
+                    'usuario_id' => $reserva->id_usuario,
+                    'valor_total_reserva' => $valor + $valorElementos,
+                ]);
+                $pagoResumen = Movimientos::where('id_reserva', $reserva->id)
+                    ->where('tipo', 'egreso')
+                    ->where('valor', $valor + $valorElementos)
+                    ->where('id_usuario', $reserva->id_usuario)
+                    ->whereNull('eliminado_en')
+                    ->first();
+                Log::debug($pagoResumen);
+            }
+
+            $valorRealReserva = $valoresReserva ? (float)$valoresReserva['valor_real'] : 0.0;
+            $valorDescReserva = $valoresReserva ? (float)$valoresReserva['valor_descuento'] : 0.0;
             $resumenReserva = [
                 'id' => $reserva->id,
                 'nombre_espacio' => $reserva->espacio->nombre ?? null,
@@ -1526,8 +1661,10 @@ class ReservaService
                 'sede' => $reserva->espacio->sede->nombre ?? null,
                 'fecha' => $fecha->format('Y-m-d'),
                 'hora_inicio' => $horaInicio->format('h:i A'),
-                'valor' => $valoresReserva ? $valoresReserva['valor_real'] : 0,
-                'valor_descuento' => $valor,
+                'valor' => $valorRealReserva,
+                'valor_descuento' => $valorDescReserva,
+                'valor_elementos' => $valorElementos,
+                'valor_total_reserva' => $valorDescReserva + $valorElementos,
                 'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
                 'estado' => $reserva->estado,
                 'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',
@@ -1537,6 +1674,7 @@ class ReservaService
                 'minimo_jugadores' => $reserva->espacio->minimo_jugadores ?? null,
                 'maximo_jugadores' => $reserva->espacio->maximo_jugadores ?? null,
                 'jugadores' => $jugadores,
+                'detalles' => $detalles,
                 'total_jugadores' => count($jugadores),
                 'es_pasada' => $this->esReservaPasada($reserva),
                 'puede_cancelar' => $reserva->puedeSerCancelada(),
@@ -1545,7 +1683,11 @@ class ReservaService
                         count($jugadores) < ($reserva->espacio->maximo_jugadores ?? 0)),
                 'necesita_aprobacion' => (bool) ($reserva->espacio->aprobar_reserva ?? false),
                 'reserva_aprobada' => $reserva->estado === 'aprobada',
+                // alias con la falta de ortografía que el front espera
+                'reserva_aprovada' => $reserva->estado === 'aprobada',
                 'pagar_con_saldo' => $this->puedePagarConSaldoReserva($reserva),
+                // Información de pago con detalles (polimórfica por tipo_concepto)
+                'pago' => $pagoResumen,
             ];
 
             return $resumenReserva;

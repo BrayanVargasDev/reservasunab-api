@@ -21,6 +21,9 @@ class Elemento extends Model
         'nombre',
         'cantidad',
         'valor_administrativo',
+        'valor_egresado',
+        'valor_estudiante',
+        'valor_externo',
         'id_espacio',
     ];
 

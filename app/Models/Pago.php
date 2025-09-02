@@ -39,4 +39,16 @@ class Pago extends Model
     {
         return $this->hasMany(PagosDetalles::class, 'id_pago', 'codigo');
     }
+
+    public function reserva()
+    {
+        return $this->hasOneThrough(
+            Reservas::class,
+            PagosDetalles::class,
+            'id_pago',
+            'id',
+            'codigo',
+            'id_concepto'
+        )->where('pagos_detalles.tipo_concepto', 'reserva');
+    }
 }

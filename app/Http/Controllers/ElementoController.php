@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateElementoRequest;
 use App\Http\Resources\ElementoResource;
 use App\Models\Elemento;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ElementoController extends Controller
 {
@@ -15,12 +16,24 @@ class ElementoController extends Controller
      */
     public function index()
     {
+        $search = strtolower(trim(request('search', '')));
+        $id_espacio = request('id_espacio');
+
         $elementos = Elemento::withTrashed()
             ->with('espacio')
+            ->when($id_espacio, function ($query, $id_espacio) {
+                $query->where('id_espacio', $id_espacio);
+            })
             ->orderByDesc('creado_en')
-            ->paginate(request('per_page', 15));
+            ->when($search, function ($query, $search) {
+                $query->whereRaw('LOWER(nombre) LIKE ?', ["%{$search}%"]);
+            });
 
-        return ElementoResource::collection($elementos);
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Elementos encontrados correctamente.',
+            'data' => ElementoResource::collection($elementos->get()),
+        ]);
     }
 
     /**
