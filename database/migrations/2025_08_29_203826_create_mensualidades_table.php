@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('mensualidades', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->foreignId('id_usuario')->constrained('usuarios', 'id_usuario');
+            $table->foreignId('id_espacio')->constrained('espacios', 'id');
             $table->date('fecha_inicio');
             $table->date('fecha_fin');
             $table->decimal('valor', 12, 2);

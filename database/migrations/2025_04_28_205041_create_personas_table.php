@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('personas', function (Blueprint $table) {
             $table->id('id_persona');
-            $table->integer('tipo_documento_id')->nullable()->unique();
+            $table->integer('tipo_documento_id')->nullable();
             $table->string('numero_documento', 30)->nullable()->unique();
             $table->string('primer_nombre', 50);
             $table->string('segundo_nombre', 50)->nullable();

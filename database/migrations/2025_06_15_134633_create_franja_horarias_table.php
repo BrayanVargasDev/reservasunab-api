@@ -33,6 +33,6 @@ return new class extends Migration
      */
     public function down()
     {
-        Schema::dropIfExists('franja_horarias');
+        Schema::dropIfExists('franjas_horarias');
     }
 };

@@ -21,8 +21,8 @@ return new class extends Migration
             $table->integer('minimo_jugadores')->nullable();
             $table->integer('maximo_jugadores')->nullable();
             $table->boolean('permite_externos')->default(false);
-            $table->unsignedBigInteger('id_sede', 20)->nullable()->constrained('sedes', 'id_sede')->nullOnDelete();
-            $table->unsignedBigInteger('id_categoria', 50)->nullable()->constrained('categorias')->nullOnDelete();
+            $table->foreignId('id_sede')->nullable()->constrained('sedes')->nullOnDelete();
+            $table->foreignId('id_categoria')->nullable()->constrained('categorias')->nullOnDelete();
             $table->foreignId('creado_por')->constrained('usuarios', 'id_usuario');
             $table->foreignId('actualizado_por')->nullable()->constrained('usuarios', 'id_usuario');
             $table->foreignId('eliminado_por')->nullable()->constrained('usuarios', 'id_usuario');

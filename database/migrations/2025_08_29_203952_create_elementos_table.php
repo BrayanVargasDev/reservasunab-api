@@ -14,11 +14,9 @@ return new class extends Migration
         Schema::create('elementos', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('nombre');
-            $table->integer('cantidad');
             $table->decimal('valor_estudiante', 12, 2)->default(0);
             $table->decimal('valor_egresado', 12, 2)->default(0);
             $table->decimal('valor_administrativo', 12, 2)->default(0);
-            $table->foreignId('id_espacio')->constrained('espacios', 'id')->cascadeOnDelete();
 
             $table->timestamp('creado_en')->useCurrent();
             $table->timestamp('actualizado_en')->useCurrent()->useCurrentOnUpdate();

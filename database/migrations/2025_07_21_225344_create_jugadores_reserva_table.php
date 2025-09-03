@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('jugadores_reserva', function (Blueprint $table) {
+        Schema::create('reservas_jugadores', function (Blueprint $table) {
             $table->id();
             $table->foreignId('id_reserva')->constrained('reservas')->onDelete('cascade');
             // Referencia a usuario O beneficiario (uno de los dos debe estar presente)
@@ -37,6 +37,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('jugadores_reserva');
+        Schema::dropIfExists('reservas_jugadores');
     }
 };
