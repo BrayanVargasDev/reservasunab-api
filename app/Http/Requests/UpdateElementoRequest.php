@@ -15,12 +15,10 @@ class UpdateElementoRequest extends FormRequest
     {
         return [
             'nombre' => 'sometimes|string|max:255',
-            'cantidad' => 'sometimes|integer|min:0',
             'valor_administrativo' => 'sometimes|numeric|min:0',
             'valor_egresado' => 'sometimes|numeric|min:0',
             'valor_estudiante' => 'sometimes|numeric|min:0',
             'valor_externo' => 'sometimes|numeric|min:0',
-            'id_espacio' => 'sometimes|integer|exists:espacios,id',
         ];
     }
 }

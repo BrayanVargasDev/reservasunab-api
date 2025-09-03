@@ -240,6 +240,11 @@ class EspacioService
                 'actualizado_por' => Auth::id(),
                 'reservas_simultaneas' => $data['reservasSimultaneas'] ?? $espacio->reservas_simultaneas,
                 'aprobar_reserva' => array_key_exists('aprobarReservas', $data) ? (bool)$data['aprobarReservas'] : $espacio->aprobar_reserva,
+                'tiempo_limite_reserva' => $data['limiteTiempoReserva'] ?? $espacio->tiempo_limite_reserva,
+                'despues_hora' => array_key_exists('despuesHora', $data) ? $data['despuesHora'] : $espacio->despues_hora,
+                'id_edificio' => $data['codigoEdificio'] ?? $espacio->id_edificio,
+                'pago_mensual' => array_key_exists('pagoMensualidad', $data) ? (bool)$data['pagoMensualidad'] : $espacio->pago_mensual,
+                'valor_mensualidad' => $data['valorMensualidad'] ?? $espacio->valor_mensual,
             ];
 
             $espacio->update($updateData);

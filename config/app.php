@@ -133,4 +133,5 @@ return [
     'unab_usuario' => env('UNAB_USUARIO', 'RESERVASPPRD'),
     'unab_password' => env('UNAB_PASSWORD'),
     'unab_tarea' => env('UNAB_TAREA', 1),
+    'activar_agregar_elementos' => env('ACTIVAR_AGREGAR_ELEMENTOS', false),
 ];

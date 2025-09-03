@@ -239,6 +239,7 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/', [PagoController::class, 'index']);
         Route::post('/reservas', [PagoController::class, 'reservas']);
         Route::post('/saldos', [PagoController::class, 'pagarConSaldo']);
+        Route::post('/mensualidad', [PagoController::class, 'mensualidad']);
         Route::get('/info', [PagoController::class, 'info']);
     });
 });

@@ -15,6 +15,7 @@ class ConfirmarReservaRequest extends FormRequest
     {
         return [
             // Resumen de iniciarReserva
+            'id' => ['sometimes', 'integer', 'exists:reservas,id'],
             'id_espacio' => ['required', 'integer'],
             'id_configuracion_base' => ['nullable', 'integer'],
             'fecha' => ['required', 'string'],
@@ -40,6 +41,7 @@ class ConfirmarReservaRequest extends FormRequest
             'fecha.required' => 'La fecha es requerida.',
             'hora_inicio.required' => 'La hora de inicio es requerida.',
             'detalles.*.id.exists' => 'El elemento seleccionado no es válido.',
+            'id.exists' => 'La reserva seleccionada no es válida.',
         ];
     }
 }

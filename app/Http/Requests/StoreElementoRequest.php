@@ -15,12 +15,10 @@ class StoreElementoRequest extends FormRequest
     {
         return [
             'nombre' => 'required|string|max:255',
-            'cantidad' => 'required|integer|min:0',
             'valor_administrativo' => 'sometimes|numeric|min:0',
             'valor_estudiante' => 'sometimes|numeric|min:0',
             'valor_externo' => 'sometimes|numeric|min:0',
             'valor_egresado' => 'sometimes|numeric|min:0',
-            'id_espacio' => 'required|integer|exists:espacios,id',
         ];
     }
 }

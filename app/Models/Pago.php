@@ -51,4 +51,28 @@ class Pago extends Model
             'id_concepto'
         )->where('pagos_detalles.tipo_concepto', 'reserva');
     }
+
+    public function mensualidad()
+    {
+        return $this->hasOneThrough(
+            Mensualidades::class,
+            PagosDetalles::class,
+            'id_pago',
+            'id',
+            'codigo',
+            'id_concepto'
+        )->where('pagos_detalles.tipo_concepto', 'mensualidad');
+    }
+
+    public function elementos()
+    {
+        return $this->hasManyThrough(
+            Elemento::class,
+            PagosDetalles::class,
+            'id_pago',
+            'id',
+            'codigo',
+            'id_concepto'
+        )->where('pagos_detalles.tipo_concepto', 'elemento');
+    }
 }

@@ -1,7 +1,10 @@
 <?php
 
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Models\Reservas;
+use Carbon\Carbon;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -261,5 +264,16 @@ class Usuario extends Authenticatable
     public function refreshTokens(): HasMany
     {
         return $this->hasMany(RefreshToken::class, 'id_usuario', 'id_usuario');
+    }
+
+    public function tieneMensualidadActiva(): bool
+    {
+        $hoy = Carbon::now()->startOfDay();
+
+        return Mensualidades::where('id_usuario', $this->id_usuario)
+            ->where('estado', 'activa')
+            ->whereDate('fecha_inicio', '<=', $hoy)
+            ->whereDate('fecha_fin', '>=', $hoy)
+            ->exists();
     }
 }

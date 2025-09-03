@@ -176,4 +176,47 @@ class PagoController extends Controller
             );
         }
     }
+
+    public function mensualidad(Request $request)
+    {
+        try {
+            $data = $request->all();
+
+            if (!isset($data['id_espacio'])) {
+                return response()->json(
+                    [
+                        'status' => 'error',
+                        'message' => 'El ID del espacio es requerido.',
+                    ],
+                    400
+                );
+            }
+
+            $mensualidad = $this->pago_service->crearMensualidad((int) $data['id_espacio']);
+            $urlPago = $this->pago_service->iniciarTransaccionDeMensualidad($mensualidad->id);
+
+            return response()->json(
+                [
+                    'status' => 'success',
+                    'data' => $urlPago,
+                    'message' => 'Pago de mensualidad creado correctamente.',
+                ],
+                201,
+            );
+        } catch (Exception $e) {
+            Log::error('Error al obtener la información de la mensualidad.', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json(
+                [
+                    'status' => 'error',
+                    'message' => 'Ocurrió un error al obtener la información de la mensualidad.',
+                    'error' => $e->getMessage(),
+                ],
+                500,
+            );
+        }
+    }
 }

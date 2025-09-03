@@ -11,7 +11,7 @@ class JugadorReserva extends Model
 {
     use HasFactory, SoftDeletes, ManageTimezone;
 
-    protected $table = 'jugadores_reserva';
+    protected $table = 'reservas_jugadores';
     protected $primaryKey = 'id';
     protected $keyType = 'integer';
 

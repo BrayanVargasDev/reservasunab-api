@@ -19,18 +19,14 @@ class Elemento extends Model
 
     protected $fillable = [
         'nombre',
-        'cantidad',
         'valor_administrativo',
         'valor_egresado',
         'valor_estudiante',
         'valor_externo',
-        'id_espacio',
     ];
 
     protected $casts = [
         'id' => 'integer',
-        'id_espacio' => 'integer',
-        'cantidad' => 'integer',
         'valor_administrativo' => 'decimal:2',
         'valor_egresado' => 'decimal:2',
         'valor_estudiante' => 'decimal:2',
@@ -39,9 +35,4 @@ class Elemento extends Model
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
     ];
-
-    public function espacio()
-    {
-        return $this->belongsTo(Espacio::class, 'id_espacio', 'id');
-    }
 }

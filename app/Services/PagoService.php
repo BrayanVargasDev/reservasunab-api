@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Espacio;
 use App\Models\Pago;
 use App\Models\PagoConsulta;
 use App\Models\Movimientos;
@@ -13,6 +14,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 use App\Models\PagosDetalles;
+use App\Models\Mensualidades;
 
 class PagoService
 {
@@ -424,7 +426,6 @@ class PagoService
     public function get_info_pago(string $codigo)
     {
         try {
-            // Primero buscar en PagoConsulta
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
 
             if ($pagoConsulta) {
@@ -440,6 +441,8 @@ class PagoService
                 'reserva.usuarioReserva',
                 'reserva.usuarioReserva.persona',
                 'reserva.usuarioReserva.persona.tipoDocumento',
+                'mensualidad',
+                'mensualidad.usuario.persona.tipoDocumento',
             ]);
 
             $pagoInfo = $this->consultarPasarelaPago($pago->ticket_id);
@@ -455,8 +458,13 @@ class PagoService
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
 
-                    $pago->reserva->estado = 'completada';
-                    $pago->reserva->save();
+                    if ($pago->reserva) {
+                        $pago->reserva->estado = 'completada';
+                        $pago->reserva->save();
+                    } elseif ($pago->mensualidad) {
+                        $pago->mensualidad->estado = 'activo';
+                        $pago->mensualidad->save();
+                    }
 
                     DB::commit();
 
@@ -468,6 +476,32 @@ class PagoService
             }
 
             $transaccion = $this->formatearTransaccion($pagoInfo);
+
+            if ($pago->mensualidad && !$pago->reserva) {
+                return [
+                    'pago' => [
+                        'codigo' => $pago->codigo,
+                        'valor' => $pago->valor,
+                        'estado' => $pago->estado,
+                        'ticket_id' => $pago->ticket_id,
+                        'creado_en' => $pago->creado_en,
+                        'actualizado_en' => $pago->actualizado_en,
+                    ],
+                    'transaccion' => $transaccion,
+                    'mensualidad' => [
+                        'id' => $pago->mensualidad->id,
+                        'usuario' => [
+                            'id' => $pago->mensualidad->usuario->id_usuario,
+                            'documento' => optional($pago->mensualidad->usuario->persona)->numero_documento,
+                            'nombre_completo' => optional($pago->mensualidad->usuario->persona)
+                                ? (optional($pago->mensualidad->usuario->persona)->primer_nombre . ' ' . optional($pago->mensualidad->usuario->persona)->primer_apellido)
+                                : null,
+                            'email' => $pago->mensualidad->usuario->email,
+                        ],
+                        'estado' => $pago->mensualidad->estado,
+                    ],
+                ];
+            }
 
             return [
                 'pago' => [
@@ -595,53 +629,83 @@ class PagoService
     {
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
 
-        // Obtener valores reales y con descuento
-        $valoresReserva = $this->reserva_service->obtenerValorReserva(
-            [],
-            $pago->reserva->configuracion->id,
-            $pago->reserva->hora_inicio,
-            $pago->reserva->hora_fin
-        );
+        // Cargar relaciones potenciales
+        $pago->loadMissing([
+            'reserva.espacio',
+            'reserva.configuracion',
+            'reserva.usuarioReserva.persona.tipoDocumento',
+            'mensualidad.usuario.persona.tipoDocumento',
+        ]);
 
-        $valorReal = $valoresReserva ? $valoresReserva['valor_real'] : $pago->valor;
+        $esReserva = (bool) $pago->reserva;
+        $esMensualidad = !$esReserva && (bool) $pago->mensualidad;
 
-        return PagoConsulta::create([
+        $payload = [
             'codigo' => $pago->codigo,
-            'valor_real' => $valorReal, // Valor sin descuento
-            'valor_transaccion' => $pagoInfo['TransValue'] ?? $pago->valor, // Valor de la transacción del proveedor
-            'estado' => $pagoInfo['TranState'],
+            'valor_real' => (float)($pagoInfo['TransValue'] ?? $pago->valor),
+            'valor_transaccion' => (float)($pagoInfo['TransValue'] ?? $pago->valor),
+            'estado' => $pagoInfo['TranState'] ?? $pago->estado,
             'ticket_id' => $pago->ticket_id,
-            'codigo_traza' => $pagoInfo['TrazabilityCode'],
-            'medio_pago' => $pagoInfo['PaymentSystem'] === "0" ? 'PSE' : 'Tarjeta',
+            'codigo_traza' => $pagoInfo['TrazabilityCode'] ?? null,
+            'medio_pago' => ($pagoInfo['PaymentSystem'] ?? "0") === "0" ? 'PSE' : 'Tarjeta',
             'tipo_doc_titular' => $transaccionFormateada['tipo_doc_titular'] ?? '',
-            'numero_doc_titular' => $pago->reserva->usuarioReserva->persona->numero_documento,
-            'nombre_titular' => $transaccionFormateada['titular'] ?? $this->reserva_service->construirNombreCompleto($pago->reserva->usuarioReserva->persona),
-            'email_titular' => $pago->reserva->usuarioReserva->email,
-            'celular_titular' => $pago->reserva->usuarioReserva->persona->celular,
-            'descripcion_pago' => "Pago reserva {$pago->reserva->codigo}",
-            'nombre_medio_pago' => $pagoInfo['FiName'],
+            'nombre_medio_pago' => $pagoInfo['FiName'] ?? null,
             'tarjeta_oculta' => $transaccionFormateada['digitos'] ?? null,
             'ultimos_cuatro' => isset($transaccionFormateada['digitos']) ? substr($transaccionFormateada['digitos'], -4) : null,
-            'fecha_banco' => $pagoInfo['BankProcessDate'],
-            'moneda' => $pagoInfo['PayCurrency'],
-            'id_reserva' => $pago->reserva->id,
-            'hora_inicio' => $pago->reserva->hora_inicio,
-            'hora_fin' => $pago->reserva->hora_fin,
-            'fecha_reserva' => $pago->reserva->fecha->format('Y-m-d'),
-            'codigo_reserva' => $pago->reserva->codigo,
-            'id_usuario_reserva' => $pago->reserva->usuarioReserva->id_usuario,
-            'tipo_doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->tipoDocumento->codigo,
-            'doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->numero_documento,
-            'email_usuario_reserva' => $pago->reserva->usuarioReserva->email,
-            'celular_usuario_reserva' => $pago->reserva->usuarioReserva->persona->celular,
-            'id_espacio' => $pago->reserva->espacio->id,
-            'nombre_espacio' => $pago->reserva->espacio->nombre,
-        ]);
+            'fecha_banco' => $pagoInfo['BankProcessDate'] ?? now(),
+            'moneda' => $pagoInfo['PayCurrency'] ?? 'COP',
+        ];
+
+        if ($esReserva) {
+            // Valor real según franja
+            $valoresReserva = $this->reserva_service->obtenerValorReserva(
+                [],
+                $pago->reserva->configuracion->id,
+                $pago->reserva->hora_inicio,
+                $pago->reserva->hora_fin
+            );
+            $payload['valor_real'] = $valoresReserva ? $valoresReserva['valor_real'] : $pago->valor;
+
+            $payload += [
+                'numero_doc_titular' => $pago->reserva->usuarioReserva->persona->numero_documento,
+                'nombre_titular' => $transaccionFormateada['titular'] ?? $this->reserva_service->construirNombreCompleto($pago->reserva->usuarioReserva->persona),
+                'email_titular' => $pago->reserva->usuarioReserva->email,
+                'celular_titular' => $pago->reserva->usuarioReserva->persona->celular,
+                'descripcion_pago' => "Pago reserva {$pago->reserva->codigo}",
+                'tipo_concepto' => 'reserva',
+                'id_concepto' => $pago->reserva->id,
+                'hora_inicio' => $pago->reserva->hora_inicio,
+                'hora_fin' => $pago->reserva->hora_fin,
+                'fecha_reserva' => $pago->reserva->fecha->format('Y-m-d'),
+                'codigo_reserva' => $pago->reserva->codigo,
+                'id_usuario_reserva' => $pago->reserva->usuarioReserva->id_usuario,
+                'tipo_doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->tipoDocumento->codigo,
+                'doc_usuario_reserva' => $pago->reserva->usuarioReserva->persona->numero_documento,
+                'email_usuario_reserva' => $pago->reserva->usuarioReserva->email,
+                'celular_usuario_reserva' => $pago->reserva->usuarioReserva->persona->celular,
+                'id_espacio' => $pago->reserva->espacio->id,
+                'nombre_espacio' => $pago->reserva->espacio->nombre,
+            ];
+        } elseif ($esMensualidad) {
+            $usuario = $pago->mensualidad->usuario;
+            $persona = optional($usuario)->persona;
+            $payload += [
+                'numero_doc_titular' => optional($persona)->numero_documento,
+                'nombre_titular' => $transaccionFormateada['titular'] ?? ($persona ? $this->reserva_service->construirNombreCompleto($persona) : ''),
+                'email_titular' => optional($usuario)->email,
+                'celular_titular' => optional($persona)->celular,
+                'descripcion_pago' => "Pago mensualidad {$pago->mensualidad->id}",
+                'tipo_concepto' => 'mensualidad',
+                'id_concepto' => $pago->mensualidad->id,
+            ];
+        }
+
+        return PagoConsulta::create($payload);
     }
 
     private function formatearRespuestaDesdePagoConsulta(PagoConsulta $pagoConsulta): array
     {
-        return [
+        $base = [
             'pago' => [
                 'codigo' => $pagoConsulta->codigo,
                 'valor' => $pagoConsulta->valor_transaccion ?? $pagoConsulta->valor_real,
@@ -659,10 +723,17 @@ class PagoService
                 'titular' => $pagoConsulta->nombre_titular,
                 'doc_titular' => $pagoConsulta->numero_doc_titular,
                 'digitos' => $pagoConsulta->tarjeta_oculta,
-                'cuotas' => null, // Este campo no se guarda en PagoConsulta
+                'cuotas' => null,
             ],
-            'reserva' => [
-                'id' => $pagoConsulta->id_reserva,
+        ];
+
+        if ($pagoConsulta->tipo_concepto === 'mensualidad') {
+            $base['mensualidad'] = [
+                'id' => $pagoConsulta->id_concepto,
+            ];
+        } else {
+            $base['reserva'] = [
+                'id' => $pagoConsulta->id_concepto,
                 'hora_inicio' => $pagoConsulta->hora_inicio,
                 'hora_fin' => $pagoConsulta->hora_fin,
                 'codigo' => $pagoConsulta->codigo_reserva,
@@ -679,7 +750,137 @@ class PagoService
                     'id' => $pagoConsulta->id_espacio,
                     'nombre' => $pagoConsulta->nombre_espacio,
                 ],
-            ]
+            ];
+        }
+
+        return $base;
+    }
+
+    public function iniciarTransaccionDeMensualidad(int $id_mensualidad, int $cantidad = 1)
+    {
+        if (!$this->session_token) {
+            $this->getSessionToken();
+        }
+
+        $url = "$this->url_pagos/createTransactionPayment";
+
+        $data = [
+            'SessionToken' => $this->session_token,
+            'EntityCode' => $this->entity_code,
+            'ApiKey' => $this->api_key,
+            'LangCode' => 'ES',
+            'SrvCurrency' => 'COP',
+            'SrvCode' => $this->service_code,
         ];
+
+        try {
+            DB::beginTransaction();
+
+            $mensualidad = Mensualidades::with(['usuario.persona.tipoDocumento'])
+                ->findOrFail($id_mensualidad);
+
+            $valorUnitario = (float) ($mensualidad->valor ?? 0);
+            $cantidad = max(1, (int) $cantidad);
+
+            if ($valorUnitario <= 0) {
+                throw new Exception('Mensualidad sin costo o valor inválido.');
+            }
+
+            $pago = $this->crearPagoMensualidad($mensualidad->id, $valorUnitario, $cantidad);
+
+            $url_redirect = $this->url_redirect_base . '?codigo=' . $pago->codigo;
+
+            $this->getSessionToken();
+            $data['SessionToken'] = $this->session_token;
+            $data['URLRedirect'] = $url_redirect;
+            $data['TransValue'] = $pago->valor;
+
+            $persona = optional($mensualidad->usuario)->persona;
+            $tipoDoc = optional(optional($persona)->tipoDocumento)->codigo;
+            $numeroDoc = optional($persona)->numero_documento;
+            $nombreTitular = $persona
+                ? $this->reserva_service->construirNombreCompleto($persona)
+                : null;
+            $emailTitular = optional($mensualidad->usuario)->email;
+            $celularTitular = optional($persona)->celular;
+
+            $data['ReferenceArray'] = [
+                $tipoDoc,
+                $numeroDoc,
+                $pago->codigo,
+                $nombreTitular,
+                $emailTitular,
+                $celularTitular,
+            ];
+
+            $response = Http::post($url, $data);
+
+            if (!$response->successful()) {
+                throw new Exception('Error iniciando transacción de mensualidad: ' . $response->body());
+            }
+
+            $responseData = $response->json();
+
+            if (isset($responseData['ReturnCode']) && $responseData['ReturnCode'] === 'FAIL_APIEXPIREDSESSION') {
+                $this->getSessionToken();
+                $data['SessionToken'] = $this->session_token;
+                $response = Http::post($url, $data);
+                if (!$response->successful()) {
+                    throw new Exception('Error iniciando transacción de mensualidad tras refrescar token: ' . $response->body());
+                }
+                $responseData = $response->json();
+            }
+
+            $pago->ticket_id = $responseData['TicketId'] ?? null;
+            $pago->url_ecollect = $responseData['eCollectUrl'] ?? null;
+            $pago->estado = 'pendiente';
+            $pago->save();
+
+            DB::commit();
+            return $pago->url_ecollect;
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Error al iniciar transacción de mensualidad', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id_mensualidad' => $id_mensualidad,
+                'error' => $e->getMessage(),
+            ]);
+            throw new Exception('Error initiating monthly payment transaction: ' . $e->getMessage());
+        }
+    }
+
+    public function crearMensualidad(int $id_espacio)
+    {
+
+        DB::beginTransaction();
+
+        try {
+
+            $espacio = Espacio::findOrFail($id_espacio);
+
+            if (!$espacio->pago_mensual) {
+                throw new Exception('El espacio no tiene pago mensual habilitado.');
+            }
+
+            $mensualidad = new Mensualidades();
+            $mensualidad->id_espacio = $id_espacio;
+            $mensualidad->id_usuario = Auth::id() ?? null;
+            $mensualidad->valor = $espacio->valor_mensualidad ?? 0;
+            $mensualidad->fecha_inicio = Carbon::now()->startOfDay();
+            $mensualidad->fecha_fin = Carbon::now()->addDays(30)->endOfDay();
+            $mensualidad->estado = 'pendiente';
+            $mensualidad->save();
+
+            DB::commit();
+            return $mensualidad;
+        } catch (Throwable $e) {
+            DB::rollBack();
+            Log::error('Error al crear mensualidad', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'id_espacio' => $id_espacio,
+                'error' => $e->getMessage(),
+            ]);
+            throw new Exception('Error creando el registro de mensualidad: ' . $e->getMessage());
+        }
     }
 }

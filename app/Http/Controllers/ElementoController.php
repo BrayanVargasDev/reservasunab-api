@@ -17,13 +17,8 @@ class ElementoController extends Controller
     public function index()
     {
         $search = strtolower(trim(request('search', '')));
-        $id_espacio = request('id_espacio');
 
         $elementos = Elemento::withTrashed()
-            ->with('espacio')
-            ->when($id_espacio, function ($query, $id_espacio) {
-                $query->where('id_espacio', $id_espacio);
-            })
             ->orderByDesc('creado_en')
             ->when($search, function ($query, $search) {
                 $query->whereRaw('LOWER(nombre) LIKE ?', ["%{$search}%"]);
