@@ -52,8 +52,7 @@ class UpdateUsuarioRequest extends FormRequest
                 Rule::unique('usuarios')->ignore($usuario_id, 'id_usuario'),
             ],
             'id_persona' => 'sometimes|nullable|exists:personas,id_persona',
-            'activo' => 'sometimes|boolean'
-            ,
+            'activo' => 'sometimes|boolean',
             // Datos de facturación dentro de un objeto "facturacion"
             'facturacion' => 'sometimes|array',
             'facturacion.nombre' => 'sometimes|string|max:255',
@@ -65,6 +64,8 @@ class UpdateUsuarioRequest extends FormRequest
             'facturacion.direccion' => 'sometimes|string|max:255',
             'facturacion.ciudadExpedicion' => 'sometimes|exists:ciudades,id',
             'facturacion.ciudadResidencia' => 'sometimes|exists:ciudades,id',
+            'facturacion.digitoVerificacion' => 'sometimes|numeric|max:1|digits:1',
+            'facturacion.email' => 'sometimes|string|email|max:100',
             'facturacion.regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
             'facturacion.tipoPersona' => 'sometimes|in:natural,juridica',
             'facturacion.id' => 'sometimes|exists:personas,id_persona',
@@ -90,6 +91,10 @@ class UpdateUsuarioRequest extends FormRequest
             'ldap_uid.uuid' => 'El formato del UID de LDAP no es válido',
             'ldap_uid.unique' => 'El UID de LDAP ya está en uso por otro usuario',
             'id_persona.exists' => 'La persona seleccionada no existe',
+            'facturacion.digitoVerificacion.numeric' => 'El dígito de verificación debe ser un número',
+            'facturacion.digitoVerificacion.max' => 'El dígito de verificación no puede tener más de 1 carácter',
+            'facturacion.digitoVerificacion.digits' => 'El dígito de verificación debe tener exactamente 1 carácter',
+            'facturacion.email.email' => 'El formato del email de facturación no es válido',
         ];
     }
 }

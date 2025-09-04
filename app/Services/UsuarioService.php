@@ -38,6 +38,7 @@ class UsuarioService
         'regimenTributario' => 'regimen_tributario_id',
         'ciudadExpedicion' => 'ciudad_expedicion_id',
         'ciudadResidencia' => 'ciudad_residencia_id',
+        'digitoVerificacion' => 'digito_verificacion',
     ];
 
     private const PERSONA_DATA_KEYS = [
@@ -49,6 +50,7 @@ class UsuarioService
         'direccion',
         'telefono',
         'tipoPersona',
+        'digitoVerificacion',
         'regimenTributarioId',
         'ciudadExpedicionId',
         'ciudadResidenciaId'
@@ -292,12 +294,11 @@ class UsuarioService
 
     private function mapEmailFacturacionToDireccion(array &$payload): void
     {
-        $emailKeys = ['email', 'correo', 'email_facturacion', 'emailFacturacion'];
-        foreach ($emailKeys as $k) {
-            if (!empty($payload[$k])) {
-                $payload['direccion'] = $payload[$k];
-                break;
-            }
+
+        $ya_esta_mapeado = count(explode(';', $payload['direccion'])) > 1;
+
+        if (!$ya_esta_mapeado) {
+            $payload['direccion'] = $payload['email'] . ';' . $payload['direccion'];
         }
     }
 

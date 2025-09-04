@@ -54,9 +54,13 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'facturacion.apellido' => 'sometimes|string|max:255',
             'facturacion.tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',
             'facturacion.documento' => 'sometimes|string|max:20',
-            'facturacion.email' => 'sometimes|email|max:255',
+            'facturacion.fechaNacimiento' => 'sometimes|date',
             'facturacion.telefono' => 'sometimes|string|max:15',
+            'facturacion.digitoVerificacion' => 'sometimes|numeric|max:1|digits:1',
+            'facturacion.direccion' => 'sometimes|string|max:255',
             'facturacion.ciudadExpedicion' => 'sometimes|exists:ciudades,id',
+            'facturacion.ciudadResidencia' => 'sometimes|exists:ciudades,id',
+            'facturacion.email' => 'sometimes|string|email|max:100',
             'facturacion.regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
             'facturacion.tipoPersona' => 'sometimes|in:natural,juridica',
             'facturacion.id' => 'sometimes|exists:personas,id_persona',
@@ -96,6 +100,8 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'facturacion.regimenTributario.exists' => 'El régimen tributario de la facturación seleccionado no es válido.',
             'facturacion.tipoPersona.in' => 'El tipo de persona de la facturación seleccionado no es válido.',
             'facturacion.id.exists' => 'La persona de facturación seleccionada no es válida.',
+            'facturacion.digitoVerificacion.string' => 'El dígito de verificación de la facturación debe ser una cadena de texto.',
+            'facturacion.digitoVerificacion.max' => 'El dígito de verificación de la facturación no puede tener más de 1 carácter.',
         ];
     }
 }

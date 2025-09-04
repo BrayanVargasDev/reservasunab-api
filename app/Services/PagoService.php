@@ -454,7 +454,6 @@ class PagoService
 
             if ($this->esEstadoExitoso($pagoInfo['TranState'])) {
                 DB::beginTransaction();
-                Log::debug($pago);
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
 

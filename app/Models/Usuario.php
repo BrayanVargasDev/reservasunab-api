@@ -267,14 +267,15 @@ class Usuario extends Authenticatable
         return $this->hasMany(RefreshToken::class, 'id_usuario', 'id_usuario');
     }
 
-    public function tieneMensualidadActiva(): bool
+    public function tieneMensualidadActiva(int $idEspacio, Carbon $fecha): bool
     {
-        $hoy = Carbon::now()->startOfDay();
+        $hoy = $fecha ?: Carbon::now();
 
         $query = Mensualidades::where('id_usuario', $this->id_usuario)
             ->where('estado', 'activa')
-            ->whereDate('fecha_inicio', '<=', $hoy)
-            ->whereDate('fecha_fin', '>=', $hoy);
+            ->where('id_espacio', $idEspacio)
+            ->whereDate('fecha_inicio', '<=', $hoy->startOfDay())
+            ->whereDate('fecha_fin', '>=', $hoy->endOfDay());
 
         return $query->exists();
     }

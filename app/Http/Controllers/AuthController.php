@@ -314,8 +314,6 @@ class AuthController extends Controller
                     'correo_unab' => $email,
                 ]);
 
-            Log::debug($response);
-
             if ($response->failed()) {
                 Log::error('Error en la comunicación con UNAB', [
                     'status' => $response->status(),
