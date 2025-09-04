@@ -454,7 +454,7 @@ class PagoService
 
             if ($this->esEstadoExitoso($pagoInfo['TranState'])) {
                 DB::beginTransaction();
-
+                Log::debug($pago);
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
 
@@ -462,7 +462,7 @@ class PagoService
                         $pago->reserva->estado = 'completada';
                         $pago->reserva->save();
                     } elseif ($pago->mensualidad) {
-                        $pago->mensualidad->estado = 'activo';
+                        $pago->mensualidad->estado = 'activa';
                         $pago->mensualidad->save();
                     }
 
@@ -629,7 +629,6 @@ class PagoService
     {
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
 
-        // Cargar relaciones potenciales
         $pago->loadMissing([
             'reserva.espacio',
             'reserva.configuracion',

@@ -15,7 +15,7 @@ class ConfirmarReservaRequest extends FormRequest
     {
         return [
             // Resumen de iniciarReserva
-            'id' => ['sometimes', 'integer', 'exists:reservas,id'],
+            'id' => ['nullable', 'integer', 'exists:reservas,id'],
             'id_espacio' => ['required', 'integer'],
             'id_configuracion_base' => ['nullable', 'integer'],
             'fecha' => ['required', 'string'],

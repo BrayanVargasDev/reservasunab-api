@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 class Usuario extends Authenticatable
@@ -270,10 +271,11 @@ class Usuario extends Authenticatable
     {
         $hoy = Carbon::now()->startOfDay();
 
-        return Mensualidades::where('id_usuario', $this->id_usuario)
+        $query = Mensualidades::where('id_usuario', $this->id_usuario)
             ->where('estado', 'activa')
             ->whereDate('fecha_inicio', '<=', $hoy)
-            ->whereDate('fecha_fin', '>=', $hoy)
-            ->exists();
+            ->whereDate('fecha_fin', '>=', $hoy);
+
+        return $query->exists();
     }
 }

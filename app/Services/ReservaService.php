@@ -160,8 +160,6 @@ class ReservaService
             }
             return $reserva;
         });
-
-        return $reservas;
     }
 
     public function getAllEspacios(
@@ -325,16 +323,23 @@ class ReservaService
 
         $minutosUso = $configuracion->minutos_uso ?? self::MINUTOS_USO_DEFAULT;
 
-        // Validación de mensualidad: si el espacio requiere pago mensual y el usuario no tiene mensualidad activa
+        // Validación de mensualidad usando el método del usuario tieneMensualidadActiva
         $aplicaSinMensualidad = false;
+        $usuarioTieneMensualidad = false;
+        $requiereMensualidad = (bool) ($espacio->pago_mensual ?? false);
         try {
+            /** @var \App\Models\Usuario|null $usuarioActual */
             $usuarioActual = Auth::user();
             $fechaCarbon = Carbon::createFromFormat('Y-m-d', $fechaConsulta);
-            $coberturaMensualidad = $this->calcularCoberturaMensualidad($espacio, (int)($usuarioActual->id_usuario ?? 0), $fechaCarbon);
-            $aplicaSinMensualidad = (bool)($espacio->pago_mensual ?? false) && (!$usuarioActual || !$coberturaMensualidad['tiene_mensualidad_activa']);
+            if ($usuarioActual) {
+                // Validar cobertura para este espacio/fecha via método del usuario
+                $usuarioTieneMensualidad = (bool) $usuarioActual->tieneMensualidadActiva($espacio->id, $fechaCarbon);
+            }
+            $aplicaSinMensualidad = $requiereMensualidad && (!$usuarioActual || !$usuarioTieneMensualidad);
         } catch (\Throwable $th) {
             // Si algo falla, no bloquear por mensualidad
             $aplicaSinMensualidad = false;
+            $usuarioTieneMensualidad = false;
             Log::warning('Fallo validando mensualidad en disponibilidad', [
                 'espacio_id' => $espacio->id ?? null,
                 'fecha' => $fechaConsulta,
@@ -485,6 +490,10 @@ class ReservaService
 
                     // Aplicar descuento por tipo de usuario al valor mostrado
                     $valorConDescuento = $this->aplicarDescuentoPorTipoUsuario($franja->valor, $espacio->id);
+                    // Si el espacio requiere mensualidad y el usuario la tiene activa, el valor del espacio queda cubierto
+                    if ($requiereMensualidad && $usuarioTieneMensualidad) {
+                        $valorConDescuento = 0;
+                    }
 
                     $slot = [
                         'hora_inicio' => $horaInicioSlot,
@@ -500,6 +509,8 @@ class ReservaService
                         'reservada' => $numeroReservasEnSlot > 0,
                         'reservas_actuales' => $numeroReservasEnSlot,
                         'reservas_maximas' => $reservasSimultaneasPermitidas,
+                        // Flag informativa de cobertura por mensualidad
+                        'cubierta_por_mensualidad' => $requiereMensualidad && $usuarioTieneMensualidad,
                     ];
 
                     if ($novedadCoincidente) {
@@ -610,10 +621,12 @@ class ReservaService
 
             // Mensualidad: si el espacio se paga con mensualidad y el usuario tiene una activa para la fecha, la reserva del espacio queda cubierta (valor 0)
             $coberturaMensualidad = $this->calcularCoberturaMensualidad($espacio, $usuario->id_usuario, $fecha);
+            Log::debug($coberturaMensualidad);
             if ($coberturaMensualidad['pago_mensual'] && $coberturaMensualidad['tiene_mensualidad_activa']) {
                 $valor = 0;
                 if ($valoresReserva) {
                     $valoresReserva['valor_descuento'] = 0;
+                    $valoresReserva['valor_real'] = 0;
                 }
             }
 
@@ -644,6 +657,7 @@ class ReservaService
                 'id' => null,
                 'id_espacio' => $espacio->id,
                 'id_configuracion_base' => $configuracionEfectiva->id,
+                'id_configuracion' => $configuracionEfectiva->id,
                 'nombre_espacio' => $espacio->nombre,
                 'duracion' => $duracionMinutos,
                 'sede' => $espacio->sede->nombre ?? null,
@@ -652,6 +666,8 @@ class ReservaService
                 'hora_fin' => $horaFin->format('h:i A'),
                 'valor' => $valoresReserva ? ($valoresReserva['valor_real'] ?? 0) : 0,
                 'valor_descuento' => $valor,
+                'valor_elementos' => 0.0,
+                'valor_total_reserva' => (float) $valor,
                 'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($espacio->id, $usuario->id_usuario),
                 'estado' => $valor > 0 ? 'inicial' : $estadoPreview,
                 'necesita_aprobacion' => $requiereAprobacion,
@@ -673,6 +689,7 @@ class ReservaService
                 'mensualidad' => $coberturaMensualidad['mensualidad'],
                 'puede_agregar_jugadores' => ($espacio->agregar_jugadores ?? false) &&
                     (($espacio->maximo_jugadores ?? 0) == 0 || count($jugadoresEntrada) < ($espacio->maximo_jugadores ?? 0)),
+                'pago' => null,
             ];
 
             return $resumenReserva;
@@ -906,6 +923,31 @@ class ReservaService
 
             $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
             $valorReserva = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
+
+            // Si el espacio se paga con mensualidad y el usuario tiene mensualidad activa para la fecha, el valor del espacio es 0
+            try {
+                $cobertura = $this->calcularCoberturaMensualidad($espacio, (int)$usuario->id_usuario, $fecha);
+                if ($cobertura['pago_mensual'] && $cobertura['tiene_mensualidad_activa']) {
+                    $valorReserva = 0.0;
+                    if ($valoresReserva) {
+                        $valoresReserva['valor_descuento'] = 0.0;
+                        $valoresReserva['valor_real'] = 0.0;
+                    } else {
+                        $valoresReserva = [
+                            'valor_real' => 0.0,
+                            'valor_descuento' => 0.0,
+                        ];
+                    }
+                }
+            } catch (\Throwable $th) {
+                // no bloquear confirmación por errores de consulta de mensualidad
+                Log::warning('Fallo validando mensualidad en confirmarReserva', [
+                    'espacio_id' => $espacioId,
+                    'usuario_id' => $usuario->id_usuario ?? null,
+                    'fecha' => $fecha->toDateString(),
+                    'error' => $th->getMessage(),
+                ]);
+            }
 
             $detalles = isset($data['detalles']) && is_array($data['detalles']) ? $data['detalles'] : [];
             $valorElementos = 0.0;
@@ -1587,36 +1629,28 @@ class ReservaService
 
         $reservas = $query->get();
 
-        $saldoFavorUsuario = $this->obtenerSaldoFavorUsuario($usuarioId);
-
-        $reservas->each(function ($reserva) use ($saldoFavorUsuario) {
-            $reserva->es_pasada = $this->esReservaPasada($reserva);
-            $reserva->puede_cancelar = $reserva->puedeSerCancelada();
-            $reserva->porcentaje_descuento = $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario);
-            // Campos solicitados
-            $reserva->necesita_aprobacion = (bool) ($reserva->espacio->aprobar_reserva ?? false);
-            $reserva->reserva_aprobada = $reserva->estado === 'aprobada';
-            // Nueva bandera de pago con saldo
-            $reserva->pagar_con_saldo = $this->puedePagarConSaldoReserva($reserva, $saldoFavorUsuario);
-
-            // Mensualidad: banderas en listado
-            try {
-                $fechaReserva = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
-                $espacio = $reserva->relationLoaded('espacio') ? $reserva->espacio : Espacio::find($reserva->id_espacio);
-                $cobertura = $this->calcularCoberturaMensualidad($espacio, (int)$reserva->id_usuario, $fechaReserva);
-                $reserva->requiere_mensualidad = (bool) $cobertura['pago_mensual'];
-                $reserva->cubierta_por_mensualidad = (bool) $cobertura['tiene_mensualidad_activa'];
-                $reserva->mensualidad = $cobertura['mensualidad'];
-                if ($reserva->cubierta_por_mensualidad) {
-                    // Si está cubierta, no aplica pago con saldo para la parte del espacio
-                    $reserva->pagar_con_saldo = false;
-                }
-            } catch (\Throwable $th) {
-                // noop
+        // Normalizar: devolver array de resúmenes coherentes con getMiReserva
+        $resumenes = $reservas->map(function ($r) {
+            $detalle = $this->getMiReserva($r->id);
+            // Si por alguna razón no se puede construir el detalle, retornar mínimos
+            if (!is_array($detalle)) {
+                return [
+                    'id' => $r->id,
+                    'id_espacio' => $r->id_espacio,
+                    'id_configuracion' => $r->id_configuracion,
+                    'id_configuracion_base' => $r->id_configuracion,
+                    'nombre_espacio' => optional($r->espacio)->nombre,
+                    'sede' => optional(optional($r->espacio)->sede)->nombre,
+                    'fecha' => optional($r->fecha)->format('Y-m-d'),
+                    'hora_inicio' => optional($r->hora_inicio)->format('h:i A'),
+                    'hora_fin' => optional($r->hora_fin)->format('h:i A'),
+                    'estado' => $r->estado,
+                ];
             }
-        });
+            return $detalle;
+        })->values();
 
-        return $reservas;
+        return $resumenes;
     }
 
     public function getMisReservasCancelables(int $usuarioId, int $perPage = 10)
@@ -1647,7 +1681,7 @@ class ReservaService
         try {
             $reserva = Reservas::withTrashed()->with([
                 // agregar aprobar_reserva
-                'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva',
+                'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva,pago_mensual,valor_mensualidad',
                 'espacio.sede:id,nombre',
                 'usuarioReserva',
                 'configuracion',
@@ -1831,18 +1865,24 @@ class ReservaService
             $valorDescReserva = $valoresReserva ? (float)$valoresReserva['valor_descuento'] : 0.0;
 
             // Mensualidad: ajustar valores si está cubierta por mensualidad
+            Log::debug($reserva);
             $coberturaMensualidad = $this->calcularCoberturaMensualidad($reserva->espacio, (int)$reserva->id_usuario, $fecha);
+            Log::debug($coberturaMensualidad);
             if ($coberturaMensualidad['pago_mensual'] && $coberturaMensualidad['tiene_mensualidad_activa']) {
                 $valorRealReserva = 0.0;
                 $valorDescReserva = 0.0;
             }
             $resumenReserva = [
                 'id' => $reserva->id,
+                'id_espacio' => $reserva->id_espacio,
+                'id_configuracion' => $reserva->id_configuracion,
+                'id_configuracion_base' => $reserva->id_configuracion,
                 'nombre_espacio' => $reserva->espacio->nombre ?? null,
                 'duracion' => $duracionMinutos,
                 'sede' => $reserva->espacio->sede->nombre ?? null,
                 'fecha' => $fecha->format('Y-m-d'),
                 'hora_inicio' => $horaInicio->format('h:i A'),
+                'hora_fin' => $horaFin->format('h:i A'),
                 'valor' => $valorRealReserva,
                 'valor_descuento' => $valorDescReserva,
                 'valor_elementos' => $valorElementos,
@@ -1914,7 +1954,6 @@ class ReservaService
                 throw new Exception('No se pueden agregar jugadores a una reserva que ya ha pasado.');
             }
 
-            // Normalizar entradas: soporta enteros (id_usuario), enteros negativos (id_beneficiario) y estructuras
             $jugadoresData = [];
             $idsUsuariosAValidar = [];
             $idsBeneficiariosAValidar = [];
@@ -1955,7 +1994,6 @@ class ReservaService
                 if ($strict && count($usuariosExistentes) !== count($idsUsuariosAValidar)) {
                     throw new Exception('Uno o más usuarios no existen.');
                 }
-                // En modo no estricto, filtrar los que no existan
                 if (!$strict) {
                     $itemsNormalizados = array_values(array_filter($itemsNormalizados, function ($it) use ($usuariosExistentes) {
                         return is_null($it['id_usuario']) || in_array($it['id_usuario'], $usuariosExistentes);
@@ -1977,7 +2015,6 @@ class ReservaService
                 }
             }
 
-            // Evitar duplicados existentes
             $existentesUsuarios = $reserva->jugadores->pluck('id_usuario')->filter()->toArray();
             $existentesBeneficiarios = $reserva->jugadores->pluck('id_beneficiario')->filter()->toArray();
 
@@ -2116,7 +2153,6 @@ class ReservaService
                 return 0;
             }
 
-            // Obtener la configuración con mayor descuento de todos los tipos del usuario
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
                 ->whereIn('tipo_usuario', $usuario->tipos_usuario)
                 ->whereNull('eliminado_en')
@@ -2134,9 +2170,6 @@ class ReservaService
         }
     }
 
-    /**
-     * Obtiene el saldo a favor del usuario basado en movimientos (ingresos - egresos)
-     */
     private function obtenerSaldoFavorUsuario(int $usuarioId): float
     {
         try {
@@ -2156,10 +2189,6 @@ class ReservaService
         }
     }
 
-    /**
-     * Valida si una reserva puede pagarse con saldo a favor del usuario.
-     * Permite pasar el saldo precomputado para optimizar.
-     */
     private function puedePagarConSaldoReserva($reserva, ?float $saldoFavor = null): bool
     {
         try {
@@ -2212,14 +2241,14 @@ class ReservaService
         }
     }
 
-    /**
-     * Determina si el usuario tiene una mensualidad activa para la fecha dada.
-     */
-    private function getMensualidadActivaParaFecha(int $usuarioId, Carbon $fecha): ?Mensualidades
+    private function getMensualidadActivaParaFecha(int $usuarioId, Carbon $fecha, int $espacioId): ?Mensualidades
     {
+        $fecha = $fecha->copy()->startOfDay();
+        Log::info($fecha);
         try {
             return Mensualidades::where('id_usuario', $usuarioId)
-                ->where('estado', 'activo')
+                ->where('estado', 'activa')
+                ->where('id_espacio', $espacioId)
                 ->whereDate('fecha_inicio', '<=', $fecha->toDateString())
                 ->whereDate('fecha_fin', '>=', $fecha->toDateString())
                 ->whereNull('eliminado_en')
@@ -2235,14 +2264,10 @@ class ReservaService
         }
     }
 
-    /**
-     * Calcula si aplica cobertura por mensualidad para el espacio/usuario/fecha.
-     * Retorna estructura con banderas y datos básicos de la mensualidad.
-     */
     private function calcularCoberturaMensualidad($espacio, int $usuarioId, Carbon $fecha): array
     {
         $pagoMensual = (bool) ($espacio->pago_mensual ?? false);
-        $mensualidad = $pagoMensual ? $this->getMensualidadActivaParaFecha($usuarioId, $fecha) : null;
+        $mensualidad = $pagoMensual ? $this->getMensualidadActivaParaFecha($usuarioId, $fecha, $espacio->id) : null;
         return [
             'pago_mensual' => $pagoMensual,
             'tiene_mensualidad_activa' => $mensualidad !== null,
