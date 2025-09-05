@@ -778,6 +778,14 @@ class PagoService
                 ->findOrFail($id_mensualidad);
 
             $valorUnitario = (float) ($mensualidad->valor ?? 0);
+            try {
+                $espacio = Espacio::find($mensualidad->id_espacio);
+                if ($espacio) {
+                    $valorUnitario = $this->reserva_service->calcularValorMensualidadParaUsuario($espacio, $mensualidad->usuario);
+                }
+            } catch (\Throwable $th) {
+                // mantener valorUnitario actual
+            }
             $cantidad = max(1, (int) $cantidad);
 
             if ($valorUnitario <= 0) {
@@ -863,7 +871,12 @@ class PagoService
             $mensualidad = new Mensualidades();
             $mensualidad->id_espacio = $id_espacio;
             $mensualidad->id_usuario = Auth::id() ?? null;
-            $mensualidad->valor = $espacio->valor_mensualidad ?? 0;
+            try {
+                $usuario = Auth::user();
+                $mensualidad->valor = $this->reserva_service->calcularValorMensualidadParaUsuario($espacio, $usuario);
+            } catch (\Throwable $th) {
+                $mensualidad->valor = (float) ($espacio->valor_mensualidad ?? 0);
+            }
             $mensualidad->fecha_inicio = Carbon::now()->startOfDay();
             $mensualidad->fecha_fin = Carbon::now()->addDays(30)->endOfDay();
             $mensualidad->estado = 'pendiente';

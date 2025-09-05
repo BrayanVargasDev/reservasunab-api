@@ -32,7 +32,7 @@ class UpdateEspacioRequest extends FormRequest
             'maximoJugadores' => 'sometimes|integer|min:0',
             'permitirExternos' => 'sometimes|boolean',
             'aprobarReservas' => 'sometimes|boolean',
-            'limiteTiempoReserva' => 'sometimes|integer|min:1',
+            'limiteTiempoReserva' => 'sometimes|integer|min:0',
             'despuesHora' => 'sometimes|boolean',
             'codigoEdificio' => 'sometimes|string|max:100',
             'pagoMensualidad' => 'sometimes|boolean',

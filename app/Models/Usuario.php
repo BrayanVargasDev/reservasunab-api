@@ -13,7 +13,9 @@ use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use App\Models\Mensualidades;
 
 class Usuario extends Authenticatable
 {
@@ -278,5 +280,38 @@ class Usuario extends Authenticatable
             ->whereDate('fecha_fin', '>=', $hoy->endOfDay());
 
         return $query->exists();
+    }
+
+    /**
+     * Asegura que solo quede una mensualidad activa (la más reciente por fecha_fin)
+     * y retorna esa mensualidad. Si $idEspacio se provee, aplica el criterio por espacio.
+     */
+    public function mensualidadActivaMasActual(?int $idEspacio = null): ?Mensualidades
+    {
+        $query = Mensualidades::where('id_usuario', $this->id_usuario)
+            ->where('estado', 'activa')
+            ->whereNull('eliminado_en')
+            ->orderByDesc('fecha_fin');
+
+        if ($idEspacio !== null) {
+            $query->where('id_espacio', $idEspacio);
+        }
+
+        $activas = $query->get();
+        if ($activas->isEmpty()) {
+            return null;
+        }
+
+        $masReciente = $activas->first();
+
+        if ($activas->count() > 1) {
+            $idsAInactivar = $activas->skip(1)->pluck('id')->all();
+            DB::transaction(function () use ($idsAInactivar) {
+                Mensualidades::whereIn('id', $idsAInactivar)
+                    ->update(['estado' => 'inactiva']);
+            });
+        }
+
+        return $masReciente;
     }
 }
