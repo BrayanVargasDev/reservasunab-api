@@ -49,7 +49,7 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'ciudadResidencia' => 'sometimes|exists:ciudades,id',
             'regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
             // Datos de facturación
-            'facturacion' => 'sometimes|array',
+            'facturacion' => 'sometimes|nullable|array',
             'facturacion.nombre' => 'sometimes|string|max:255',
             'facturacion.apellido' => 'sometimes|string|max:255',
             'facturacion.tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',

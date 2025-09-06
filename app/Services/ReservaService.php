@@ -480,11 +480,9 @@ class ReservaService
                         config('app.timezone')
                     );
                     $ahora = Carbon::now();
-                    // Clonar antes de mutar para otras validaciones
                     $slotInicioParaLimite = $fechaHoraReserva->copy();
                     $reservaPasada = $fechaHoraReserva->copy()->addMinutes(10)->lessThan($ahora);
 
-                    // Validación de tiempo límite de reserva por espacio
                     try {
                         $limiteMinutosRaw = $espacio->getRawOriginal('tiempo_limite_reserva');
                         $despuesHoraRaw = $espacio->getRawOriginal('despues_hora');
@@ -495,15 +493,12 @@ class ReservaService
 
                             if ($limiteMinutos > 0) {
                                 if ($despuesHora) {
-                                    // Se permite reservar hasta X minutos después del inicio del bloque (inclusive)
                                     $momentoLimite = $slotInicioParaLimite->copy()->addMinutes($limiteMinutos);
                                     if ($ahora->greaterThan($momentoLimite)) {
                                         $disponible = false;
                                     }
                                 } else {
-                                    // Se permite reservar solo hasta X minutos antes del inicio del bloque
                                     $momentoLimite = $slotInicioParaLimite->copy()->subMinutes($limiteMinutos);
-                                    // A partir del momento límite (>=) ya no se puede reservar
                                     if ($ahora->greaterThanOrEqualTo($momentoLimite)) {
                                         $disponible = false;
                                     }
@@ -517,9 +512,7 @@ class ReservaService
                         ]);
                     }
 
-                    // Aplicar descuento por tipo de usuario al valor mostrado
                     $valorConDescuento = $this->aplicarDescuentoPorTipoUsuario($franja->valor, $espacio->id);
-                    // Si el espacio requiere mensualidad y el usuario la tiene activa o es estudiante, el valor del espacio queda cubierto
                     if ($requiereMensualidad && $usuarioTieneMensualidad) {
                         $valorConDescuento = 0;
                     }
@@ -535,10 +528,9 @@ class ReservaService
                         'reserva_pasada' => $reservaPasada,
                         'novedad' => false,
                         'id_reserva' => $miReserva ? $idMiReserva : null,
-                        'reservada' => $numeroReservasEnSlot > 0,
+                        'reservada' => $numeroReservasEnSlot >= $reservasSimultaneasPermitidas,
                         'reservas_actuales' => $numeroReservasEnSlot,
                         'reservas_maximas' => $reservasSimultaneasPermitidas,
-                        // Flag informativa de cobertura por mensualidad
                         'cubierta_por_mensualidad' => $requiereMensualidad && $usuarioTieneMensualidad,
                     ];
 
@@ -548,11 +540,8 @@ class ReservaService
                         $slot['novedad_desc'] = $novedadCoincidente->descripcion ?? 'Novedad en el espacio';
                     }
 
-                    // Bloquear por mensualidad si aplica (no aplicar a estudiantes)
                     if ($aplicaSinMensualidad && !$reservaPasada) {
-                        $slot['novedad'] = true;
                         $slot['disponible'] = false;
-                        $slot['novedad_desc'] = 'sin mensualidad';
                     }
 
                     $disponibilidad[] = $slot;
@@ -1479,7 +1468,7 @@ class ReservaService
             })
                 ->where('id_usuario', $usuarioId)
                 ->whereDate('fecha', $fechaReserva)
-                ->whereIn('estado', ['inicial', 'pagada', 'confirmada'])
+                ->whereIn('estado', ['inicial', 'pendienteap', 'completada', 'rechazada'])
                 ->whereNull('eliminado_en')
                 ->count();
 
