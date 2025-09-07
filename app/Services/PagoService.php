@@ -427,7 +427,7 @@ class PagoService
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
-            Log::debug('pagoConsulta', ['pagoConsulta' => $pagoConsulta]);
+
             if ($pagoConsulta) {
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
