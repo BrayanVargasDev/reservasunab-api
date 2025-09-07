@@ -427,7 +427,7 @@ class PagoService
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
-
+            Log::debug('pagoConsulta', ['pagoConsulta' => $pagoConsulta]);
             if ($pagoConsulta) {
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
@@ -452,7 +452,7 @@ class PagoService
                 $pago->save();
             }
 
-            if ($this->esEstadoExitoso($pagoInfo['TranState'])) {
+            if (!empty($pagoInfo['TranState'])) {
                 DB::beginTransaction();
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
@@ -475,7 +475,6 @@ class PagoService
             }
 
             $transaccion = $this->formatearTransaccion($pagoInfo);
-
             if ($pago->mensualidad && !$pago->reserva) {
                 return [
                     'pago' => [
@@ -703,7 +702,7 @@ class PagoService
 
     private function formatearRespuestaDesdePagoConsulta(PagoConsulta $pagoConsulta): array
     {
-        $base = [
+        $respuesta = [
             'pago' => [
                 'codigo' => $pagoConsulta->codigo,
                 'valor' => $pagoConsulta->valor_transaccion ?? $pagoConsulta->valor_real,
@@ -726,11 +725,30 @@ class PagoService
         ];
 
         if ($pagoConsulta->tipo_concepto === 'mensualidad') {
-            $base['mensualidad'] = [
+            $mensualidad = Mensualidades::with(['usuario.persona', 'espacio'])
+                ->find($pagoConsulta->id_concepto);
+            $usuario = optional($mensualidad)->usuario;
+            $persona = optional($usuario)->persona;
+            $espacio = optional($mensualidad)->espacio;
+            $respuesta['mensualidad'] = [
                 'id' => $pagoConsulta->id_concepto,
+                'fecha_inicio' => optional($mensualidad?->fecha_inicio)->format('Y-m-d'),
+                'fecha_fin' => optional($mensualidad?->fecha_fin)->format('Y-m-d'),
+                'usuario' => [
+                    'id' => $usuario->id_usuario ?? null,
+                    'tipo_documento' => optional($persona?->tipoDocumento)->codigo,
+                    'documento' => $persona->numero_documento ?? $pagoConsulta->numero_doc_titular,
+                    'nombre_completo' => $pagoConsulta->nombre_titular,
+                    'email' => $usuario->email ?? null,
+                    'celular' => $persona->celular ?? null,
+                ],
+                'espacio' => [
+                    'id' => $espacio->id ?? null,
+                    'nombre' => $espacio->nombre ?? null,
+                ],
             ];
         } else {
-            $base['reserva'] = [
+            $respuesta['reserva'] = [
                 'id' => $pagoConsulta->id_concepto,
                 'hora_inicio' => $pagoConsulta->hora_inicio,
                 'hora_fin' => $pagoConsulta->hora_fin,
@@ -738,7 +756,7 @@ class PagoService
                 'fecha' => $pagoConsulta->fecha_reserva,
                 'usuario' => [
                     'id' => $pagoConsulta->id_usuario_reserva,
-                    'tipo_docuemnto' => $pagoConsulta->tipo_doc_usuario_reserva . ' ' . $pagoConsulta->doc_usuario_reserva,
+                    'tipo_documento' => $pagoConsulta->tipo_doc_usuario_reserva . ' ' . $pagoConsulta->doc_usuario_reserva,
                     'documento' => $pagoConsulta->doc_usuario_reserva,
                     'nombre_completo' => $pagoConsulta->nombre_titular,
                     'email' => $pagoConsulta->email_usuario_reserva,
@@ -751,7 +769,7 @@ class PagoService
             ];
         }
 
-        return $base;
+        return $respuesta;
     }
 
     public function iniciarTransaccionDeMensualidad(int $id_mensualidad, int $cantidad = 1)

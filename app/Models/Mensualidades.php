@@ -19,6 +19,7 @@ class Mensualidades extends Model
 
     protected $fillable = [
         'id_usuario',
+        'id_espacio',
         'fecha_inicio',
         'fecha_fin',
         'valor',
@@ -37,5 +38,10 @@ class Mensualidades extends Model
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'id_usuario', 'id_usuario');
+    }
+
+    public function espacio()
+    {
+        return $this->belongsTo(Espacio::class, 'id_espacio', 'id');
     }
 }
