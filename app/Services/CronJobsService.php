@@ -222,16 +222,28 @@ class CronJobsService
                             continue;
                         }
 
-                        $estado = $json['estado'] ?? null;
-                        $datos = $json['datos'] ?? [];
-                        if (strtolower((string)$estado) !== 'success') {
-                            Log::warning('[CRON] Estado no success en novedades', [
+                        // Normalizar respuesta: el servicio responde como un array con un único objeto {estado, mensaje, datos}
+                        $resp = $this->normalizarRespuestaServicio($json);
+                        if (!$resp) {
+                            $errores++;
+                            Log::error('[CRON] Respuesta del servicio inválida', [
                                 'espacio_id' => $espacio->id,
-                                'estado' => $estado,
+                                'body' => $response->body(),
                             ]);
                             continue;
                         }
 
+                        if (strtolower((string)$resp['estado']) !== 'success') {
+                            // Solo loguear mensajes de error del servicio
+                            $errores++;
+                            Log::error('[CRON] Error del servicio en novedades', [
+                                'espacio_id' => $espacio->id,
+                                'mensaje' => $resp['mensaje'] ?? null,
+                            ]);
+                            continue;
+                        }
+
+                        $datos = is_array($resp['datos'] ?? null) ? $resp['datos'] : [];
                         if (empty($datos)) {
                             Log::info('[CRON] Sin datos de novedades para espacio', [
                                 'espacio_id' => $espacio->id,
@@ -371,7 +383,9 @@ class CronJobsService
                 'usuarioReserva.persona.ciudadResidencia',
                 'usuarioReserva.persona.personaFacturacionPadre.tipoDocumento',
                 'usuarioReserva.persona.personaFacturacionPadre.ciudadExpedicion',
+                'usuarioReserva.persona.personaFacturacionPadre.ciudadExpedicion.departamento',
                 'usuarioReserva.persona.personaFacturacionPadre.ciudadResidencia',
+                'usuarioReserva.persona.personaFacturacionPadre.ciudadResidencia.departamento',
             ])
             ->where('reportado', false)
             ->where(function ($q) use ($maxFallos) {
@@ -388,7 +402,9 @@ class CronJobsService
                 'usuario.persona.ciudadResidencia',
                 'usuario.persona.personaFacturacionPadre.tipoDocumento',
                 'usuario.persona.personaFacturacionPadre.ciudadExpedicion',
+                'usuario.persona.personaFacturacionPadre.ciudadExpedicion.departamento',
                 'usuario.persona.personaFacturacionPadre.ciudadResidencia',
+                'usuario.persona.personaFacturacionPadre.ciudadResidencia.departamento',
                 'espacio.edificio',
             ])
             ->where('reportado', false)
@@ -589,14 +605,25 @@ class CronJobsService
                 if (!is_array($json)) {
                     throw new Exception('Respuesta no JSON');
                 }
-                $estado = strtolower((string)($json['estado'] ?? ''));
-                if ($estado !== 'success') {
-                    throw new Exception('Estado respuesta: ' . ($json['estado'] ?? 'sin_estado'));
+                // Normalizar (el servicio puede responder un array con un único objeto)
+                $resp = $this->normalizarRespuestaServicio($json);
+                if (!$resp) {
+                    throw new Exception('Formato de respuesta inválido');
+                }
+                if (strtolower((string)$resp['estado']) !== 'success') {
+                    // Propagar mensaje del servicio para que quede en logs y en ultimo_error_reporte
+                    $msgSrv = $resp['mensaje'] ?? 'sin_mensaje';
+                    throw new Exception('Estado respuesta: ' . ($resp['estado'] ?? 'error') . ' - ' . $msgSrv);
                 }
 
                 $model->reportado = true;
                 $model->ultimo_error_reporte = null;
                 $model->save();
+                // Loguear casos exitosos solo en reportes
+                Log::info('[CRON] Reporte enviado con éxito', [
+                    'tipo' => $item['tipo'],
+                    'id' => $model->id ?? null,
+                ]);
                 $reportadasOk++;
             } catch (\Throwable $e) {
                 $this->marcarFallo($model, 'Error reporte: ' . $e->getMessage());
@@ -805,5 +832,31 @@ class CronJobsService
             return $h . ':' . $m . ':' . $s;
         }
         return null;
+    }
+
+    /**
+     * Normaliza la respuesta del servicio externo.
+     * El servicio puede responder como un array envolviendo un único objeto con llaves: estado, mensaje, datos.
+     * Retorna un array asociativo con esas llaves o null si no cumple.
+     */
+    private function normalizarRespuestaServicio($json): ?array
+    {
+        // Si viene como array numerico con un solo elemento, tomar ese
+        if (is_array($json) && array_key_exists(0, $json) && is_array($json[0])) {
+            $json = $json[0];
+        }
+        if (!is_array($json)) {
+            return null;
+        }
+        // Debe tener al menos 'estado' y 'mensaje'
+        if (!array_key_exists('estado', $json)) {
+            return null;
+        }
+        // Garantizar llaves esperadas
+        return [
+            'estado' => $json['estado'] ?? null,
+            'mensaje' => $json['mensaje'] ?? null,
+            'datos' => $json['datos'] ?? null,
+        ];
     }
 }
