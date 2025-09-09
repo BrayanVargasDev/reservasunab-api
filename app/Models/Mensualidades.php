@@ -24,6 +24,9 @@ class Mensualidades extends Model
         'fecha_fin',
         'valor',
         'estado',
+        'reportado',
+        'fallos_reporte',
+        'ultimo_error_reporte',
     ];
 
     protected $casts = [
@@ -33,6 +36,8 @@ class Mensualidades extends Model
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
+        'reportado' => 'boolean',
+        'fallos_reporte' => 'integer',
     ];
 
     public function usuario()

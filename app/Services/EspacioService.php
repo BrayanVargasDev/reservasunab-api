@@ -243,6 +243,7 @@ class EspacioService
                 'tiempo_limite_reserva' => $data['limiteTiempoReserva'] ?? $espacio->tiempo_limite_reserva,
                 'despues_hora' => array_key_exists('despuesHora', $data) ? $data['despuesHora'] : $espacio->despues_hora,
                 'id_edificio' => $data['codigoEdificio'] ?? $espacio->id_edificio,
+                'codigo' => $data['codigoEspacio'] ?? $espacio->codigo,
                 'pago_mensual' => array_key_exists('pagoMensualidad', $data) ? (bool)$data['pagoMensualidad'] : $espacio->pago_mensual,
                 'valor_mensualidad' => $data['valorMensualidad'] ?? $espacio->valor_mensual,
             ];

@@ -63,7 +63,8 @@ class UsuarioController extends Controller
 
             $data = $request->validated();
 
-            $usuario = $this->usuarioService->create($data);
+            // Creación desde formulario público: no dashboard, no SSO
+            $usuario = $this->usuarioService->create($data, false, false);
 
             Log::info('Usuario creado', [
                 'usuario_id' => Auth::id(),
@@ -111,7 +112,8 @@ class UsuarioController extends Controller
             // $this->authorize('crearDesdeDashboard', Usuario::class);
 
             $data = $request->validated();
-            $usuario = $this->usuarioService->create($data, true);
+            // Creación desde dashboard: dashboard=true, no SSO
+            $usuario = $this->usuarioService->create($data, true, false);
 
             Log::info('Usuario creado desde el dashboard', [
                 'usuario_id' => Auth::id(),

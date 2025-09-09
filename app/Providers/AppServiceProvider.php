@@ -217,7 +217,8 @@ class AppServiceProvider extends ServiceProvider
                 $user = Usuario::where('email', $email)->first();
 
                 if (!$user) {
-                    $user = $usuarioService->create($payload, true);
+                    // Creación por SSO: no dashboard, esSSO=true para evitar generación de password y correo
+                    $user = $usuarioService->create($payload, false, true);
                     Log::info('Usuario UNAB creado vía SAML', [
                         'user_id' => $user->id_usuario,
                         'email' => $email,

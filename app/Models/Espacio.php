@@ -33,6 +33,7 @@ class Espacio extends Model
         'pago_mensual',
         'valor_mensualidad',
         'id_edificio',
+        'codigo',
         'id_sede',
         'id_categoria',
         'creado_por',
@@ -49,6 +50,13 @@ class Espacio extends Model
         'aprobar_reserva' => 'boolean',
         'tiempo_limite_reserva' => 'integer',
         'despues_hora' => 'boolean',
+        'id_edificio' => 'integer',
+        'id_sede' => 'integer',
+        'id_categoria' => 'integer',
+        'creado_por' => 'integer',
+        'actualizado_por' => 'integer',
+        'eliminado_por' => 'integer',
+        'codigo' => 'string',
         'pago_mensual' => 'boolean',
         'valor_mensualidad' => 'decimal:2',
         'creado_en' => 'datetime',
@@ -89,6 +97,11 @@ class Espacio extends Model
     public function configuraciones()
     {
         return $this->hasMany(EspacioConfiguracion::class, 'id_espacio', 'id');
+    }
+
+    public function edificio()
+    {
+        return $this->belongsTo(Edificio::class, 'id_edificio', 'id');
     }
 
     public function scopeFiltros($query, $sede, $categoria, $grupo)

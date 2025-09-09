@@ -18,7 +18,7 @@ return new class extends Migration
         Schema::create('usuarios', function (Blueprint $table) {
             $table->id('id_usuario');
             $table->string('email', 100)->unique();
-            $table->string('password_hash');
+            $table->string('password_hash')->nullable();
             $table->enum('tipo_usuario', ['estudiante', 'administrativo', 'egresado', 'externo']);
             $table->foreignId('id_rol')->nullable()->constrained('roles', 'id_rol')->nullOnDelete();
             $table->uuid('ldap_uid')->unique()->nullable();

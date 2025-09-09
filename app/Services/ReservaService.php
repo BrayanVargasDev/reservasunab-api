@@ -1455,6 +1455,8 @@ class ReservaService
             throw new Exception("Sin categoría.");
         }
 
+        $estadosActivos = ['inicial', 'pendienteap', 'completada', 'confirmada'];
+
         foreach ($tiposUsuario as $tipoUsuario) {
             $campoLimite = "reservas_{$tipoUsuario}";
             $limiteReservas = $espacio->categoria->{$campoLimite} ?? 0;
@@ -1463,17 +1465,27 @@ class ReservaService
                 continue;
             }
 
-            $reservasExistentes = Reservas::whereHas('espacio', function ($query) use ($espacio) {
+            $baseQuery = Reservas::whereHas('espacio', function ($query) use ($espacio) {
                 $query->where('id_categoria', $espacio->categoria->id);
             })
-                ->where('id_usuario', $usuarioId)
                 ->whereDate('fecha', $fechaReserva)
-                ->whereIn('estado', ['inicial', 'pendienteap', 'completada', 'rechazada'])
-                ->whereNull('eliminado_en')
+                ->whereIn('estado', $estadosActivos)
+                ->whereNull('eliminado_en');
+
+            $propias = (clone $baseQuery)
+                ->where('id_usuario', $usuarioId)
                 ->count();
 
-            if ($reservasExistentes >= $limiteReservas) {
-                throw new Exception("No puedes reservar más como {$tipoUsuario}.");
+            $comoJugador = (clone $baseQuery)
+                ->whereHas('jugadores', function ($q) use ($usuarioId) {
+                    $q->where('id_usuario', $usuarioId);
+                })
+                ->count();
+
+            $total = $propias + $comoJugador;
+
+            if ($total >= $limiteReservas) {
+                throw new Exception("No puedes reservar o participar más como {$tipoUsuario}.");
             }
         }
     }
@@ -2355,5 +2367,24 @@ class ReservaService
                 'estado' => $mensualidad->estado,
             ] : null,
         ];
+    }
+
+    public function aprobar_reserva(int $reservaId): bool
+    {
+        try {
+            $reserva = Reservas::find($reservaId);
+            if (!$reserva || $reserva->estado !== 'pendienteap') {
+                return false;
+            }
+            $reserva->estado = 'completada';
+            $reserva->save();
+            return true;
+        } catch (\Throwable $th) {
+            Log::warning('Error aprobando reserva', [
+                'reserva_id' => $reservaId,
+                'error' => $th->getMessage(),
+            ]);
+            return false;
+        }
     }
 }

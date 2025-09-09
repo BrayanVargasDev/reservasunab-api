@@ -316,4 +316,44 @@ class ReservasController extends Controller
             ], 422);
         }
     }
+
+    /**
+     * Aprueba una reserva pendiente.
+     * Endpoint sugerido: POST /api/reservas/{id}/aprobar
+     */
+    public function aprobar($reservaId)
+    {
+        try {
+            $id = (int) $reservaId;
+            $resultado = $this->reserva_service->aprobar_reserva($id);
+
+            if (!$resultado) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No fue posible aprobar la reserva (puede que ya esté aprobada o no exista).'
+                ], 422);
+            }
+
+            $reserva = $this->reserva_service->getMiReserva($id);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Reserva aprobada correctamente.',
+                'data' => $reserva,
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al aprobar la reserva', [
+                'reserva_id' => $reservaId,
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ocurrió un error al aprobar la reserva',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

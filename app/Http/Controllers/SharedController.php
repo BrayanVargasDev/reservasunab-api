@@ -289,4 +289,30 @@ class SharedController extends Controller
             );
         }
     }
+
+    public function edificios(Request $request)
+    {
+        try {
+            // $search = $request->query('search', '');
+            // $per_page = $request->query('per_page', null);
+
+            $edificios = $this->shared_service->get_edificios();
+            return response()->json([
+                'status' => 'success',
+                'data' => $edificios,
+                'message' => 'Edificios obtenidos correctamente',
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error al obtener edificios', [
+                'usuario_id' => Auth::id() ?? 'no autenticado',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error al obtener edificios',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

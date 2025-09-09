@@ -31,14 +31,15 @@ class Reservas extends Model
         'hora_fin',
         'check_in',
         'codigo',
-        'valor',
         'observaciones',
+        'reportado',
+        'fallos_reporte',
+        'ultimo_error_reporte',
     ];
 
     protected $casts = [
         'id_configuracion' => 'integer',
         'id_espacio' => 'integer',
-        'valor' => 'float',
         'id_usuario' => 'integer',
         'fecha' => 'datetime',
         'hora_inicio' => 'datetime',
@@ -49,6 +50,8 @@ class Reservas extends Model
         'creado_en' => 'datetime',
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
+        'reportado' => 'boolean',
+        'fallos_reporte' => 'integer',
     ];
 
     protected $hidden = [

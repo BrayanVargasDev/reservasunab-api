@@ -26,7 +26,7 @@ class StoreUsuarioRequest extends FormRequest
     {
         return [
             'email' => 'required|string|email|max:100|unique:usuarios',
-            'password' => 'required|string|min:8',
+            'password' => 'nullable|string|min:8',
             'tipos_usuario' => [
                 'required',
                 'array',
@@ -58,8 +58,7 @@ class StoreUsuarioRequest extends FormRequest
             'email.required' => 'El email es obligatorio',
             'email.email' => 'El formato del email no es válido',
             'email.unique' => 'El email ya está en uso',
-            'password.required' => 'La contraseña es obligatoria',
-            'password.min' => 'La contraseña debe tener al menos 8 caracteres',
+            'password.min' => 'La contraseña debe tener al menos 8 caracteres cuando se proporciona',
             'tipos_usuario.required' => 'Los tipos de usuario son obligatorios',
             'tipos_usuario.array' => 'Los tipos de usuario deben ser un array',
             'tipos_usuario.min' => 'Debe seleccionar al menos un tipo de usuario',

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Edificio;
 use App\Models\Fecha;
 use App\Models\Grupo;
 use App\Models\Movimientos;
@@ -150,5 +151,14 @@ class SharedService
         $ingresos = Movimientos::where('tipo', 'ingreso')->where('id_usuario', Auth::id())->sum('valor');
         $egresos = Movimientos::where('tipo', 'egreso')->where('id_usuario', Auth::id())->sum('valor');
         return $ingresos - $egresos;
+    }
+
+    public function get_edificios()
+    {
+        try {
+            return Edificio::orderBy('nombre', 'asc')->get();
+        } catch (Exception $e) {
+            throw new Exception('Error al obtener los edificios: ' . $e->getMessage());
+        }
     }
 }

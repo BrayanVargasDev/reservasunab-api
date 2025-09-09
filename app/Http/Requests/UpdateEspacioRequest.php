@@ -34,7 +34,8 @@ class UpdateEspacioRequest extends FormRequest
             'aprobarReservas' => 'sometimes|boolean',
             'limiteTiempoReserva' => 'sometimes|integer|min:0',
             'despuesHora' => 'sometimes|boolean',
-            'codigoEdificio' => 'sometimes|string|max:100',
+            'codigoEdificio' => 'sometimes|integer|min:0',
+            'codigoEspacio' => 'sometimes|string|max:50',
             'pagoMensualidad' => 'sometimes|boolean',
             'valorMensualidad' => 'sometimes|numeric|min:0',
             'reservasSimultaneas' => 'sometimes|integer|min:1',
@@ -78,6 +79,8 @@ class UpdateEspacioRequest extends FormRequest
             'reservasSimultaneas.integer' => 'El número de reservas simultáneas debe ser un número entero.',
             'reservasSimultaneas.min' => 'El número de reservas simultáneas debe ser al menos 1.',
             'aprobarReservas.boolean' => 'El campo "Aprobar Reserva" debe ser verdadero o falso.',
+            'codigoEspacio.string' => 'El campo "codigo espacio" debe ser una cadena de texto.',
+            'codigoEspacio.max' => 'El campo "codigo espacio" no puede exceder los 50 caracteres.',
         ];
     }
 

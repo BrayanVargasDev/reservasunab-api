@@ -12,9 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('espacios', function (Blueprint $table) {
-            $table->integer('tiempo_limite_reserva')->nullable();
-            $table->boolean('despues_hora')->default(false);
-            $table->foreignId('id_edificio')->nullable()->constrained('edificios')->onDelete('set null');
+            $table->string('codigo', 50)->after('nombre')->nullable();
         });
     }
 
@@ -24,7 +22,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('espacios', function (Blueprint $table) {
-            $table->dropColumn(['tiempo_limite_reserva', 'despues_hora', 'id_edificio']);
+            $table->dropColumn('codigo');
         });
     }
 };

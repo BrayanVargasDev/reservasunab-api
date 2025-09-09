@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\PasswordGenericoEmail;
 
 class UsuarioService
 {
@@ -143,7 +145,7 @@ class UsuarioService
         return Usuario::with('persona')->firstWhere('email', $email);
     }
 
-    public function create(array $data, bool $desdeDashboard = false): Usuario
+    public function create(array $data, bool $desdeDashboard = false, $esSSO = false): Usuario
     {
         try {
             DB::beginTransaction();
@@ -157,11 +159,22 @@ class UsuarioService
                 );
             }
 
-            $usuario = $this->createUsuarioRecord($data, $persona, $desdeDashboard);
+            $usuario = $this->createUsuarioRecord($data, $persona, $desdeDashboard, $esSSO);
 
             $persona->id_usuario = $usuario->id_usuario;
             $persona->save();
             DB::commit();
+
+            if ($desdeDashboard && !empty($usuario->password_hash) && isset($usuario->_password_plano_generado)) {
+                try {
+                    Mail::to($usuario->email)->send(new PasswordGenericoEmail($usuario, $usuario->_password_plano_generado, true));
+                } catch (\Throwable $mailEx) {
+                    Log::error('No se pudo enviar correo de password genérico', [
+                        'error' => $mailEx->getMessage(),
+                        'user_id' => $usuario->id_usuario,
+                    ]);
+                }
+            }
             return $usuario->load('persona');
         } catch (\Exception $e) {
             DB::rollBack();
@@ -194,13 +207,28 @@ class UsuarioService
                     404,
                 );
             }
-
             DB::beginTransaction();
 
             $this->updateUsuarioFields($usuario, $data);
             $this->handlePersonaUpdate($usuario, $data);
             // Manejar datos de facturación si vienen en la actualización de perfil
             $this->handlePersonaFacturacion($usuario, $data);
+
+            $desdeDashboard = $data['__desde_dashboard'] ?? false; // bandera opcional en payload
+            $forzarGeneracion = $data['generar_password'] ?? false;
+            if (($desdeDashboard || $forzarGeneracion) && empty($usuario->password_hash)) {
+                $passwordPlano = $this->generarPasswordGenerico($usuario->persona ?? new Persona());
+                $usuario->password_hash = Hash::make($passwordPlano);
+                $usuario->save();
+                try {
+                    Mail::to($usuario->email)->send(new PasswordGenericoEmail($usuario, $passwordPlano, false));
+                } catch (\Throwable $mailEx) {
+                    Log::error('No se pudo enviar correo de generación de password en update', [
+                        'error' => $mailEx->getMessage(),
+                        'user_id' => $usuario->id_usuario,
+                    ]);
+                }
+            }
 
             DB::commit();
             return $usuario->load('persona');
@@ -435,17 +463,28 @@ class UsuarioService
 
     private function generarPasswordGenerico(Persona $persona): string
     {
-        $nombre = $persona->primer_nombre ?? '';
-        $apellido = $persona->primer_apellido ?? '';
-        $fechaNacimiento = $persona->fecha_nacimiento ? date('Y', strtotime($persona->fecha_nacimiento)) : '';
-
-        Log::info('Generando contraseña genérica', [
-            'nombre' => $nombre,
-            'apellido' => $apellido,
-            'fechaNacimiento' => $fechaNacimiento,
-        ]);
-
-        return strtolower("{$nombre}.{$apellido}.{$fechaNacimiento}");
+        // Nueva lógica: palabra base + año nacimiento (si existe) + 4 caracteres aleatorios
+        $nombre = preg_replace('/[^a-zA-Z]/', '', strtolower($persona->primer_nombre ?? 'user'));
+        $apellido = preg_replace('/[^a-zA-Z]/', '', strtolower($persona->primer_apellido ?? ''));
+        $base = substr($nombre, 0, 4) . substr($apellido, 0, 4);
+        if (empty(trim($base))) {
+            $base = 'usr';
+        }
+        $year = '';
+        if (!empty($persona->fecha_nacimiento)) {
+            try {
+                $year = Carbon::parse($persona->fecha_nacimiento)->format('Y');
+            } catch (\Throwable $t) {
+                $year = '';
+            }
+        }
+        $rand = substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 4);
+        $password = strtolower($base) . ($year ? '.' . $year : '') . '@' . $rand;
+        // Garantizar longitud mínima 10
+        if (strlen($password) < 10) {
+            $password .= substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 10 - strlen($password));
+        }
+        return $password;
     }
 
     private function createPersonaFromData(array $data, ?int $idUsuario): Persona
@@ -502,19 +541,16 @@ class UsuarioService
 
     private function createUsuarioRecord(array $data, Persona $persona, bool $desdeDashboard): Usuario
     {
-        $password = $desdeDashboard
-            ? $this->generarPasswordGenerico($persona)
-            : $data['password'];
-
-        if (empty($password)) {
-            throw new UsuarioException(
-                'La contraseña no puede estar vacía',
-                'empty_password',
-                400,
-            );
+        // Si viene desde dashboard generamos password genérico y lo marcamos para correo.
+        // Si viene de SSO (no desde dashboard) permitimos password null y se enviará luego cuando complete perfil desde dashboard.
+        $password = null;
+        if ($desdeDashboard) {
+            $password = $this->generarPasswordGenerico($persona);
+        } elseif (!empty($data['password'])) {
+            $password = $data['password'];
         }
 
-        $tiposUsuario = $data['tiposUsuario'] ?? $data['tipos_usuario'] ?? ['externo'];
+        $tiposUsuario = $data['tiposUsuario'] ?? $data['tipos_usuario'] ?? ['egresado'];
 
         if (!is_array($tiposUsuario)) {
             $tiposUsuario = [$tiposUsuario];
@@ -522,15 +558,14 @@ class UsuarioService
 
         $dataUsuario = [
             'email' => $data['email'],
-            'password_hash' => Hash::make($password),
+            'password_hash' => $password ? Hash::make($password) : null,
             'tipos_usuario' => $tiposUsuario,
             'ldap_uid' => $data['ldap_uid'] ?? null,
             'activo' => $data['activo'] ?? true,
             'id_persona' => $persona->id_persona,
-            'perfil_completado' => false, // Se calculará después
+            'perfil_completado' => false,
             'terminos_condiciones' => $data['terminos_condiciones'] ?? false,
         ];
-
         if (isset($data['rol']) || isset($data['id_rol'])) {
             $dataUsuario['id_rol'] = $data['rol'] ?? $data['id_rol'];
         }
@@ -539,9 +574,11 @@ class UsuarioService
 
         $usuario->perfil_completado = $this->esPerfilCompleto($usuario);
         $usuario->save();
-
         $usuario->asignarPermisoReservar();
 
+        if ($password) {
+            $usuario->_password_plano_generado = $password;
+        }
         return $usuario;
     }
 
@@ -549,7 +586,7 @@ class UsuarioService
     {
         if (!$usuario->persona && $this->hasPersonaData($data)) {
             $persona = $this->createPersonaFromData($data, $usuario->id_usuario);
-            // Asegurar que el usuario apunte a su persona titular recién creada
+
             if (empty($usuario->id_persona)) {
                 $usuario->id_persona = $persona->id_persona;
                 $usuario->save();
