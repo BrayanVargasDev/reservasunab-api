@@ -97,7 +97,6 @@ class CronJobsService
                         }
                         DB::transaction(function () use ($reserva, &$totalCanceladas) {
                             $reserva->estado = 'cancelada';
-                            $reserva->cancelado_por = 0; // 0 = sistema / cron
                             $reserva->save();
                             $reserva->delete();
                             $totalCanceladas++;
