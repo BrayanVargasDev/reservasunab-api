@@ -16,9 +16,8 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         $schedule->command('cron:reservas-sin-pago')->everyMinute()->runInBackground();
-    // Job dos: ejecutar diariamente a medianoche
-    $schedule->command('cron:job-dos')->dailyAt('00:00')->runInBackground();
-        $schedule->command('cron:job-tres')->hourly()->runInBackground();
+        $schedule->command('cron:procesar-novedades')->dailyAt('00:00')->runInBackground();
+        $schedule->command('cron:reportar-reservas-mensualidades')->hourly()->runInBackground();
 
         // Referencia oficial: https://laravel.com/docs/12.x/scheduling
     }
