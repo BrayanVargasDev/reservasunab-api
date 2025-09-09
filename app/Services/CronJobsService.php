@@ -611,7 +611,7 @@ class CronJobsService
         // Enviar correo si hay algo
         if (!empty($reservasFallosMax) || !empty($mensualidadesFallosMax)) {
             try {
-                \Illuminate\Support\Facades\Mail::to(config('mail.reporte_fallos_job3_to'))
+                \Illuminate\Support\Facades\Mail::to(config('mail.reporte_fallos'))
                     ->send(new ReporteFallosReservaMensualidades($reservasFallosMax, $mensualidadesFallosMax));
             } catch (\Throwable $mailEx) {
                 Log::error('[CRON] Error enviando correo fallos reporte de reservas y mensualidades', ['error' => $mailEx->getMessage()]);

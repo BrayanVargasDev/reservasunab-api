@@ -116,4 +116,6 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Reservas UNAB'),
     ],
 
+    'reporte_fallos' => env('MAIL_REPORTE_FALLOS', 'will@wgsoluciones.com'),
+
 ];
