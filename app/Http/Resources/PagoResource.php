@@ -23,6 +23,7 @@ class PagoResource extends JsonResource
             'ticket_id' => $this->ticket_id,
             'url_ecollect' => $this->url_ecollect,
             'valor' => $this->valor,
+            'reserva' => $this->reserva,
             'detalles' => $this->whenLoaded('detalles', function () {
                 return $this->detalles->map(function ($d) {
                     return [

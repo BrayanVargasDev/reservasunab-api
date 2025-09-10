@@ -145,6 +145,7 @@ class PagoService
 
         $query = Pago::withTrashed()->with([
             'reserva',
+            'detalles',
             'reserva.espacio',
             'reserva.configuracion',
             'reserva.usuarioReserva',
