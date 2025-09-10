@@ -1887,14 +1887,6 @@ class ReservaService
                     ->sum('total');
             }
 
-            if ($valorElementos == 0) {
-                $valorElementos = count($detalles) > 0
-                    ? array_reduce($detalles, function ($carry, $item) {
-                        return $carry + ($item['valor_administrativo'] * $item['cantidad']);
-                    }, 0.0)
-                    : 0.0;
-            }
-
             $pagoResumen = null;
             if ($reserva->pago) {
                 $pagoResumen = [
