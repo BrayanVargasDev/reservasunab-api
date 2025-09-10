@@ -183,12 +183,6 @@ class CronJobsService
                         $totalConsultados++;
                         $response = null;
                         try {
-                            Log::channel('cronjobs')->info('[CRON] Consultando novedades', [
-                                'espacio_id' => $espacio->id,
-                                'payload' => $datosPayload,
-                                'urlBase' => $urlBase,
-                            ]);
-
                             $response = Http::timeout(30)
                                 ->connectTimeout(5)
                                 ->withBasicAuth($this->usuario_unab, $this->password_unab)
@@ -198,10 +192,6 @@ class CronJobsService
                                     'Connection' => 'keep-alive'
                                 ])
                                 ->post($urlBase, $datosPayload);
-
-                            Log::channel('cronjobs')->info('[CRON] Petición HTTP realizada', [
-                                'response' => $response,
-                            ]);
                         } catch (\Throwable $httpEx) {
                             $errores++;
                             Log::channel('cronjobs')->error('[CRON] Error HTTP consultando novedades', [
@@ -222,10 +212,7 @@ class CronJobsService
                         }
 
                         $json = $response->json();
-                        Log::channel('cronjobs')->debug('[CRON] Respuesta novedades', [
-                            'espacio_id' => $espacio->id,
-                            'body' => $json,
-                        ]);
+
                         if (!is_array($json)) {
                             $errores++;
                             Log::channel('cronjobs')->error('[CRON] Respuesta inesperada (no JSON array)', [
@@ -316,7 +303,7 @@ class CronJobsService
                                                 ->where('id_espacio', $espacio->id)
                                                 ->whereDate('fecha', $cursor->toDateString())
                                                 ->whereTime('hora_inicio', $horaInicio)
-                                                ->whereTime('hora_fin', $horaFin)
+                                                ->whereTime('hora_fin', '<=', $horaFin)
                                                 ->exists();
                                             if ($existe) {
                                                 $totalNovedadesDuplicadas++;
