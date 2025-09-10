@@ -1798,7 +1798,7 @@ class ReservaService
             $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
-            if ($reserva->pago && $reserva->pago->estado != 'OK') {
+            if ($reserva->pago && $reserva->pago->estado == 'PENDING') {
                 DB::beginTransaction();
                 try {
 
@@ -2014,7 +2014,7 @@ class ReservaService
             return 'pendiente';
         }
 
-        return 'rechazada';
+        return 'cancelada';
     }
 
     public function agregarJugadores(int $idReserva, array $jugadoresIds, bool $strict = true)
