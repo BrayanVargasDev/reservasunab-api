@@ -328,7 +328,6 @@ class CronJobsService
                                                     'hora_inicio' => $cursor->toDateString() . ' ' . $horaInicio,
                                                     'hora_fin' => $cursor->toDateString() . ' ' . $horaFin,
                                                     'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
-                                                    'creado_por' => 0,
                                                 ]);
                                                 $totalNovedadesInsertadas++;
                                             }
