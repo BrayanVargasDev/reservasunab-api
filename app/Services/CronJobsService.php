@@ -187,25 +187,18 @@ class CronJobsService
                                 'espacio_id' => $espacio->id,
                                 'payload' => $datosPayload,
                                 'urlBase' => $urlBase,
+                                'usuario' => $this->usuario_unab,
+                                'password' => $this->password_unab,
                             ]);
 
-                            $response = Http::
-                                // ->connectTimeout(5)
-                                withBasicAuth('RESERVASPPRD', 'RESERVASPPRD')
+                            $response = Http::timeout(30)
+                                ->connectTimeout(5)
+                                ->withBasicAuth($this->usuario_unab, $this->password_unab)
                                 ->withHeaders([
                                     'Content-Type' => 'application/json',
                                     'Accept' => 'application/json',
                                     'Connection' => 'keep-alive'
                                 ])
-                                ->beforeSending(function ($request) use ($espacio) {
-                                    Log::channel('cronjobs')->info('[CRON] Enviando petición HTTP', [
-                                        'espacio_id' => $espacio->id,
-                                        'url' => $request->url(),
-                                        'method' => $request->method(),
-                                        'headers' => $request->headers(),
-                                        'body' => $request->body()
-                                    ]);
-                                })
                                 ->post($urlBase, $datosPayload);
                         } catch (\Throwable $httpEx) {
                             $errores++;
