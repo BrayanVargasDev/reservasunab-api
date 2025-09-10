@@ -408,6 +408,7 @@ class CronJobsService
                 'espacio.edificio',
             ])
             ->where('reportado', false)
+            ->where('estado', '=', 'activa')
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
@@ -489,6 +490,7 @@ class CronJobsService
                 // Calcular totales y flags de día
                 [$totalPagar, $precioEspacio, $precioElementos] = $this->calcularTotalReserva($reserva, $usuario);
                 $flags = $this->flagsDiaSemanaParaFecha(Carbon::parse($reserva->fecha));
+                $codigoTrazaPago = PagoConsulta::where('codigo', $pago->codigo ?? null)->first()?->codigo_traza;
 
                 $payload = [
                     'tarea' => '3',
@@ -500,7 +502,7 @@ class CronJobsService
                     'totalPagar' => round((float)$totalPagar, 2),
                     'Ecollect' => $hayPagoOk ? [
                         'ticketId' => $pago->ticket_id,
-                        'paymentId' => $pago->codigo,
+                        'paymentId' => $codigoTrazaPago ?? null,
                         'medioPagoEcollect' => (string)($medioPago ?? '0'),
                         'svrcode' => 21000,
                     ] : [
@@ -511,7 +513,7 @@ class CronJobsService
                     ],
                     'DatosReserva' => $this->construirDatosReserva($usuario, $rol),
                     'Reserva' => [[
-                        'codReserva' => (string)$reserva->codigo,
+                        'codReserva' => (string)$reserva->id,
                         'tipoReserva' => $tipoReserva,
                         'edificio' => $espacio->edificio->codigo,
                         'espacio' => $espacio->codigo,
@@ -570,7 +572,7 @@ class CronJobsService
                 $rol = $rolDb === 'egresado' ? 'GRADUADO' : strtoupper($rolDb ?: 'ESTUDIANTE');
 
                 $payload = [
-                    'tarea' => 3,
+                    'tarea' => '3',
                     'numberDoc' => '522',
                     'fechaTransac' => $fechaHoy->format('d/m/Y'),
                     'canalVenta' => 'RESERVA_EN_LINEA',
@@ -585,7 +587,7 @@ class CronJobsService
                     ],
                     'DatosReserva' => $this->construirDatosReserva($usuario, $rol),
                     'Reserva' => [[
-                        'codReserva' => 'MENS-' . $mensualidad->id,
+                        'codReserva' => $mensualidad->id,
                         'tipoReserva' => 'ESPACIO_GIM',
                         'edificio' => $espacio->edificio->codigo,
                         'espacio' => $espacio->codigo,

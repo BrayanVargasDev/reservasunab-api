@@ -624,10 +624,10 @@ class PagoService
         return in_array(strtolower($estado), array_map('strtolower', $estadosExitosos));
     }
 
-    private function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
+    public function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
     {
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
-
+        Log::debug($pagoInfo);
         $pago->loadMissing([
             'reserva.espacio',
             'reserva.configuracion',
