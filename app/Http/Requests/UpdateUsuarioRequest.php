@@ -55,6 +55,7 @@ class UpdateUsuarioRequest extends FormRequest
             'activo' => 'sometimes|boolean',
             // Datos de facturación dentro de un objeto "facturacion"
             // a veces un objeto a veces null
+            'usaFacturacionDiferente' => 'sometimes|boolean',
             'facturacion' => 'sometimes|nullable|array',
             'facturacion.nombre' => 'sometimes|string|max:255',
             'facturacion.apellido' => 'sometimes|string|max:255',

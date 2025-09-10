@@ -1485,7 +1485,7 @@ class ReservaService
             $total = $propias + $comoJugador;
 
             if ($total >= $limiteReservas) {
-                throw new Exception("No puedes reservar o participar más como {$tipoUsuario}.");
+                throw new Exception("No puedes reservar, ya has reservado o fuiste incluido en otra reserva y se supera el límite.");
             }
         }
     }

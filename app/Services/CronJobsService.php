@@ -53,7 +53,7 @@ class CronJobsService
         $inicio = microtime(true);
         $limite = Carbon::now()->subMinutes(30);
 
-        Log::info('[CRON] Inicio procesarReservasSinPago', [
+        Log::channel('cronjobs')->info('[CRON] Inicio procesarReservasSinPago', [
             'limite_creado_en' => $limite->toDateTimeString(),
         ]);
 
@@ -100,14 +100,14 @@ class CronJobsService
                             $reserva->save();
                             $reserva->delete();
                             $totalCanceladas++;
-                            Log::info('[CRON] Reserva cancelada por falta de pago', [
+                            Log::channel('cronjobs')->info('[CRON] Reserva cancelada por falta de pago', [
                                 'reserva_id' => $reserva->id,
                                 'pago_estado' => $reserva->pago->estado ?? null,
                                 'creado_en' => $reserva->creado_en?->toDateTimeString(),
                             ]);
                         });
                     } catch (\Throwable $e) {
-                        Log::error('[CRON] Error cancelando reserva sin pago', [
+                        Log::channel('cronjobs')->error('[CRON] Error cancelando reserva sin pago', [
                             'reserva_id' => $reserva->id ?? null,
                             'error' => $e->getMessage(),
                         ]);
@@ -116,7 +116,7 @@ class CronJobsService
             });
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
-        Log::info('[CRON] Fin procesarReservasSinPago', [
+        Log::channel('cronjobs')->info('[CRON] Fin procesarReservasSinPago', [
             'evaluadas' => $totalEvaluadas,
             'canceladas' => $totalCanceladas,
             'ms' => $duracion,
@@ -135,7 +135,7 @@ class CronJobsService
     public function procesarNovedades(): void
     {
         $inicio = microtime(true);
-        Log::info('[CRON] Inicio procesarNovedades (tarea 2)');
+        Log::channel('cronjobs')->info('[CRON] Inicio procesarNovedades (tarea 2)');
 
         $hoy = Carbon::today();
         $totalEspacios = 0;
@@ -165,7 +165,7 @@ class CronJobsService
                         $codigoEspacio = $espacio->codigo;
                         if (!$codigoEdificio || !$codigoEspacio) {
                             $totalSinCodigos++;
-                            Log::warning('[CRON] Espacio sin códigos requeridos para consulta novedades', [
+                            Log::channel('cronjobs')->warning('[CRON] Espacio sin códigos requeridos para consulta novedades', [
                                 'espacio_id' => $espacio->id,
                                 'codigo_edificio' => $codigoEdificio,
                                 'codigo_espacio' => $codigoEspacio,
@@ -184,7 +184,7 @@ class CronJobsService
                         $totalConsultados++;
                         $response = null;
                         try {
-                            Log::debug('[CRON] Consultando novedades', [
+                            Log::channel('cronjobs')->debug('[CRON] Consultando novedades', [
                                 'espacio_id' => $espacio->id,
                                 'payload' => $datosPayload,
                             ]);
@@ -198,7 +198,7 @@ class CronJobsService
                                 ])->post($urlBase, $datosPayload);
                         } catch (\Throwable $httpEx) {
                             $errores++;
-                            Log::error('[CRON] Error HTTP consultando novedades', [
+                            Log::channel('cronjobs')->error('[CRON] Error HTTP consultando novedades', [
                                 'espacio_id' => $espacio->id,
                                 'error' => $httpEx->getMessage(),
                             ]);
@@ -207,7 +207,7 @@ class CronJobsService
 
                         if (!$response->ok()) {
                             $errores++;
-                            Log::error('[CRON] Respuesta HTTP no OK novedades', [
+                            Log::channel('cronjobs')->error('[CRON] Respuesta HTTP no OK novedades', [
                                 'espacio_id' => $espacio->id,
                                 'status' => $response->status(),
                                 'body' => $response->body(),
@@ -216,13 +216,13 @@ class CronJobsService
                         }
 
                         $json = $response->json();
-                        Log::debug('[CRON] Respuesta novedades', [
+                        Log::channel('cronjobs')->debug('[CRON] Respuesta novedades', [
                             'espacio_id' => $espacio->id,
                             'body' => $json,
                         ]);
                         if (!is_array($json)) {
                             $errores++;
-                            Log::error('[CRON] Respuesta inesperada (no JSON array)', [
+                            Log::channel('cronjobs')->error('[CRON] Respuesta inesperada (no JSON array)', [
                                 'espacio_id' => $espacio->id,
                                 'body' => $response->body(),
                             ]);
@@ -233,7 +233,7 @@ class CronJobsService
                         $resp = $this->normalizarRespuestaServicio($json);
                         if (!$resp) {
                             $errores++;
-                            Log::error('[CRON] Respuesta del servicio inválida', [
+                            Log::channel('cronjobs')->error('[CRON] Respuesta del servicio inválida', [
                                 'espacio_id' => $espacio->id,
                                 'body' => $response->body(),
                             ]);
@@ -243,7 +243,7 @@ class CronJobsService
                         if (strtolower((string)$resp['estado']) !== 'success') {
                             // Solo loguear mensajes de error del servicio
                             $errores++;
-                            Log::error('[CRON] Error del servicio en novedades', [
+                            Log::channel('cronjobs')->error('[CRON] Error del servicio en novedades', [
                                 'espacio_id' => $espacio->id,
                                 'mensaje' => $resp['mensaje'] ?? null,
                             ]);
@@ -252,7 +252,7 @@ class CronJobsService
 
                         $datos = is_array($resp['datos'] ?? null) ? $resp['datos'] : [];
                         if (empty($datos)) {
-                            Log::info('[CRON] Sin datos de novedades para espacio', [
+                            Log::channel('cronjobs')->info('[CRON] Sin datos de novedades para espacio', [
                                 'espacio_id' => $espacio->id,
                             ]);
                             continue;
@@ -262,7 +262,7 @@ class CronJobsService
                         try {
                             $maxDiasPrevios = (int) ($espacio->configuraciones->max('dias_previos_apertura') ?? 0);
                         } catch (\Throwable $e) {
-                            Log::warning('[CRON] Error obteniendo dias_previos_apertura', [
+                            Log::channel('cronjobs')->warning('[CRON] Error obteniendo dias_previos_apertura', [
                                 'espacio_id' => $espacio->id,
                                 'error' => $e->getMessage(),
                             ]);
@@ -334,7 +334,7 @@ class CronJobsService
                                 }
                             } catch (\Throwable $inner) {
                                 $errores++;
-                                Log::error('[CRON] Error procesando item novedad', [
+                                Log::channel('cronjobs')->error('[CRON] Error procesando item novedad', [
                                     'espacio_id' => $espacio->id,
                                     'item' => $item,
                                     'error' => $inner->getMessage(),
@@ -343,7 +343,7 @@ class CronJobsService
                         }
                     } catch (\Throwable $e) {
                         $errores++;
-                        Log::error('[CRON] Error general procesando espacio en job dos', [
+                        Log::channel('cronjobs')->error('[CRON] Error general procesando espacio en job dos', [
                             'espacio_id' => $espacio->id ?? null,
                             'error' => $e->getMessage(),
                         ]);
@@ -352,7 +352,7 @@ class CronJobsService
             });
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
-        Log::info('[CRON] Fin procesarNovedades', [
+        Log::channel('cronjobs')->info('[CRON] Fin procesarNovedades', [
             'espacios_totales' => $totalEspacios,
             'espacios_sin_codigos' => $totalSinCodigos,
             'consultados' => $totalConsultados,
@@ -367,7 +367,7 @@ class CronJobsService
     public function procesarReporteReservasMensualidades(): void
     {
         $inicio = microtime(true);
-        Log::info('[CRON] Inicio procesarReporteReservasMensualidades (tarea 3)');
+        Log::channel('cronjobs')->info('[CRON] Inicio procesarReporteReservasMensualidades (tarea 3)');
 
         $endpoint = rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
         $fechaHoy = now();
@@ -490,7 +490,12 @@ class CronJobsService
                         'paymentId' => $pago->codigo,
                         'medioPagoEcollect' => (string)($medioPago ?? '0'),
                         'svrcode' => 21000,
-                    ] : null,
+                    ] : [
+                        'ticketId' => null,
+                        'paymentId' => null,
+                        'medioPagoEcollect' => null,
+                        'svrcode' => 21000,
+                    ],
                     'DatosReserva' => $this->construirDatosReserva($usuario, $rol),
                     'Reserva' => [[
                         'codReserva' => (string)$reserva->codigo,
@@ -599,7 +604,7 @@ class CronJobsService
             $model = $item['model'];
             $payload = $item['payload'];
             try {
-                Log::debug('[CRON] Enviando reporte reserva/mensualidad', [
+                Log::channel('cronjobs')->debug('[CRON] Enviando reporte reserva/mensualidad', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                     'body' => $payload,
@@ -614,7 +619,7 @@ class CronJobsService
                     throw new Exception('HTTP status ' . $response->status());
                 }
                 $json = $response->json();
-                Log::debug('[CRON] Respuesta reporte reserva/mensualidad', [
+                Log::channel('cronjobs')->debug('[CRON] Respuesta reporte reserva/mensualidad', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                     'body' => $json,
@@ -637,7 +642,7 @@ class CronJobsService
                 $model->ultimo_error_reporte = null;
                 $model->save();
                 // Loguear casos exitosos solo en reportes
-                Log::info('[CRON] Reporte enviado con éxito', [
+                Log::channel('cronjobs')->info('[CRON] Reporte enviado con éxito', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                 ]);
@@ -658,12 +663,12 @@ class CronJobsService
                 \Illuminate\Support\Facades\Mail::to(config('mail.reporte_fallos'))
                     ->send(new ReporteFallosReservaMensualidades($reservasFallosMax, $mensualidadesFallosMax));
             } catch (\Throwable $mailEx) {
-                Log::error('[CRON] Error enviando correo fallos reporte de reservas y mensualidades', ['error' => $mailEx->getMessage()]);
+                Log::channel('cronjobs')->error('[CRON] Error enviando correo fallos reporte de reservas y mensualidades', ['error' => $mailEx->getMessage()]);
             }
         }
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
-        Log::info('[CRON] Fin procesarReporteReservasMensualidades', [
+        Log::channel('cronjobs')->info('[CRON] Fin procesarReporteReservasMensualidades', [
             'reportadas_ok' => $reportadasOk,
             'fallidas' => $fallidas,
             'omitidas_fallos_max' => $omitidasPorFallos,
@@ -683,10 +688,12 @@ class CronJobsService
             $persona = $usuario->persona ?? null;
             // Usar la persona de facturación (padre referenciado) si existe; si no, la persona normal
             $pf = $persona?->personaFacturacion ?: $persona;
-            Log::debug('[CRON] Construyendo DatosReserva', [
+            Log::channel('cronjobs')->debug('[CRON] Construyendo DatosReserva', [
                 'pf' => $pf
             ]);
             if ($pf) {
+                $datosDir = explode(';', $pf->direccion);
+
                 $tipoPersona = strtoupper($pf->tipo_persona ?? 'NATURAL');
                 $regimen = (string)($pf->regimen_tributario_id ?? '99');
                 $nombres = trim(($pf->primer_nombre ?? '') . ' ' . ($pf->segundo_nombre ?? ''));
@@ -696,10 +703,10 @@ class CronJobsService
                 $dv = (string)($pf->digito_verificacion ?? '0');
                 $ciudadDoc = str_pad((string)($pf->ciudadExpedicion->codigo ?? ''), 4, '0', STR_PAD_LEFT);
                 $departamentoDoc = (string)($pf->ciudadExpedicion->departamento->codigo ?? '');
-                $direccion = (string)($pf->direccion ?? '');
+                $direccion = count($datosDir) > 1 ? (string)($datosDir[1] ?? '') : (string)($pf->direccion ?? '');
                 $ciudadDir = str_pad((string)($pf->ciudadResidencia->codigo ?? ''), 4, '0', STR_PAD_LEFT);
                 $departamentoDir = (string)($pf->ciudadResidencia->departamento->codigo ?? '');
-                $email = (string)($usuario->email ?? '');
+                $email = count($datosDir) > 1 ? (string)($datosDir[0] ?? '') : (string)($usuario->email ?? '');
                 $celular = (string)($pf->celular ?? ($usuario->celular ?? ''));
 
                 return [
@@ -719,7 +726,7 @@ class CronJobsService
                 ];
             }
         } catch (\Throwable $e) {
-            Log::warning('[CRON] Error construyendo DatosReserva', ['error' => $e->getMessage()]);
+            Log::channel('cronjobs')->warning('[CRON] Error construyendo DatosReserva', ['error' => $e->getMessage()]);
         }
 
         // Fallback a datos del usuario
@@ -767,7 +774,7 @@ class CronJobsService
                 $precioEspacio = (float)($valores['valor_descuento'] ?? $valores['valor'] ?? 0);
             }
         } catch (\Throwable $e) {
-            Log::warning('[CRON] Error calculando valor de espacio', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
+            Log::channel('cronjobs')->warning('[CRON] Error calculando valor de espacio', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
         }
 
         $precioElementos = 0.0;
@@ -795,12 +802,13 @@ class CronJobsService
                 $precioElementos += $precio * $cantidad;
             }
         } catch (\Throwable $e) {
-            Log::warning('[CRON] Error calculando valor de elementos', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
+            Log::channel('cronjobs')->warning('[CRON] Error calculando valor de elementos', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
         }
 
         $total = $precioEspacio + $precioElementos;
         return [$total, $precioEspacio, $precioElementos];
     }
+
     private function marcarFallo($model, string $mensaje): void
     {
         try {
@@ -811,14 +819,14 @@ class CronJobsService
             $model->fallos_reporte = $fallos + 1;
             $model->ultimo_error_reporte = mb_substr($mensaje, 0, 500);
             $model->save();
-            Log::error('[CRON] Fallo reporte reporte de reservas y mensualidades', [
+            Log::channel('cronjobs')->error('[CRON] Fallo reporte reporte de reservas y mensualidades', [
                 'id' => $model->id ?? null,
                 'tipo' => $model instanceof Mensualidades ? 'mensualidad' : 'reserva',
                 'fallos' => $model->fallos_reporte,
                 'error' => $mensaje,
             ]);
         } catch (\Throwable $e) {
-            Log::error('[CRON] Error marcando fallo reporte', [
+            Log::channel('cronjobs')->error('[CRON] Error marcando fallo reporte', [
                 'error' => $e->getMessage(),
             ]);
         }

@@ -208,6 +208,20 @@ class UsuarioService
                 );
             }
             DB::beginTransaction();
+            Log::debug('usa facturacion diferente', [
+                'usaFacturacionDiferente' => $data['usaFacturacionDiferente'] ?? null,
+            ]);
+            if (isset($data['usaFacturacionDiferente']) && !$data['usaFacturacionDiferente']) {
+                $personaFact = Persona::where('persona_facturacion_id', $usuario->persona->id_persona ?? 0)
+                    ->where('es_persona_facturacion', true)
+                    ->orderByDesc('id_persona')
+                    ->first();
+                Log::debug($personaFact);
+                if (!empty($personaFact)) {
+                    $personaFact->forceDelete();
+                }
+            }
+
 
             $this->updateUsuarioFields($usuario, $data);
             $this->handlePersonaUpdate($usuario, $data);
