@@ -623,6 +623,7 @@ class CronJobsService
                 ]);
                 $response = Http::timeout(30)
                     ->connectTimeout(5)
+                    ->withBasicAuth($this->usuario_unab, $this->password_unab)
                     ->withHeaders([
                         'Accept' => 'application/json',
                         'Content-Type' => 'application/json',
