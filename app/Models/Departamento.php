@@ -22,7 +22,7 @@ class Departamento extends Model
     ];
 
     protected $casts = [
-        'codigo' => 'integer',
+        'codigo' => 'string',
         'id_pais' => 'integer',
     ];
 
