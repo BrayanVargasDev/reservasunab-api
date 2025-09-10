@@ -315,7 +315,7 @@ class ReservaService
             ->whereNull('eliminado_en')
             ->sortBy('fecha')
             ->sortBy('hora_inicio');
-        Log::debug($novedades);
+
         $reservasExistentes = Reservas::where('id_espacio', $espacio->id)
             ->whereDate('fecha', $fechaConsulta)
             ->whereNull('eliminado_en')
