@@ -148,7 +148,7 @@ class CronJobsService
         $fechaInicioConsulta = $hoy->copy();
         $fechaFinConsulta = $hoy->copy()->addDays(30);
 
-        $urlBase = rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
+        $urlBase = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
 
         Espacio::query()
             ->with(['edificio:id,codigo', 'configuraciones' => function ($q) {
