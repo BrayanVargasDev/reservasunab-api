@@ -679,7 +679,9 @@ class CronJobsService
             $persona = $usuario->persona ?? null;
             // Usar la persona de facturación (padre referenciado) si existe; si no, la persona normal
             $pf = $persona?->personaFacturacion ?: $persona;
-
+            Log::debug('[CRON] Construyendo DatosReserva', [
+                'pf' => $pf
+            ]);
             if ($pf) {
                 $tipoPersona = strtoupper($pf->tipo_persona ?? 'NATURAL');
                 $regimen = (string)($pf->regimen_tributario_id ?? '99');
