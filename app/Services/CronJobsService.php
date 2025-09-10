@@ -36,7 +36,6 @@ class CronJobsService
         $this->unab_endpoint = config('app.unab_endpoint');
         $this->usuario_unab = config('app.unab_usuario');
         $this->password_unab = config('app.unab_password');
-        $this->tarea = '2';
     }
 
     /**
@@ -174,13 +173,16 @@ class CronJobsService
                         }
 
                         $datosPayload = [[
-                            'tarea' => $this->tarea,
+                            'tarea' => 2,
                             'edificio' => $codigoEdificio,
                             'espacio' => $codigoEspacio,
                             'fecha_inicio' => $fechaInicioConsulta->format('d/m/Y'),
                             'fecha_fin' => $fechaFinConsulta->format('d/m/Y'),
                         ]];
-
+                        Log::debug([
+                            'usuario' => $this->usuario_unab,
+                            'payload' => $this->password_unab,
+                        ]);
                         $totalConsultados++;
                         $response = null;
                         try {
