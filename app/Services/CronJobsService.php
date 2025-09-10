@@ -179,10 +179,7 @@ class CronJobsService
                             'fecha_inicio' => $fechaInicioConsulta->format('d/m/Y'),
                             'fecha_fin' => $fechaFinConsulta->format('d/m/Y'),
                         ]];
-                        Log::debug([
-                            'usuario' => $this->usuario_unab,
-                            'payload' => $this->password_unab,
-                        ]);
+
                         $totalConsultados++;
                         $response = null;
                         try {
@@ -192,7 +189,7 @@ class CronJobsService
                             ]);
                             $response = Http::timeout(self::TIME_OUT)
                                 ->connectTimeout(5)
-                                ->withBasicAuth($this->usuario_unab, $this->password_unab)
+                                ->withBasicAuth('RESERVASPPRD', 'RESERVASPPRD')
                                 ->withHeaders([
                                     'Content-Type' => 'application/json',
                                     'Accept' => 'application/json',
