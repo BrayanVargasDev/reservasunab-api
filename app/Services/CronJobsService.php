@@ -359,7 +359,7 @@ class CronJobsService
         $inicio = microtime(true);
         Log::channel('cronjobs')->info('[CRON] Inicio procesarReporteReservasMensualidades (tarea 3)');
 
-        $endpoint = rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
+        $endpoint = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
         $fechaHoy = now();
 
         $maxFallos = 5;
@@ -490,8 +490,8 @@ class CronJobsService
                 $flags = $this->flagsDiaSemanaParaFecha(Carbon::parse($reserva->fecha));
 
                 $payload = [
-                    'tarea' => 3,
-                    'numberDoc' => "522", // Ajustar si existe otro campo
+                    'tarea' => '3',
+                    'numberDoc' => "522",
                     'fechaTransac' => $fechaHoy->format('d/m/Y'),
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => 'PAGO_ONLINE',
