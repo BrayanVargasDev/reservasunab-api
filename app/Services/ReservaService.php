@@ -1798,7 +1798,7 @@ class ReservaService
             $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
-            if ($reserva->pago && $reserva->pago->estado == 'PENDING') {
+            if ($reserva->pago && $reserva->pago->estado != 'OK') {
                 DB::beginTransaction();
                 try {
 
