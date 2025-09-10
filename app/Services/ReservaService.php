@@ -1768,7 +1768,7 @@ class ReservaService
                 return null;
             }
 
-            if (!$reserva->pago) {
+            if (!$reserva->pago()) {
                 Log::warning('Reserva sin pago asociado', [
                     'reserva_id' => $id_reserva,
                     'usuario_id' => $reserva->id_usuario ?? null,
