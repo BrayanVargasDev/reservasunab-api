@@ -184,6 +184,10 @@ class CronJobsService
                         $totalConsultados++;
                         $response = null;
                         try {
+                            Log::debug('[CRON] Consultando novedades', [
+                                'espacio_id' => $espacio->id,
+                                'payload' => $datosPayload,
+                            ]);
                             $response = Http::timeout(self::TIME_OUT)
                                 ->connectTimeout(5)
                                 ->withBasicAuth($this->usuario_unab, $this->password_unab)
