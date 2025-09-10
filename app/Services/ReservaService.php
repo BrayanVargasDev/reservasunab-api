@@ -1881,10 +1881,27 @@ class ReservaService
             }
 
             $valorElementos = 0.0;
-            if ($reserva->pago && $reserva->pago->relationLoaded('detalles') && $reserva->pago->detalles) {
-                $valorElementos = (float) $reserva->pago->detalles
-                    ->where('tipo_concepto', 'elemento')
-                    ->sum('total');
+            if (!empty($detalles)) {
+                $usuario = $reserva->usuarioReserva;
+                $tipos = (array)($usuario->tipos_usuario ?? []);
+
+                foreach ($detalles as $detalle) {
+                    $cantidad = (int)$detalle['cantidad'];
+                    $valorUnit = 0.0;
+
+                    // Aplicar el valor según el tipo de usuario
+                    if (in_array('estudiante', $tipos) && isset($detalle['valor_estudiante'])) {
+                        $valorUnit = (float)$detalle['valor_estudiante'];
+                    } elseif (in_array('egresado', $tipos) && isset($detalle['valor_egresado'])) {
+                        $valorUnit = (float)$detalle['valor_egresado'];
+                    } elseif (in_array('administrativo', $tipos) && isset($detalle['valor_administrativo'])) {
+                        $valorUnit = (float)$detalle['valor_administrativo'];
+                    } elseif (isset($detalle['valor_externo'])) {
+                        $valorUnit = (float)$detalle['valor_externo'];
+                    }
+
+                    $valorElementos += $valorUnit * $cantidad;
+                }
             }
 
             $pagoResumen = null;
