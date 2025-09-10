@@ -212,6 +212,10 @@ class CronJobsService
                         }
 
                         $json = $response->json();
+                        Log::debug('[CRON] Respuesta novedades', [
+                            'espacio_id' => $espacio->id,
+                            'body' => $json,
+                        ]);
                         if (!is_array($json)) {
                             $errores++;
                             Log::error('[CRON] Respuesta inesperada (no JSON array)', [
@@ -380,11 +384,11 @@ class CronJobsService
                 'usuarioReserva.persona.tipoDocumento',
                 'usuarioReserva.persona.ciudadExpedicion',
                 'usuarioReserva.persona.ciudadResidencia',
-                'usuarioReserva.persona.personaFacturacionPadre.tipoDocumento',
-                'usuarioReserva.persona.personaFacturacionPadre.ciudadExpedicion',
-                'usuarioReserva.persona.personaFacturacionPadre.ciudadExpedicion.departamento',
-                'usuarioReserva.persona.personaFacturacionPadre.ciudadResidencia',
-                'usuarioReserva.persona.personaFacturacionPadre.ciudadResidencia.departamento',
+                'usuarioReserva.persona.personaFacturacion.tipoDocumento',
+                'usuarioReserva.persona.personaFacturacion.ciudadExpedicion',
+                'usuarioReserva.persona.personaFacturacion.ciudadExpedicion.departamento',
+                'usuarioReserva.persona.personaFacturacion.ciudadResidencia',
+                'usuarioReserva.persona.personaFacturacion.ciudadResidencia.departamento',
             ])
             ->where('reportado', false)
             ->where(function ($q) use ($maxFallos) {
@@ -399,11 +403,11 @@ class CronJobsService
                 'usuario.persona.tipoDocumento',
                 'usuario.persona.ciudadExpedicion',
                 'usuario.persona.ciudadResidencia',
-                'usuario.persona.personaFacturacionPadre.tipoDocumento',
-                'usuario.persona.personaFacturacionPadre.ciudadExpedicion',
-                'usuario.persona.personaFacturacionPadre.ciudadExpedicion.departamento',
-                'usuario.persona.personaFacturacionPadre.ciudadResidencia',
-                'usuario.persona.personaFacturacionPadre.ciudadResidencia.departamento',
+                'usuario.persona.personaFacturacion.tipoDocumento',
+                'usuario.persona.personaFacturacion.ciudadExpedicion',
+                'usuario.persona.personaFacturacion.ciudadExpedicion.departamento',
+                'usuario.persona.personaFacturacion.ciudadResidencia',
+                'usuario.persona.personaFacturacion.ciudadResidencia.departamento',
                 'espacio.edificio',
             ])
             ->where('reportado', false)
@@ -591,6 +595,11 @@ class CronJobsService
             $model = $item['model'];
             $payload = $item['payload'];
             try {
+                Log::debug('[CRON] Enviando reporte reserva/mensualidad', [
+                    'tipo' => $item['tipo'],
+                    'id' => $model->id ?? null,
+                    'body' => $payload,
+                ]);
                 $response = Http::timeout(self::TIME_OUT)
                     ->withHeaders([
                         'Accept' => 'application/json',
@@ -601,6 +610,11 @@ class CronJobsService
                     throw new Exception('HTTP status ' . $response->status());
                 }
                 $json = $response->json();
+                Log::debug('[CRON] Respuesta reporte reserva/mensualidad', [
+                    'tipo' => $item['tipo'],
+                    'id' => $model->id ?? null,
+                    'body' => $json,
+                ]);
                 if (!is_array($json)) {
                     throw new Exception('Respuesta no JSON');
                 }
@@ -664,7 +678,7 @@ class CronJobsService
         try {
             $persona = $usuario->persona ?? null;
             // Usar la persona de facturación (padre referenciado) si existe; si no, la persona normal
-            $pf = $persona?->personaFacturacionPadre ?: $persona;
+            $pf = $persona?->personaFacturacion ?: $persona;
 
             if ($pf) {
                 $tipoPersona = strtoupper($pf->tipo_persona ?? 'NATURAL');
@@ -675,8 +689,10 @@ class CronJobsService
                 $numDocumento = (string)($pf->numero_documento ?? '');
                 $dv = (string)($pf->digito_verificacion ?? '0');
                 $ciudadDoc = (string)($pf->ciudadExpedicion->codigo ?? '');
+                $departamentoDoc = (string)($pf->ciudadExpedicion->departamento->codigo ?? '');
                 $direccion = (string)($pf->direccion ?? '');
                 $ciudadDir = (string)($pf->ciudadResidencia->codigo ?? '');
+                $departamentoDir = (string)($pf->ciudadResidencia->departamento->codigo ?? '');
                 $email = (string)($usuario->email ?? '');
                 $celular = (string)($pf->celular ?? ($usuario->celular ?? ''));
 
@@ -689,9 +705,9 @@ class CronJobsService
                     'tipoDocumento' => $tipoDocumento,
                     'numDocumento' => $numDocumento,
                     'digitoVerificacion' => $dv,
-                    'ciudadDocumento' => $ciudadDoc,
+                    'ciudadDocumento' => '34|' . $departamentoDoc . '|' . $ciudadDoc,
                     'direccion' => $direccion,
-                    'ciudadDireccion' => $ciudadDir,
+                    'ciudadDireccion' => '34|' . $departamentoDir . '|' . $ciudadDir,
                     'email' => $email,
                     'celular' => $celular,
                 ];
@@ -703,18 +719,18 @@ class CronJobsService
         // Fallback a datos del usuario
         return [
             'rol' => $rol,
-            'tipoPersona' => 'NATURAL',
-            'regimenTributario' => '99',
-            'nombresCliente' => (string)($usuario->nombres ?? ''),
-            'apellidosCliente' => (string)($usuario->apellidos ?? ''),
-            'tipoDocumento' => (string)($usuario->tipo_documento ?? 'CC'),
-            'numDocumento' => (string)($usuario->numero_documento ?? ''),
-            'digitoVerificacion' => '0',
-            'ciudadDocumento' => (string)($usuario->ciudad_documento ?? ''),
-            'direccion' => (string)($usuario->direccion ?? ''),
-            'ciudadDireccion' => (string)($usuario->ciudad_direccion ?? ''),
+            'tipoPersona' => $usuario->persona->tipo_persona,
+            'regimenTributario' => (string)$usuario->persona->regimen_tributario_id ?? '99',
+            'nombresCliente' => trim((string)($usuario->persona->primer_nombre ?? '') . ' ' . (string)($usuario->persona->segundo_nombre ?? '')),
+            'apellidosCliente' => trim((string)($usuario->persona->primer_apellido ?? '') . ' ' . (string)($usuario->persona->segundo_apellido ?? '')),
+            'tipoDocumento' => (string)($usuario->persona->tipo_documento->codigo ?? 'CC'),
+            'numDocumento' => (string)($usuario->persona->numero_documento ?? ''),
+            'digitoVerificacion' => (string)($usuario->persona->digito_verificacion ?? '0'),
+            'ciudadDocumento' => '34|' . (string)($usuario->ciudad_documento->departamento->codigo ?? '') . '|' . (string)($usuario->ciudad_documento->codigo ?? ''),
+            'direccion' => (string)($usuario->persona->direccion ?? ''),
+            'ciudadDireccion' => '34|' . (string)($usuario->ciudad_direccion->departamento->codigo ?? '') . '|' . (string)($usuario->ciudad_direccion->codigo ?? ''),
             'email' => (string)($usuario->email ?? ''),
-            'celular' => (string)($usuario->celular ?? ''),
+            'celular' => (string)($usuario->persona->celular ?? ''),
         ];
     }
 

@@ -73,11 +73,6 @@ class Persona extends Model
         return $this->belongsTo(Ciudad::class, 'ciudad_residencia_id');
     }
 
-    public function personaFacturacionPadre(): BelongsTo
-    {
-        return $this->belongsTo(Persona::class, 'persona_facturacion_id', 'id_persona');
-    }
-
     public function personaFacturacion()
     {
         return $this->hasOne(Persona::class, 'persona_facturacion_id', 'id_persona');
