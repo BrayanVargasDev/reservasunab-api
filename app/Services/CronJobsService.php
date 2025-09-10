@@ -172,13 +172,13 @@ class CronJobsService
                             continue;
                         }
 
-                        $datosPayload = [[
+                        $datosPayload = [
                             'tarea' => '2',
                             'edificio' => $codigoEdificio,
                             'espacio' => $codigoEspacio,
                             'fecha_inicio' => $fechaInicioConsulta->format('d/m/Y'),
                             'fecha_fin' => $fechaFinConsulta->format('d/m/Y'),
-                        ]];
+                        ];
 
                         $totalConsultados++;
                         $response = null;
