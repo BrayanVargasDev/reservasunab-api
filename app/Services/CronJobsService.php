@@ -387,6 +387,7 @@ class CronJobsService
                 'usuarioReserva.persona.personaFacturacion.ciudadResidencia.departamento',
             ])
             ->where('reportado', false)
+            ->where('estado', '=', 'completada')
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
