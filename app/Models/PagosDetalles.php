@@ -37,4 +37,9 @@ class PagosDetalles extends Model
     {
         return $this->belongsTo(Pago::class, 'id_pago', 'codigo');
     }
+
+    public function reserva()
+    {
+        return $this->belongsTo(Reservas::class, 'id_concepto', 'id');
+    }
 }

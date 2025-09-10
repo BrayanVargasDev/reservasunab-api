@@ -87,7 +87,8 @@ class Reservas extends Model
             'codigo',
             'id',
             'id_pago'
-        )->where('pagos_detalles.tipo_concepto', 'reserva');
+        )
+            ->where('pagos_detalles.tipo_concepto', 'reserva');
     }
 
     public function jugadores()
