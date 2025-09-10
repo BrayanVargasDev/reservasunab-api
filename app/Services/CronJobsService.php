@@ -690,10 +690,10 @@ class CronJobsService
                 $tipoDocumento = $pf->tipoDocumento->codigo ?? 'CC';
                 $numDocumento = (string)($pf->numero_documento ?? '');
                 $dv = (string)($pf->digito_verificacion ?? '0');
-                $ciudadDoc = (string)($pf->ciudadExpedicion->codigo ?? '');
+                $ciudadDoc = str_pad((string)($pf->ciudadExpedicion->codigo ?? ''), 4, '0', STR_PAD_LEFT);
                 $departamentoDoc = (string)($pf->ciudadExpedicion->departamento->codigo ?? '');
                 $direccion = (string)($pf->direccion ?? '');
-                $ciudadDir = (string)($pf->ciudadResidencia->codigo ?? '');
+                $ciudadDir = str_pad((string)($pf->ciudadResidencia->codigo ?? ''), 4, '0', STR_PAD_LEFT);
                 $departamentoDir = (string)($pf->ciudadResidencia->departamento->codigo ?? '');
                 $email = (string)($usuario->email ?? '');
                 $celular = (string)($pf->celular ?? ($usuario->celular ?? ''));
@@ -728,9 +728,9 @@ class CronJobsService
             'tipoDocumento' => (string)($usuario->persona->tipo_documento->codigo ?? 'CC'),
             'numDocumento' => (string)($usuario->persona->numero_documento ?? ''),
             'digitoVerificacion' => (string)($usuario->persona->digito_verificacion ?? '0'),
-            'ciudadDocumento' => '34|' . (string)($usuario->ciudad_documento->departamento->codigo ?? '') . '|' . (string)($usuario->ciudad_documento->codigo ?? ''),
+            'ciudadDocumento' => '34|' . (string)($usuario->ciudad_documento->departamento->codigo ?? '') . '|' . str_pad((string)($usuario->ciudad_documento->codigo ?? ''), 4, '0', STR_PAD_LEFT),
             'direccion' => (string)($usuario->persona->direccion ?? ''),
-            'ciudadDireccion' => '34|' . (string)($usuario->ciudad_direccion->departamento->codigo ?? '') . '|' . (string)($usuario->ciudad_direccion->codigo ?? ''),
+            'ciudadDireccion' => '34|' . (string)($usuario->ciudad_direccion->departamento->codigo ?? '') . '|' . str_pad((string)($usuario->ciudad_direccion->codigo ?? ''), 4, '0', STR_PAD_LEFT),
             'email' => (string)($usuario->email ?? ''),
             'celular' => (string)($usuario->persona->celular ?? ''),
         ];

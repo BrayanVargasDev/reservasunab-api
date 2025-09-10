@@ -124,7 +124,7 @@ class ReservaService
 
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('codigo', 'like', "%$search%")
+                $q->where('codigo', 'ilike', "%$search%")
                     ->orWhereHas('espacio', function ($qEspacio) use ($search) {
                         $qEspacio->where('nombre', 'like', "%$search%");
                     })
