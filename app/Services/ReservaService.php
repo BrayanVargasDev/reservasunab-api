@@ -12,6 +12,7 @@ use App\Models\FranjaHoraria;
 use App\Models\Reservas;
 use App\Models\Movimientos;
 use App\Models\Mensualidades;
+use App\Models\Pago;
 use App\Models\Usuario;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
@@ -1768,11 +1769,24 @@ class ReservaService
                 return null;
             }
 
-            if (!$reserva->pago()) {
-                Log::warning('Reserva sin pago asociado', [
-                    'reserva_id' => $id_reserva,
-                    'usuario_id' => $reserva->id_usuario ?? null,
-                ]);
+            if (!$reserva->relationLoaded('pago')) {
+                $reserva->load('pago');
+            }
+
+            if (!$reserva->pago) {
+                $pago = Pago::whereHas('detalles', function ($q) use ($reserva) {
+                    $q->where('tipo_concepto', 'reserva')
+                        ->where('id_concepto', $reserva->id);
+                })->with('detalles')->first();
+
+                if ($pago) {
+                    $reserva->setRelation('pago', $pago);
+                } else {
+                    Log::warning('Reserva sin pago asociado', [
+                        'reserva_id' => $id_reserva,
+                        'usuario_id' => $reserva->id_usuario ?? null,
+                    ]);
+                }
             }
 
             $fecha = $reserva->fecha instanceof Carbon ? $reserva->fecha : Carbon::parse($reserva->fecha);
