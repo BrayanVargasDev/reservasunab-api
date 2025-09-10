@@ -616,12 +616,13 @@ class CronJobsService
             $model = $item['model'];
             $payload = $item['payload'];
             try {
-                Log::channel('cronjobs')->debug('[CRON] Enviando reporte reserva/mensualidad', [
+                Log::channel('cronjobs')->info('[CRON] Enviando reporte reserva/mensualidad', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                     'body' => $payload,
                 ]);
-                $response = Http::timeout(self::TIME_OUT)
+                $response = Http::timeout(30)
+                    ->connectTimeout(5)
                     ->withHeaders([
                         'Accept' => 'application/json',
                         'Content-Type' => 'application/json',
@@ -631,7 +632,7 @@ class CronJobsService
                     throw new Exception('HTTP status ' . $response->status());
                 }
                 $json = $response->json();
-                Log::channel('cronjobs')->debug('[CRON] Respuesta reporte reserva/mensualidad', [
+                Log::channel('cronjobs')->info('[CRON] Respuesta reporte reserva/mensualidad', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                     'body' => $json,
