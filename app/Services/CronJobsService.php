@@ -183,7 +183,7 @@ class CronJobsService
                         $totalConsultados++;
                         $response = null;
                         try {
-                            Log::channel('cronjobs')->debug('[CRON] Consultando novedades', [
+                            Log::channel('cronjobs')->info('[CRON] Consultando novedades', [
                                 'espacio_id' => $espacio->id,
                                 'payload' => $datosPayload,
                             ]);
@@ -228,7 +228,6 @@ class CronJobsService
                             continue;
                         }
 
-                        // Normalizar respuesta: el servicio responde como un array con un único objeto {estado, mensaje, datos}
                         $resp = $this->normalizarRespuestaServicio($json);
                         if (!$resp) {
                             $errores++;
@@ -240,7 +239,6 @@ class CronJobsService
                         }
 
                         if (strtolower((string)$resp['estado']) !== 'success') {
-                            // Solo loguear mensajes de error del servicio
                             $errores++;
                             Log::channel('cronjobs')->error('[CRON] Error del servicio en novedades', [
                                 'espacio_id' => $espacio->id,
