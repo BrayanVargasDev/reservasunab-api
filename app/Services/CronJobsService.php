@@ -187,8 +187,6 @@ class CronJobsService
                                 'espacio_id' => $espacio->id,
                                 'payload' => $datosPayload,
                                 'urlBase' => $urlBase,
-                                'usuario' => $this->usuario_unab,
-                                'password' => $this->password_unab,
                             ]);
 
                             $response = Http::timeout(30)
@@ -199,16 +197,11 @@ class CronJobsService
                                     'Accept' => 'application/json',
                                     'Connection' => 'keep-alive'
                                 ])
-                                ->beforeSending(function ($request) use ($espacio) {
-                                    Log::channel('cronjobs')->info('[CRON] Enviando petición HTTP', [
-                                        'espacio_id' => $espacio->id,
-                                        'url' => $request->url(),
-                                        'method' => $request->method(),
-                                        'headers' => $request->headers(),
-                                        'body' => $request->body()
-                                    ]);
-                                })
                                 ->post($urlBase, $datosPayload);
+
+                            Log::channel('cronjobs')->info('[CRON] Petición HTTP realizada', [
+                                'response' => $response,
+                            ]);
                         } catch (\Throwable $httpEx) {
                             $errores++;
                             Log::channel('cronjobs')->error('[CRON] Error HTTP consultando novedades', [
