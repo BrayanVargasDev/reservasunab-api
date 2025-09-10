@@ -366,6 +366,7 @@ class CronJobsService
         $reportadasOk = 0;
         $fallidas = 0;
         $omitidasPorFallos = 0;
+        $omitidasGimnasio = 0;
 
         $reservasFallosMax = [];
         $mensualidadesFallosMax = [];
@@ -375,6 +376,7 @@ class CronJobsService
                 'pago',
                 'detalles.elemento',
                 'espacio.edificio',
+                'espacio.categoria',
                 'usuarioReserva.persona.tipoDocumento',
                 'usuarioReserva.persona.ciudadExpedicion',
                 'usuarioReserva.persona.ciudadResidencia',
@@ -419,6 +421,26 @@ class CronJobsService
                 if (!$espacio || !$espacio->edificio?->codigo || !$espacio->codigo) {
                     $this->marcarFallo($reserva, 'Espacio sin códigos de edificio o id de espacio');
                     $fallidas++;
+                    continue;
+                }
+
+                $esGimnasio = false;
+                try {
+                    $nombreEspacio = strtoupper((string)($espacio->nombre ?? ''));
+                    $nombreCategoria = strtoupper((string)($espacio->categoria->nombre ?? ''));
+                    if (($espacio->pago_mensual ?? false) === true || str_contains($nombreEspacio, 'GIMNASIO') || str_contains($nombreCategoria, 'GIMNASIO')) {
+                        $esGimnasio = true;
+                    }
+                } catch (\Throwable $e) {
+                    // Silencioso
+                }
+
+                if ($esGimnasio) {
+                    $omitidasGimnasio++;
+                    Log::channel('cronjobs')->info('[CRON] Reserva omitida por ser de gimnasio', [
+                        'reserva_id' => $reserva->id,
+                        'espacio_id' => $espacio->id,
+                    ]);
                     continue;
                 }
 
@@ -662,6 +684,7 @@ class CronJobsService
             'reportadas_ok' => $reportadasOk,
             'fallidas' => $fallidas,
             'omitidas_fallos_max' => $omitidasPorFallos,
+            'omitidas_gimnasio' => $omitidasGimnasio,
             'ms' => $duracion,
         ]);
     }
