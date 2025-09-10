@@ -189,9 +189,9 @@ class CronJobsService
                                 'urlBase' => $urlBase,
                             ]);
 
-                            $response = Http::timeout(30)
-                                ->connectTimeout(5)
-                                ->withBasicAuth('RESERVASPPRD', 'RESERVASPPRD')
+                            $response = Http::
+                                // ->connectTimeout(5)
+                                withBasicAuth('RESERVASPPRD', 'RESERVASPPRD')
                                 ->withHeaders([
                                     'Content-Type' => 'application/json',
                                     'Accept' => 'application/json',
