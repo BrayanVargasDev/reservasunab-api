@@ -59,7 +59,7 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'facturacion.telefono' => 'sometimes|string|max:15',
             'facturacion.digitoVerificacion' => 'sometimes|numeric',
             'facturacion.direccion' => 'sometimes|string|max:255',
-            'facturacion.ciudadExpedicion' => 'sometimes|exists:ciudades,id',
+            'facturacion.ciudadExpedicion' => 'sometimes|nullable|exists:ciudades,id',
             'facturacion.ciudadResidencia' => 'sometimes|exists:ciudades,id',
             'facturacion.email' => 'sometimes|string|email|max:100',
             'facturacion.regimenTributario' => 'sometimes|exists:regimenes_tributarios,codigo',
