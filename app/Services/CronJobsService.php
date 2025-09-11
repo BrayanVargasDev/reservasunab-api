@@ -501,7 +501,7 @@ class CronJobsService
                     'descuentoTotal' => 0.00,
                     'totalPagar' => round((float)$totalPagar, 2),
                     'Ecollect' => $hayPagoOk ? [
-                        'ticketId' => $pago->ticket_id,
+                        'ticketId' => (string)$pago->ticket_id,
                         'paymentId' => $codigoTrazaPago ?? null,
                         'medioPagoEcollect' => (string)($medioPago ?? '0'),
                         'svrcode' => 21000,
