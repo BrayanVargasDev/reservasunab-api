@@ -1828,6 +1828,10 @@ class ReservaService
                         }
                         $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
                         $reserva->save();
+
+                        if ($reserva->estado === 'cancelada') {
+                            $reserva->delete();
+                        }
                     }
                     DB::commit();
                 } catch (Throwable $th) {

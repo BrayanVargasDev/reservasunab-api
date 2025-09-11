@@ -377,6 +377,7 @@ class CronJobsService
                 'detalles.elemento',
                 'espacio.edificio',
                 'espacio.categoria',
+                'movimientos',
                 'usuarioReserva.persona.tipoDocumento',
                 'usuarioReserva.persona.ciudadExpedicion',
                 'usuarioReserva.persona.ciudadResidencia',
@@ -387,11 +388,9 @@ class CronJobsService
                 'usuarioReserva.persona.personaFacturacion.ciudadResidencia.departamento',
             ])
             ->where('reportado', false)
-            ->whereIn('estado', ['completada', 'pagada', 'aprobada'])
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
-            ->whereNull('eliminado_en')
             ->limit(300)
             ->get();
 
@@ -458,12 +457,13 @@ class CronJobsService
                 $elementoNombres = $tieneElementos ? $detalles->pluck('elemento.nombre')->filter()->implode(',') : null;
 
                 $pago = $reserva->pago; // puede ser null
+                $tieneMovimiento = ($reserva->movimientos && $reserva->movimientos->count() > 0);
 
                 $medioPago = null;
                 if ($pago) {
                     $consultaPago = PagoConsulta::where('codigo', $pago->codigo)->first();
 
-                    if (!$consultaPago && strtoupper($pago->estado) !== 'OK') {
+                    if (!$consultaPago && strtoupper($pago->estado) !== 'OK' && !$tieneMovimiento) {
                         $this->marcarFallo($reserva, 'Pago asociado sin registro en PagoConsulta');
                         $fallidas++;
                         continue;
@@ -473,6 +473,7 @@ class CronJobsService
                 }
 
                 $hayPagoOk = $pago && strtoupper($pago->estado) === 'OK';
+                // $formaPago = $hayPagoOk ? 'PAGO_ONLINE' : ($tieneMovimiento ? 'SIN_PAGO' : 'PAGO_ONLINE');
 
                 $tipoReserva = $tieneElementos ? 'TODO' : 'ESPACIO';
 
@@ -497,7 +498,7 @@ class CronJobsService
                     'numberDoc' => "522",
                     'fechaTransac' => $fechaHoy->format('d/m/Y'),
                     'canalVenta' => 'RESERVA_EN_LINEA',
-                    'formaPago' => 'PAGO_ONLINE',
+                    'formaPago' => $hayPagoOk ? 'PAGO_ONLINE' : '',
                     'descuentoTotal' => 0.00,
                     'totalPagar' => round((float)$totalPagar, 2),
                     'Ecollect' => $hayPagoOk ? [
@@ -600,10 +601,10 @@ class CronJobsService
                         'viernes' => null,
                         'sabado' => null,
                         'domingo' => null,
-                        'fechaInicioReserva' => Carbon::parse($mensualidad->fecha_inicio)->format('d/m/Y'),
-                        'fechaFinReserva' => Carbon::parse($mensualidad->fecha_fin)->format('d/m/Y'),
-                        'horaInicio' => '0000',
-                        'horaFin' => '2359',
+                        'fechaInicioReserva' => '',
+                        'fechaFinReserva' => '',
+                        'horaInicio' => '',
+                        'horaFin' => '',
                         'descuentoReserva' => 0.00,
                         'precioTotal' => round((float)$mensualidad->valor, 2),
                     ]],
