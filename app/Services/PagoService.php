@@ -219,6 +219,7 @@ class PagoService
 
     public function iniciarTransaccionDePago(int $id_reserva)
     {
+        Log::debug('Ejecutando método', ['metodo' => 'iniciarTransaccionDePago', 'id_reserva' => $id_reserva]);
         if (!$this->session_token) {
             $this->getSessionToken();
         }
@@ -235,6 +236,27 @@ class PagoService
         ];
 
         try {
+            // 1. Verificar si ya existe un pago en estado CREATED para esta reserva
+            // Se asume que 'CREATED' es el estado entregado por la pasarela antes de redirigir al usuario
+            // y que se debe reutilizar la misma URL si no ha cambiado.
+            $pagoExistente = Pago::whereRaw('LOWER(estado) = ?', ['created'])
+                ->whereHas('detalles', function ($q) use ($id_reserva) {
+                    $q->where('tipo_concepto', 'reserva')
+                        ->where('id_concepto', $id_reserva);
+                })
+                ->whereNull('eliminado_en')
+                ->orderBy('creado_en', 'desc')
+                ->first();
+
+            if ($pagoExistente && !empty($pagoExistente->url_ecollect)) {
+                Log::info('Reutilizando pago existente CREATED para la reserva', [
+                    'id_reserva' => $id_reserva,
+                    'pago_codigo' => $pagoExistente->codigo,
+                    'estado' => $pagoExistente->estado,
+                ]);
+                return $pagoExistente->url_ecollect;
+            }
+
             DB::beginTransaction();
 
             $pago = $this->crearPago($id_reserva);
@@ -256,6 +278,8 @@ class PagoService
             ];
 
             $response = Http::post($url, $data);
+
+            Log::debug('Respuesta de la API de pagos', ['response' => $response->json()]);
 
             if (!$response->successful()) {
                 throw new Exception('Error initiating payment transaction after token refresh: ' . $response->body());
