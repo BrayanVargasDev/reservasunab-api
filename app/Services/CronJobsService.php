@@ -489,7 +489,6 @@ class CronJobsService
                 $rol = $rolDb === 'egresado' ? 'GRADUADO' : strtoupper($rolDb ?: 'ESTUDIANTE');
 
                 // Calcular totales y flags de día
-                [$totalPagar, $precioEspacio, $precioElementos] = $this->calcularTotalReserva($reserva, $usuario);
                 $flags = $this->flagsDiaSemanaParaFecha(Carbon::parse($reserva->fecha));
                 $codigoTrazaPago = PagoConsulta::where('codigo', $pago->codigo ?? null)->first()?->codigo_traza;
 
@@ -500,7 +499,7 @@ class CronJobsService
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => $hayPagoOk ? 'PAGO_ONLINE' : '',
                     'descuentoTotal' => 0.00,
-                    'totalPagar' => round((float)$totalPagar, 2),
+                    'totalPagar' => round((float)$reserva->precio_total, 2),
                     'Ecollect' => $hayPagoOk ? [
                         'ticketId' => (string)$pago->ticket_id,
                         'paymentId' => $codigoTrazaPago ?? null,
@@ -531,7 +530,7 @@ class CronJobsService
                         'horaInicio' => $horaInicio,
                         'horaFin' => $horaFin,
                         'descuentoReserva' => 0.00,
-                        'precioTotal' => round((float)$totalPagar, 2),
+                        'precioTotal' => round((float)$reserva->precio_total, 2),
                     ]],
                 ];
 
@@ -696,12 +695,6 @@ class CronJobsService
         ]);
     }
 
-    // Wrapper para mantener compatibilidad con el comando existente
-    public function procesarJobTres(): void
-    {
-        $this->procesarReporteReservasMensualidades();
-    }
-
     private function construirDatosReserva($usuario, string $rol): array
     {
         try {
@@ -779,54 +772,6 @@ class CronJobsService
             'sabado' => $dow === 6,
             'domingo' => $dow === 7,
         ];
-    }
-
-    private function calcularTotalReserva(Reservas $reserva, $usuario): array
-    {
-        $precioEspacio = 0.0;
-        try {
-            $horaIni = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio->format('H:i') : Carbon::parse($reserva->hora_inicio)->format('H:i');
-            $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin->format('H:i') : Carbon::parse($reserva->hora_fin)->format('H:i');
-            $idConfig = $reserva->id_configuracion ?? optional($reserva->configuracion)->id;
-            if ($idConfig) {
-                $svc = app(\App\Services\ReservaService::class);
-                $valores = $svc->obtenerValorReserva(null, $idConfig, $horaIni, $horaFin);
-                $precioEspacio = (float)($valores['valor_descuento'] ?? $valores['valor'] ?? 0);
-            }
-        } catch (\Throwable $e) {
-            Log::channel('cronjobs')->warning('[CRON] Error calculando valor de espacio', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
-        }
-
-        $precioElementos = 0.0;
-        try {
-            $rolDb = strtolower((string)($usuario->tipos_usuario[0] ?? 'externo'));
-            foreach ($reserva->detalles as $det) {
-                $elem = $det->elemento;
-                if (!$elem) continue;
-                $cantidad = (int)($det->cantidad ?? 1);
-                $precio = 0.0;
-                switch ($rolDb) {
-                    case 'administrativo':
-                        $precio = (float)($elem->valor_administrativo ?? 0);
-                        break;
-                    case 'egresado':
-                        $precio = (float)($elem->valor_egresado ?? 0);
-                        break;
-                    case 'estudiante':
-                        $precio = (float)($elem->valor_estudiante ?? 0);
-                        break;
-                    default:
-                        $precio = (float)($elem->valor_externo ?? 0);
-                        break;
-                }
-                $precioElementos += $precio * $cantidad;
-            }
-        } catch (\Throwable $e) {
-            Log::channel('cronjobs')->warning('[CRON] Error calculando valor de elementos', ['reserva_id' => $reserva->id, 'error' => $e->getMessage()]);
-        }
-
-        $total = $precioEspacio + $precioElementos;
-        return [$total, $precioEspacio, $precioElementos];
     }
 
     private function marcarFallo($model, string $mensaje): void

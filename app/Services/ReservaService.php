@@ -928,22 +928,9 @@ class ReservaService
                 throw $th;
             }
 
-            $reserva = Reservas::create([
-                'id_usuario' => $usuario->id_usuario,
-                'id_espacio' => $espacioId,
-                'fecha' => $fecha,
-                'id_configuracion' => $idConfiguracion,
-                'estado' => 'inicial',
-                'hora_inicio' => $horaInicio->format('H:i:s'),
-                'hora_fin' => $horaFin->format('H:i:s'),
-                'check_in' => false,
-                'codigo' => Ulid::generate(),
-            ]);
-
             $valoresReserva = $this->obtenerValorReserva(null, $idConfiguracion, $horaInicio, $horaFin);
             $valorReserva = $valoresReserva ? (float)($valoresReserva['valor_descuento'] ?? 0) : 0.0;
 
-            // Si el espacio se paga con mensualidad y el usuario tiene mensualidad activa para la fecha, el valor del espacio es 0
             try {
                 $cobertura = $this->calcularCoberturaMensualidad($espacio, (int)$usuario->id_usuario, $fecha);
                 if ($cobertura['pago_mensual'] && $cobertura['tiene_mensualidad_activa']) {
@@ -959,7 +946,6 @@ class ReservaService
                     }
                 }
             } catch (\Throwable $th) {
-                // no bloquear confirmación por errores de consulta de mensualidad
                 Log::warning('Fallo validando mensualidad en confirmarReserva', [
                     'espacio_id' => $espacioId,
                     'usuario_id' => $usuario->id_usuario ?? null,
@@ -997,7 +983,6 @@ class ReservaService
                     $valorElementos += $valorUnit * $cant;
 
                     $detallesData[] = [
-                        'id_reserva' => $reserva->id,
                         'id_elemento' => $idElem,
                         'cantidad' => $cant,
                     ];
@@ -1025,6 +1010,22 @@ class ReservaService
                     throw new Exception('Valor total de la reserva inválido.');
                 }
             }
+
+            $reserva = Reservas::create([
+                'id_usuario' => $usuario->id_usuario,
+                'id_espacio' => $espacioId,
+                'fecha' => $fecha,
+                'id_configuracion' => $idConfiguracion,
+                'estado' => 'inicial',
+                'hora_inicio' => $horaInicio->format('H:i:s'),
+                'hora_fin' => $horaFin->format('H:i:s'),
+                'check_in' => false,
+                'codigo' => Ulid::generate(),
+                'precio_base' => $valoresReserva['valor_real'] ?? 0,
+                'precio_espacio' => $valoresReserva['valor_descuento'] ?? 0,
+                'precio_elementos' => $valorElementos,
+                'precio_total' => $valorTotal,
+            ]);
 
             if ($valorTotal <= 0) {
                 $requiereAprobacion = (bool) ($espacio->aprobar_reserva ?? false);
@@ -1077,6 +1078,10 @@ class ReservaService
             }
 
             if (!empty($detallesData)) {
+                foreach ($detallesData as &$detalle) {
+                    $detalle['id_reserva'] = $reserva->id;
+                }
+
                 DB::table('reservas_detalles')->insert($detallesData);
             }
 
@@ -1748,7 +1753,6 @@ class ReservaService
 
         try {
             $reserva = Reservas::withTrashed()->with([
-                // agregar aprobar_reserva
                 'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva,pago_mensual,valor_mensualidad',
                 'espacio.sede:id,nombre',
                 'usuarioReserva',
@@ -1794,8 +1798,6 @@ class ReservaService
             $horaFin = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::createFromFormat('H:i:s', $reserva->hora_fin);
 
             $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
-            $valoresReserva = $this->obtenerValorReserva(null, $reserva->id_configuracion, $horaInicio, $horaFin);
-            $valor = $valoresReserva ? $valoresReserva['valor_descuento'] : 0;
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
             if ($reserva->pago && $reserva->pago->estado != 'OK') {
@@ -1840,7 +1842,6 @@ class ReservaService
                 }
             }
 
-            // Procesar información de jugadores
             $jugadores = [];
 
             if ($reserva->jugadores->isNotEmpty()) {
@@ -1907,7 +1908,6 @@ class ReservaService
                     $cantidad = (int)$detalle['cantidad'];
                     $valorUnit = 0.0;
 
-                    // Aplicar el valor según el tipo de usuario
                     if (in_array('estudiante', $tipos) && isset($detalle['valor_estudiante'])) {
                         $valorUnit = (float)$detalle['valor_estudiante'];
                     } elseif (in_array('egresado', $tipos) && isset($detalle['valor_egresado'])) {
@@ -1943,21 +1943,14 @@ class ReservaService
             if (!$pagoResumen) {
                 $pagoResumen = Movimientos::where('id_reserva', $reserva->id)
                     ->where('tipo', 'egreso')
-                    ->where('valor', $valor + $valorElementos)
+                    ->where('valor', $reserva->precio_total)
                     ->where('id_usuario', $reserva->id_usuario)
                     ->whereNull('eliminado_en')
                     ->first();
             }
 
-            $valorRealReserva = $valoresReserva ? (float)$valoresReserva['valor_real'] : 0.0;
-            $valorDescReserva = $valoresReserva ? (float)$valoresReserva['valor_descuento'] : 0.0;
-
             $coberturaMensualidad = $this->calcularCoberturaMensualidad($reserva->espacio, (int)$reserva->id_usuario, $fecha);
 
-            if ($coberturaMensualidad['pago_mensual'] && $coberturaMensualidad['tiene_mensualidad_activa']) {
-                $valorRealReserva = 0.0;
-                $valorDescReserva = 0.0;
-            }
             $resumenReserva = [
                 'id' => $reserva->id,
                 'id_espacio' => $reserva->id_espacio,
@@ -1969,10 +1962,10 @@ class ReservaService
                 'fecha' => $fecha->format('Y-m-d'),
                 'hora_inicio' => $horaInicio->format('h:i A'),
                 'hora_fin' => $horaFin->format('h:i A'),
-                'valor' => $valorRealReserva,
-                'valor_descuento' => $valorDescReserva,
-                'valor_elementos' => $valorElementos,
-                'valor_total_reserva' => $valorDescReserva + $valorElementos,
+                'valor' => $reserva->precio_base,
+                'valor_descuento' => $reserva->precio_espacio,
+                'valor_elementos' => $reserva->precio_elementos,
+                'valor_total_reserva' => $reserva->precio_total,
                 'porcentaje_descuento' => $this->obtenerPorcentajeDescuento($reserva->id_espacio, $reserva->id_usuario),
                 'estado' => $reserva->estado,
                 'usuario_reserva' => $nombreCompleto ?: 'Usuario sin nombre',

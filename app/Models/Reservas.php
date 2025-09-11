@@ -35,6 +35,10 @@ class Reservas extends Model
         'reportado',
         'fallos_reporte',
         'ultimo_error_reporte',
+        'precio_base',
+        'precio_espacio',
+        'precio_elementos',
+        'precio_total',
     ];
 
     protected $casts = [
@@ -52,6 +56,11 @@ class Reservas extends Model
         'eliminado_en' => 'datetime',
         'reportado' => 'boolean',
         'fallos_reporte' => 'integer',
+        'ultimo_error_reporte' => 'string',
+        'precio_base' => 'decimal:2',
+        'precio_espacio' => 'decimal:2',
+        'precio_elementos' => 'decimal:2',
+        'precio_total' => 'decimal:2',
     ];
 
     protected $hidden = [

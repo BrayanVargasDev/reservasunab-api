@@ -236,9 +236,6 @@ class PagoService
         ];
 
         try {
-            // 1. Verificar si ya existe un pago en estado CREATED para esta reserva
-            // Se asume que 'CREATED' es el estado entregado por la pasarela antes de redirigir al usuario
-            // y que se debe reutilizar la misma URL si no ha cambiado.
             $pagoExistente = Pago::whereRaw('LOWER(estado) = ?', ['created'])
                 ->whereHas('detalles', function ($q) use ($id_reserva) {
                     $q->where('tipo_concepto', 'reserva')
@@ -311,25 +308,11 @@ class PagoService
 
         $reserva = $this->reserva_service->getReservaById($id_reserva);
 
-        $valoresReserva = $this->reserva_service->obtenerValorReserva(
-            [],
-            $reserva->configuracion->id,
-            $reserva->hora_inicio,
-            $reserva->hora_fin
-        );
-
         $reserva->loadMissing(['detalles', 'detalles.elemento', 'usuarioReserva']);
-        $valorElementos = $this->calcularValorElementos($reserva);
 
-        $valorReserva = $valoresReserva ? (float) $valoresReserva['valor_descuento'] : 0.0;
-        $valorTotal = $valorReserva + $valorElementos;
-
-        if ($valorTotal <= 0) {
-            throw new Exception('Reserva sin costo: no requiere creación de pago.');
-        }
 
         $pago = Pago::create([
-            'valor' => $valorTotal,
+            'valor' => $reserva->precio_total,
             'estado' => 'inicial',
         ]);
 
@@ -339,7 +322,7 @@ class PagoService
             'tipo_concepto' => 'reserva',
             'cantidad' => 1,
             'id_concepto' => $reserva->id,
-            'total' => $valorReserva,
+            'total' => $reserva->precio_total,
             'creado_en' => now(),
             'actualizado_en' => now(),
         ];
@@ -352,8 +335,8 @@ class PagoService
                 continue;
             }
 
-            if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) {
-                $valorUnit = (float) $elem->valor_estudiante;
+            if (in_array('estudiante', $tipos)) {
+                $valorUnit = (float) $elem->valor_estudiante ?? 0.0;
             } elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) {
                 $valorUnit = (float) $elem->valor_egresado;
             } elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) {
