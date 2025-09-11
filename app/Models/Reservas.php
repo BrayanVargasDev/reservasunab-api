@@ -123,6 +123,10 @@ class Reservas extends Model
             return false;
         }
 
+        if ($this->estado === 'cancelada') {
+            return false;
+        }
+
         $fechaHoraReserva = $this->fecha->format('Y-m-d') . ' ' . $this->hora_inicio->format('H:i:s');
         $momentoReserva = Carbon::parse($fechaHoraReserva);
 

@@ -387,7 +387,7 @@ class CronJobsService
                 'usuarioReserva.persona.personaFacturacion.ciudadResidencia.departamento',
             ])
             ->where('reportado', false)
-            ->where('estado', '=', 'completada')
+            ->whereIn('estado', ['completada', 'pagada', 'aprobada'])
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
@@ -562,6 +562,7 @@ class CronJobsService
                         $q->where('tipo_concepto', 'mensualidad')->where('id_concepto', $mensualidad->id);
                     })
                     ->first();
+
                 $hayPagoOk = $pago && strtoupper($pago->estado) === 'OK';
                 if (!$hayPagoOk) {
                     // Omitir mensualidades sin pago OK (no cuenta como fallo)
@@ -581,7 +582,7 @@ class CronJobsService
                     'totalPagar' => round((float)$mensualidad->valor, 2),
                     'Ecollect' => [
                         'ticketId' => $pago->ticket_id,
-                        'paymentId' => $pago->codigo,
+                        'paymentId' => PagoConsulta::where('codigo', $pago->codigo)->first()->codigo_traza ?? null,
                         'medioPagoEcollect' => (string)(optional(PagoConsulta::where('codigo', $pago->codigo)->first())->medio_pago === 'PSE' ? 0 : 1),
                         'svrcode' => 21000,
                     ],
