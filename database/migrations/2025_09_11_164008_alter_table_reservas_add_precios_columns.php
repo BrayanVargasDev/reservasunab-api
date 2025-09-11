@@ -16,6 +16,7 @@ return new class extends Migration
             $table->decimal('precio_espacio', 10, 2)->default(0);
             $table->decimal('precio_elementos', 10, 2)->default(0);
             $table->decimal('precio_total', 10, 2)->default(0);
+            $table->decimal('porcentaje_aplicado', 3, 1)->default(0);
         });
     }
 
@@ -29,6 +30,7 @@ return new class extends Migration
             $table->dropColumn('precio_espacio');
             $table->dropColumn('precio_elementos');
             $table->dropColumn('precio_total');
+            $table->dropColumn('porcentaje_aplicado');
         });
     }
 };

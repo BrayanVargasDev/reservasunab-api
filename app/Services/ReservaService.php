@@ -1025,6 +1025,7 @@ class ReservaService
                 'precio_espacio' => $valoresReserva['valor_descuento'] ?? 0,
                 'precio_elementos' => $valorElementos,
                 'precio_total' => $valorTotal,
+                'porcentaje_aplicado' => $valoresReserva['porcentaje_aplicado'] ?? 0,
             ]);
 
             if ($valorTotal <= 0) {
@@ -1153,6 +1154,7 @@ class ReservaService
                         return [
                             'valor_real' => 0,
                             'valor_descuento' => 0,
+                            'porcentaje_aplicado' => 0
                         ];
                     }
                 }
@@ -1161,7 +1163,8 @@ class ReservaService
             }
             return [
                 'valor_real' => $data['valor'],
-                'valor_descuento' => $data['valor']
+                'valor_descuento' => $data['valor'],
+                'porcentaje_aplicado' => $data['porcentaje_descuento'] ?? 0
             ];
         }
 
@@ -1244,6 +1247,7 @@ class ReservaService
                     return [
                         'valor_real' => 0,
                         'valor_descuento' => 0,
+                        'porcentaje_aplicado' => 0
                     ];
                 }
             } catch (Exception $e) {
@@ -1253,11 +1257,12 @@ class ReservaService
                 ]);
             }
 
-            $valorDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio);
+            $valoresDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio);
 
             return [
                 'valor_real' => $valorReal,
-                'valor_descuento' => $valorDescuento
+                'valor_descuento' => $valoresDescuento[0],
+                'porcentaje_aplicado' => $valoresDescuento[1],
             ];
         } catch (Exception $e) {
             Log::error('Error al obtener valor de franja', [
@@ -1275,7 +1280,7 @@ class ReservaService
             $usuario = Auth::user();
 
             if (!$usuario || !$usuario->tipos_usuario || empty($usuario->tipos_usuario)) {
-                return $valorBase;
+                return [$valorBase, 0];
             }
 
             $configTipoUsuario = EspacioTipoUsuarioConfig::where('id_espacio', $espacioId)
@@ -1285,7 +1290,7 @@ class ReservaService
                 ->first();
 
             if (!$configTipoUsuario || !$configTipoUsuario->porcentaje_descuento) {
-                return $valorBase;
+                return [$valorBase, 0];
             }
 
             $porcentajeDescuento = $configTipoUsuario->porcentaje_descuento;
@@ -1293,7 +1298,7 @@ class ReservaService
             $valorFinal = $valorBase - $descuento;
 
             $valorFinal = max(0, $valorFinal);
-            return $valorFinal;
+            return [$valorFinal, $porcentajeDescuento];
         } catch (Exception $e) {
             Log::error('Error al aplicar descuento por tipo de usuario', [
                 'error' => $e->getMessage(),
@@ -1302,7 +1307,7 @@ class ReservaService
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return $valorBase;
+            return [$valorBase, 0];
         }
     }
 

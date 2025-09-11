@@ -50,35 +50,17 @@ class PagoService
             if (in_array(strtolower((string) $reserva->estado), array_map('strtolower', $estadosPagada), true)) {
                 throw new Exception('La reserva ya se encuentra pagada o completada');
             }
-
-            // Valor de la franja (con descuento por tipo de usuario)
-            $valoresReserva = $this->reserva_service->obtenerValorReserva(
-                null,
-                $reserva->configuracion->id ?? null,
-                $reserva->hora_inicio,
-                $reserva->hora_fin
-            );
-
-            $valorReserva = 0.0;
-            if (is_array($valoresReserva) && isset($valoresReserva['valor_descuento'])) {
-                $valorReserva = (float) $valoresReserva['valor_descuento'];
-            } elseif (isset($reserva->valor)) {
-                $valorReserva = (float) $reserva->valor;
-            }
-
             // Valor de elementos (si los hay) multiplicando por cantidad
             $reserva->loadMissing(['detalles.elemento', 'usuarioReserva']);
-            $valorElementos = $this->calcularValorElementos($reserva);
-            $valorAPagar = $valorReserva + $valorElementos;
 
-            if ($valorAPagar <= 0) {
+            if ($reserva->precio_total <= 0) {
                 throw new Exception('No hay valor por pagar para esta reserva');
             }
 
             $idUsuarioReserva = (int) ($reserva->usuarioReserva->id_usuario ?? $reserva->id_usuario);
             $saldoFavor = $this->obtenerSaldoFavorUsuario($idUsuarioReserva);
 
-            if ($saldoFavor <= 0 || $saldoFavor < $valorAPagar) {
+            if ($saldoFavor <= 0 || $saldoFavor < $reserva->precio_total) {
                 throw new Exception('Saldo insuficiente para pagar la reserva');
             }
 
@@ -92,7 +74,7 @@ class PagoService
                 'id_reserva' => $reserva->id,
                 'id_movimiento_principal' => $ultimoIngreso->id ?? null,
                 'fecha' => Carbon::now(),
-                'valor' => $valorAPagar,
+                'valor' => $reserva->precio_total,
                 'tipo' => Movimientos::TIPO_EGRESO,
                 'creado_por' => Auth::id(),
             ]);
@@ -102,7 +84,7 @@ class PagoService
 
             DB::commit();
 
-            $saldoRestante = max(0, $saldoFavor - $valorAPagar);
+            $saldoRestante = max(0, $saldoFavor - $reserva->precio_total);
             $resumen = $this->reserva_service->getMiReserva($reserva->id);
 
             return [
@@ -663,13 +645,7 @@ class PagoService
 
         if ($esReserva) {
             // Valor real según franja
-            $valoresReserva = $this->reserva_service->obtenerValorReserva(
-                [],
-                $pago->reserva->configuracion->id,
-                $pago->reserva->hora_inicio,
-                $pago->reserva->hora_fin
-            );
-            $payload['valor_real'] = $valoresReserva ? $valoresReserva['valor_real'] : $pago->valor;
+            $payload['valor_real'] = $pago->reserva->precio_total;
 
             $payload += [
                 'numero_doc_titular' => $pago->reserva->usuarioReserva->persona->numero_documento,
