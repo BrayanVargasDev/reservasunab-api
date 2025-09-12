@@ -201,7 +201,6 @@ class PagoService
 
     public function iniciarTransaccionDePago(int $id_reserva)
     {
-        Log::debug('Ejecutando método', ['metodo' => 'iniciarTransaccionDePago', 'id_reserva' => $id_reserva]);
         if (!$this->session_token) {
             $this->getSessionToken();
         }
@@ -573,7 +572,7 @@ class PagoService
     public function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
     {
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
-        Log::debug($pagoInfo);
+
         $pago->loadMissing([
             'reserva.espacio',
             'reserva.configuracion',

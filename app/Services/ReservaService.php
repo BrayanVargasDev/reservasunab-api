@@ -345,14 +345,17 @@ class ReservaService
             $esEstudiante = $usuarioActual && is_array($usuarioActual->tipos_usuario)
                 ? in_array('estudiante', $usuarioActual->tipos_usuario)
                 : false;
+
             if ($usuarioActual) {
                 $usuarioTieneMensualidad = (bool) $usuarioActual->tieneMensualidadActiva($espacio->id, $fechaCarbon);
             }
+
             if ($requiereMensualidad && $esEstudiante) {
                 $usuarioTieneMensualidad = true; // tratar como cubierto
                 $aplicaSinMensualidad = false;
             } else {
                 $valorMensualConDesc = 0.0;
+
                 try {
                     if ($usuarioActual) {
                         $valorMensualConDesc = (float) $this->calcularValorMensualidadParaUsuario($espacio, $usuarioActual);
@@ -360,6 +363,7 @@ class ReservaService
                 } catch (\Throwable $e) {
                     // no
                 }
+
                 if ($requiereMensualidad && $valorMensualConDesc === 0.0) {
                     $usuarioTieneMensualidad = true;
                     $aplicaSinMensualidad = false;
@@ -513,7 +517,8 @@ class ReservaService
                         ]);
                     }
 
-                    $valorConDescuento = $this->aplicarDescuentoPorTipoUsuario($franja->valor, $espacio->id);
+                    // Aplicar descuento por tipo de usuario y asegurar valor numérico
+                    [$valorConDescuento, $porcentajeAplicado] = $this->aplicarDescuentoPorTipoUsuario($franja->valor, $espacio->id, 'disponibilidad');
                     if ($requiereMensualidad && $usuarioTieneMensualidad) {
                         $valorConDescuento = 0;
                     }
@@ -522,7 +527,8 @@ class ReservaService
                         'hora_inicio' => $horaInicioSlot,
                         'hora_fin' => $horaFinSlotFormatted,
                         'disponible' => $disponible,
-                        'valor' => $valorConDescuento,
+                        'valor' => (float) $valorConDescuento,
+                        'porcentaje_descuento' => (float) ($porcentajeAplicado ?? 0),
                         'valor_base' => $franja->valor, // Mantener el valor base para referencia
                         'franja_id' => $franja->id, // Agregar ID de franja para debugging
                         'mi_reserva' => $miReserva,
@@ -1258,7 +1264,7 @@ class ReservaService
                 ]);
             }
 
-            $valoresDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio);
+            $valoresDescuento = $this->aplicarDescuentoPorTipoUsuario($valorReal, $configuracionCompleta->id_espacio, 'obtenerValorReserva');
 
             return [
                 'valor_real' => $valorReal,
@@ -1275,7 +1281,7 @@ class ReservaService
         }
     }
 
-    public function aplicarDescuentoPorTipoUsuario($valorBase, $espacioId)
+    public function aplicarDescuentoPorTipoUsuario($valorBase, $espacioId, ?string $contexto = null)
     {
         try {
             $usuario = Auth::user();
@@ -1299,6 +1305,7 @@ class ReservaService
             $valorFinal = $valorBase - $descuento;
 
             $valorFinal = max(0, $valorFinal);
+
             return [$valorFinal, $porcentajeDescuento];
         } catch (Exception $e) {
             Log::error('Error al aplicar descuento por tipo de usuario', [
@@ -1328,11 +1335,13 @@ class ReservaService
             }
 
             $tipos = (array) ($usuario?->tipos_usuario ?? []);
+
             if (in_array('estudiante', $tipos, true)) {
                 return 0.0;
             }
 
-            return (float) $this->aplicarDescuentoPorTipoUsuario($valorBase, $espacio->id);
+            [$valorConDescuento] = $this->aplicarDescuentoPorTipoUsuario($valorBase, $espacio->id, 'mensualidad');
+            return (float) $valorConDescuento;
         } catch (\Throwable $th) {
             Log::warning('Fallo calculando valor de mensualidad con descuento', [
                 'espacio_id' => $espacio->id ?? null,
