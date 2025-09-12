@@ -18,12 +18,14 @@ class DetalleReserva extends Model
         'id_reserva',
         'id_elemento',
         'cantidad',
+        'valor_unitario',
     ];
 
     protected $casts = [
         'id_reserva' => 'integer',
         'id_elemento' => 'integer',
         'cantidad' => 'integer',
+        'valor_unitario' => 'decimal:2',
     ];
 
     public function reserva()

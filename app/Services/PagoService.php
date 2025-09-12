@@ -218,22 +218,31 @@ class PagoService
         ];
 
         try {
-            $pagoExistente = Pago::whereRaw('LOWER(estado) = ?', ['created'])
-                ->whereHas('detalles', function ($q) use ($id_reserva) {
-                    $q->where('tipo_concepto', 'reserva')
-                        ->where('id_concepto', $id_reserva);
-                })
+            $pagoExistente = Pago::whereHas('detalles', function ($q) use ($id_reserva) {
+                $q->where('tipo_concepto', 'reserva')
+                    ->where('id_concepto', $id_reserva);
+            })
                 ->whereNull('eliminado_en')
                 ->orderBy('creado_en', 'desc')
                 ->first();
 
-            if ($pagoExistente && !empty($pagoExistente->url_ecollect)) {
+            if ($pagoExistente && $pagoExistente->estado == 'CREATED') {
                 Log::info('Reutilizando pago existente CREATED para la reserva', [
                     'id_reserva' => $id_reserva,
                     'pago_codigo' => $pagoExistente->codigo,
                     'estado' => $pagoExistente->estado,
                 ]);
                 return $pagoExistente->url_ecollect;
+            }
+
+            if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'NON_AUTHORIZED'], true)) {
+                Log::info('Eliminando pago existente con estado ' . $pagoExistente->estado . ' para crear uno nuevo', [
+                    'id_reserva' => $id_reserva,
+                    'pago_codigo' => $pagoExistente->codigo,
+                    'estado' => $pagoExistente->estado,
+                ]);
+                $pagoExistente->forceDelete();
+                $pagoExistente = null;
             }
 
             DB::beginTransaction();
@@ -317,24 +326,12 @@ class PagoService
                 continue;
             }
 
-            if (in_array('estudiante', $tipos)) {
-                $valorUnit = (float) $elem->valor_estudiante ?? 0.0;
-            } elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) {
-                $valorUnit = (float) $elem->valor_egresado;
-            } elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) {
-                $valorUnit = (float) $elem->valor_administrativo;
-            } elseif ($elem->valor_externo !== null) {
-                $valorUnit = (float) $elem->valor_externo;
-            } else {
-                $valorUnit = 0.0;
-            }
-
             $detalles[] = [
                 'id_pago' => $pago->codigo,
                 'tipo_concepto' => 'elemento',
                 'cantidad' => $cant,
                 'id_concepto' => $elem->id,
-                'total' => $valorUnit * $cant,
+                'total' => $elem->valor_unitario * $cant,
                 'creado_en' => now(),
                 'actualizado_en' => now(),
             ];
@@ -377,40 +374,6 @@ class PagoService
         ]);
 
         return $pago;
-    }
-
-    private function calcularValorElementos($reserva): float
-    {
-        if (!$reserva || !$reserva->relationLoaded('detalles') || !$reserva->detalles) {
-            return 0.0;
-        }
-
-        $tipos = (array) optional($reserva->usuarioReserva)->tipos_usuario ?: [];
-
-        $total = 0.0;
-        foreach ($reserva->detalles as $d) {
-            $elem = $d->elemento;
-            $cant = (int) ($d->cantidad ?? 0);
-            if (!$elem || $cant <= 0) {
-                continue;
-            }
-
-            $valorUnit = null;
-            if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) {
-                $valorUnit = (float) $elem->valor_estudiante;
-            } elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) {
-                $valorUnit = (float) $elem->valor_egresado;
-            } elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) {
-                $valorUnit = (float) $elem->valor_administrativo;
-            } elseif ($elem->valor_externo !== null) {
-                $valorUnit = (float) $elem->valor_externo;
-            } else {
-                $valorUnit = 0.0;
-            }
-
-            $total += $valorUnit * $cant;
-        }
-        return $total;
     }
 
     public function get_info_pago(string $codigo)
@@ -605,12 +568,6 @@ class PagoService
         }
 
         return $pagoInfo;
-    }
-
-    private function esEstadoExitoso(string $estado): bool
-    {
-        $estadosExitosos = ['completado', 'approved', 'APPROVED', 'success', 'SUCCESS', 'pagado', 'OK'];
-        return in_array(strtolower($estado), array_map('strtolower', $estadosExitosos));
     }
 
     public function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta

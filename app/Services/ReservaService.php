@@ -985,6 +985,7 @@ class ReservaService
                     $detallesData[] = [
                         'id_elemento' => $idElem,
                         'cantidad' => $cant,
+                        'valor_unitario' => $valorUnit
                     ];
                 }
             }
@@ -1011,12 +1012,18 @@ class ReservaService
                 }
             }
 
+            $estadoReserva = 'inicial';
+            if ((float)$valorTotal <= 0) {
+                $requiereAprobacion = (bool) ($espacio->aprobar_reserva ?? false);
+                $estadoReserva = $requiereAprobacion ? 'pendienteap' : 'completada';
+            }
+
             $reserva = Reservas::create([
                 'id_usuario' => $usuario->id_usuario,
                 'id_espacio' => $espacioId,
                 'fecha' => $fecha,
                 'id_configuracion' => $idConfiguracion,
-                'estado' => 'inicial',
+                'estado' => $estadoReserva,
                 'hora_inicio' => $horaInicio->format('H:i:s'),
                 'hora_fin' => $horaFin->format('H:i:s'),
                 'check_in' => false,
@@ -1027,12 +1034,6 @@ class ReservaService
                 'precio_total' => $valorTotal,
                 'porcentaje_aplicado' => $valoresReserva['porcentaje_aplicado'] ?? 0,
             ]);
-
-            if ($valorTotal <= 0) {
-                $requiereAprobacion = (bool) ($espacio->aprobar_reserva ?? false);
-                $reserva->estado = $requiereAprobacion ? 'pendienteap' : 'completada';
-                $reserva->save();
-            }
 
             $jugadores = isset($data['jugadores']) && is_array($data['jugadores']) ? $data['jugadores'] : [];
             if (!empty($jugadores)) {
@@ -1835,10 +1836,6 @@ class ReservaService
                         }
                         $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
                         $reserva->save();
-
-                        if ($reserva->estado === 'cancelada') {
-                            $reserva->delete();
-                        }
                     }
                     DB::commit();
                 } catch (Throwable $th) {
@@ -1895,10 +1892,7 @@ class ReservaService
                         'id' => $d->id_elemento,
                         'nombre' => $d->elemento?->nombre,
                         'cantidad' => (int) $d->cantidad,
-                        'valor_administrativo' => (float) $d->elemento?->valor_administrativo,
-                        'valor_egresado' => (float) $d->elemento?->valor_egresado,
-                        'valor_estudiante' => (float) $d->elemento?->valor_estudiante,
-                        'valor_externo' => (float) $d->elemento?->valor_externo,
+                        'valor' => (float) $d->valor_unitario,
                         'cantidad_seleccionada' => (int) $d->cantidad,
                     ];
                 }
@@ -1911,17 +1905,7 @@ class ReservaService
 
                 foreach ($detalles as $detalle) {
                     $cantidad = (int)$detalle['cantidad'];
-                    $valorUnit = 0.0;
-
-                    if (in_array('estudiante', $tipos) && isset($detalle['valor_estudiante'])) {
-                        $valorUnit = (float)$detalle['valor_estudiante'];
-                    } elseif (in_array('egresado', $tipos) && isset($detalle['valor_egresado'])) {
-                        $valorUnit = (float)$detalle['valor_egresado'];
-                    } elseif (in_array('administrativo', $tipos) && isset($detalle['valor_administrativo'])) {
-                        $valorUnit = (float)$detalle['valor_administrativo'];
-                    } elseif (isset($detalle['valor_externo'])) {
-                        $valorUnit = (float)$detalle['valor_externo'];
-                    }
+                    $valorUnit = (float)$detalle['valor'];
 
                     $valorElementos += $valorUnit * $cantidad;
                 }
@@ -2012,15 +1996,7 @@ class ReservaService
             return 'pagada';
         }
 
-        if ($estado === 'PENDING') {
-            return 'pendiente';
-        }
-
-        if ($estado === 'CREATED') {
-            return 'inicial';
-        }
-
-        return 'cancelada';
+        return 'inicial';
     }
 
     public function agregarJugadores(int $idReserva, array $jugadoresIds, bool $strict = true)
