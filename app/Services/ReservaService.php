@@ -1982,6 +1982,7 @@ class ReservaService
                 'mensualidad' => $coberturaMensualidad['mensualidad'],
                 // Información de pago con detalles (polimórfica por tipo_concepto)
                 'pago' => $pagoResumen,
+                'creado_en' => Carbon::parse($reserva->creado_en)->format('d/m/Y H:i A')
             ];
 
             return $resumenReserva;

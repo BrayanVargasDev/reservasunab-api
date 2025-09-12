@@ -457,19 +457,29 @@ class CronJobsService
                 $elementoNombres = $tieneElementos ? $detalles->pluck('elemento.nombre')->filter()->implode(',') : null;
 
                 $pago = $reserva->pago; // puede ser null
-                $tieneMovimiento = ($reserva->movimientos && $reserva->movimientos->count() > 0);
 
                 $medioPago = null;
                 if ($pago) {
+                    if (strtoupper($pago->estado) !== 'OK') {
+                        $this->marcarFallo($reserva, 'La reserva tiene pago pero el pago no fue completado.');
+                        $fallidas++;
+                        continue;
+                    }
                     $consultaPago = PagoConsulta::where('codigo', $pago->codigo)->first();
 
-                    if (!$consultaPago && strtoupper($pago->estado) !== 'OK' && !$tieneMovimiento) {
-                        $this->marcarFallo($reserva, 'Pago asociado sin registro en PagoConsulta');
+                    if (!$consultaPago) {
+                        $this->marcarFallo($reserva, 'La reserva tiene pago completado pero no hay datos en pagos consultas.');
                         $fallidas++;
                         continue;
                     }
 
                     $medioPago = $consultaPago ? ($consultaPago->medio_pago === 'PSE' ? 0 : 1) : null;
+                }
+
+                if (!$pago && $reserva->estado != 'completada') {
+                    $this->marcarFallo($reserva, 'Reserva no tenida en cuenta por no estar completada y no tener pago');
+                    $fallidas++;
+                    continue;
                 }
 
                 $hayPagoOk = $pago && strtoupper($pago->estado) === 'OK';

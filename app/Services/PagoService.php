@@ -218,6 +218,7 @@ class PagoService
         ];
 
         try {
+            DB::beginTransaction();
             $pagoExistente = Pago::whereHas('detalles', function ($q) use ($id_reserva) {
                 $q->where('tipo_concepto', 'reserva')
                     ->where('id_concepto', $id_reserva);
@@ -235,7 +236,11 @@ class PagoService
                 return $pagoExistente->url_ecollect;
             }
 
-            if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'NON_AUTHORIZED'], true)) {
+            if ($pagoExistente && $pagoExistente->estado == 'PENDING') {
+                throw new Exception("Esperando resolución del pago actual");
+            }
+
+            if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'EXPIRED', 'NON_AUTHORIZED'], true)) {
                 Log::info('Eliminando pago existente con estado ' . $pagoExistente->estado . ' para crear uno nuevo', [
                     'id_reserva' => $id_reserva,
                     'pago_codigo' => $pagoExistente->codigo,
@@ -244,8 +249,6 @@ class PagoService
                 $pagoExistente->forceDelete();
                 $pagoExistente = null;
             }
-
-            DB::beginTransaction();
 
             $pago = $this->crearPago($id_reserva);
             $url_redirect = $this->url_redirect_base . '?codigo=' . $pago->codigo;
@@ -267,10 +270,8 @@ class PagoService
 
             $response = Http::post($url, $data);
 
-            Log::debug('Respuesta de la API de pagos', ['response' => $response->json()]);
-
             if (!$response->successful()) {
-                throw new Exception('Error initiating payment transaction after token refresh: ' . $response->body());
+                throw new Exception('Error iniciando transacción después de obtener token: ' . $response->body());
             }
 
             $responseData = $response->json();
@@ -290,7 +291,7 @@ class PagoService
             return $pago->url_ecollect;
         } catch (Throwable $th) {
             DB::rollBack();
-            throw new Exception('Error initiating payment transaction: ' . $th->getMessage());
+            throw new Exception('Error iniciando transacción de pago: ' . $th->getMessage());
         }
     }
 
@@ -300,7 +301,6 @@ class PagoService
         $reserva = $this->reserva_service->getReservaById($id_reserva);
 
         $reserva->loadMissing(['detalles', 'detalles.elemento', 'usuarioReserva']);
-
 
         $pago = Pago::create([
             'valor' => $reserva->precio_total,
