@@ -474,9 +474,7 @@ class CronJobsService
 
                 $hayPagoOk = $pago && strtoupper($pago->estado) === 'OK';
                 // $formaPago = $hayPagoOk ? 'PAGO_ONLINE' : ($tieneMovimiento ? 'SIN_PAGO' : 'PAGO_ONLINE');
-
                 $tipoReserva = $tieneElementos ? 'TODO' : 'ESPACIO';
-
                 // Horas
                 $horaInicio = $reserva->hora_inicio instanceof Carbon ? $reserva->hora_inicio->format('Hi') : (Carbon::parse($reserva->hora_inicio)->format('Hi'));
                 $horaFinCarbon = $reserva->hora_fin instanceof Carbon ? $reserva->hora_fin : Carbon::parse($reserva->hora_fin);
@@ -494,7 +492,7 @@ class CronJobsService
 
                 $payload = [
                     'tarea' => '3',
-                    'numberDoc' => "522",
+                    'numberDoc' => "RES_" . $reserva->id,
                     'fechaTransac' => $fechaHoy->format('d/m/Y'),
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => $hayPagoOk ? 'PAGO_ONLINE' : '',
@@ -507,9 +505,9 @@ class CronJobsService
                         'svrcode' => 21000,
                     ] : [
                         'ticketId' => null,
-                        'paymentId' => null,
-                        'medioPagoEcollect' => null,
-                        'svrcode' => 21000,
+                        'paymentId' => '',
+                        'medioPagoEcollect' => '',
+                        'svrcode' => null,
                     ],
                     'DatosReserva' => $this->construirDatosReserva($usuario, $rol),
                     'Reserva' => [[
@@ -574,7 +572,7 @@ class CronJobsService
 
                 $payload = [
                     'tarea' => '3',
-                    'numberDoc' => '522',
+                    'numberDoc' => 'MEN_' . $mensualidad->id,
                     'fechaTransac' => $fechaHoy->format('d/m/Y'),
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => 'PAGO_ONLINE',
@@ -600,10 +598,10 @@ class CronJobsService
                         'viernes' => null,
                         'sabado' => null,
                         'domingo' => null,
-                        'fechaInicioReserva' => '',
-                        'fechaFinReserva' => '',
-                        'horaInicio' => '',
-                        'horaFin' => '',
+                        'fechaInicioReserva' => Carbon::parse($mensualidad->fecha_inicio)->format('d/m/Y'),
+                        'fechaFinReserva' => Carbon::parse($mensualidad->fecha_fin)->format('d/m/Y'),
+                        'horaInicio' => '0000',
+                        'horaFin' => '2359',
                         'descuentoReserva' => 0.00,
                         'precioTotal' => round((float)$mensualidad->valor, 2),
                     ]],
