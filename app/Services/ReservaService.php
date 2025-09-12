@@ -2016,6 +2016,10 @@ class ReservaService
             return 'pendiente';
         }
 
+        if ($estado === 'CREATED') {
+            return 'inicial';
+        }
+
         return 'cancelada';
     }
 
