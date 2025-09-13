@@ -20,7 +20,6 @@ class SamlCustomController extends Controller
         $appSamlLogin = URL::to('/api/saml/' . $tenantDb->uuid . '/login');
 
         $chooser = 'https://accounts.google.com/AccountChooser?continue=' . urlencode($appSamlLogin);
-        Log::debug('[SAML] Redirecting to chooser: ' . $chooser);
         return redirect()->away($chooser);
     }
 }

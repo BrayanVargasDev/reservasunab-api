@@ -120,8 +120,7 @@ class ReservaService
             $query->where('id_usuario', $usuario->id_usuario);
         }
 
-        $query->orderBy('fecha', 'desc')
-            ->orderBy('hora_inicio', 'desc');
+        $query->orderBy('creado_en', 'desc');
 
         if ($search) {
             $query->where(function ($q) use ($search) {

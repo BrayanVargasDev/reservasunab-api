@@ -233,6 +233,24 @@ class PersonaService
         ];
     }
 
+    public function filtrarPersonasFacturacion(
+        int $perPage = 15,
+        ?string $numeroDocumento = null,
+        ?int $tipoDocumentoId = null
+    ) {
+        $numeroDocumento = $numeroDocumento !== null ? trim($numeroDocumento) : null;
+
+        return Persona::with(['tipoDocumento', 'regimenTributario', 'ciudadExpedicion', 'ciudadResidencia', 'usuario'])
+            ->when($numeroDocumento, function ($query) use ($numeroDocumento) {
+                $query->whereRaw('LOWER(numero_documento) LIKE ?', ['%' . strtolower($numeroDocumento) . '%']);
+            })
+            ->when($tipoDocumentoId, function ($query) use ($tipoDocumentoId) {
+                $query->where('tipo_documento_id', $tipoDocumentoId);
+            })
+            ->orderBy('id_persona', 'desc')
+            ->first();
+    }
+
     /**
      * Log de errores
      */

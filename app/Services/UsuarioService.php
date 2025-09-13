@@ -18,10 +18,8 @@ use App\Mail\PasswordGenericoEmail;
 
 class UsuarioService
 {
-    // Constante para tipo de documento por defecto
-    private const DEFAULT_TIPO_DOCUMENTO_ID = 1; // CC - Cédula de Ciudadanía
+    private const DEFAULT_TIPO_DOCUMENTO_ID = 1;
 
-    // Constantes para campos de mapeo
     private const USUARIO_FIELDS_MAPPING = [
         'email' => 'email',
         'tipos_usuario' => 'tipos_usuario',
@@ -215,24 +213,26 @@ class UsuarioService
                     ->orderByDesc('id_persona')
                     ->first();
 
-                if (!empty($personaFact)) {
-                    $personaFact->forceDelete();
+                if ($personaFact) {
+                    $personaFact->persona_facturacion_id = null;
+                    $personaFact->save();
                 }
             }
 
-
             $this->updateUsuarioFields($usuario, $data);
             $this->handlePersonaUpdate($usuario, $data);
-            // Manejar datos de facturación si vienen en la actualización de perfil
             $this->handlePersonaFacturacion($usuario, $data);
 
-            $desdeDashboard = $data['__desde_dashboard'] ?? false; // bandera opcional en payload
+            $desdeDashboard = $data['__desde_dashboard'] ?? false;
             $forzarGeneracion = $data['generar_password'] ?? false;
             if (($desdeDashboard || $forzarGeneracion) && empty($usuario->password_hash)) {
                 $passwordPlano = $this->generarPasswordGenerico($usuario->persona ?? new Persona());
                 $usuario->password_hash = Hash::make($passwordPlano);
                 $usuario->save();
                 try {
+                    Log::info('Enviando correo de generación de password', [
+                        'email' => $usuario->email,
+                    ]);
                     Mail::to($usuario->email)->send(new PasswordGenericoEmail($usuario, $passwordPlano, false));
                 } catch (\Throwable $mailEx) {
                     Log::error('No se pudo enviar correo de generación de password en update', [
@@ -280,10 +280,25 @@ class UsuarioService
             }
         }
 
+        $numeroDocumento = $payload['documento'] ?? $payload['numero_documento'] ?? null;
+        $tipoDocumentoId = $payload['tipoDocumento'] ?? $payload['tipo_documento_id'] ?? null;
+
         $personaFact = null;
-        $idFact = $payload['id'] ?? $payload['id_persona'] ?? null;
-        if ($idFact) {
-            $personaFact = Persona::find($idFact);
+
+        if (!empty($numeroDocumento)) {
+            $personaFact = Persona::where('numero_documento', $numeroDocumento)
+                ->when(!empty($tipoDocumentoId), function ($q) use ($tipoDocumentoId) {
+                    $q->where('tipo_documento_id', $tipoDocumentoId);
+                })
+                ->orderByDesc('id_persona')
+                ->first();
+        }
+
+        if (!$personaFact) {
+            $idFact = $payload['id'] ?? $payload['id_persona'] ?? null;
+            if ($idFact) {
+                $personaFact = Persona::find($idFact);
+            }
         }
 
         if (!$personaFact) {
@@ -293,13 +308,28 @@ class UsuarioService
                 ->first();
         }
 
+        if ($personaFact && $personaFact->id_persona === $personaTitular->id_persona) {
+            return;
+        }
+
         if ($personaFact) {
+            $anterior = Persona::where('persona_facturacion_id', $personaTitular->id_persona)
+                ->where('es_persona_facturacion', true)
+                ->where('id_persona', '!=', $personaFact->id_persona)
+                ->orderByDesc('id_persona')
+                ->first();
+            if ($anterior) {
+                $anterior->persona_facturacion_id = null;
+                $anterior->save();
+            }
+
             $this->mapEmailFacturacionToDireccion($payload);
             $this->updatePersonaFields($personaFact, $payload);
             $personaFact->es_persona_facturacion = true;
             $personaFact->persona_facturacion_id = $personaTitular->id_persona;
             $personaFact->save();
         } else {
+            $this->mapEmailFacturacionToDireccion($payload);
             $personaFact = $this->createPersonaFacturacionFromData($payload, $personaTitular->id_persona);
         }
     }
@@ -368,7 +398,6 @@ class UsuarioService
             $usuario->id_rol = $data['rol'] ?? $data['id_rol'] ?? null;
         }
 
-        // Manejar terminos_condiciones
         if (isset($data['terminos_condiciones'])) {
             $usuario->terminos_condiciones = (bool) $data['terminos_condiciones'];
         }
@@ -475,7 +504,6 @@ class UsuarioService
 
     private function generarPasswordGenerico(Persona $persona): string
     {
-        // Nueva lógica: palabra base + año nacimiento (si existe) + 4 caracteres aleatorios
         $nombre = preg_replace('/[^a-zA-Z]/', '', strtolower($persona->primer_nombre ?? 'user'));
         $apellido = preg_replace('/[^a-zA-Z]/', '', strtolower($persona->primer_apellido ?? ''));
         $base = substr($nombre, 0, 4) . substr($apellido, 0, 4);
@@ -492,7 +520,7 @@ class UsuarioService
         }
         $rand = substr(str_shuffle('ABCDEFGHJKLMNPQRSTUVWXYZ23456789'), 0, 4);
         $password = strtolower($base) . ($year ? '.' . $year : '') . '@' . $rand;
-        // Garantizar longitud mínima 10
+
         if (strlen($password) < 10) {
             $password .= substr(str_shuffle('abcdefghijklmnopqrstuvwxyz0123456789'), 0, 10 - strlen($password));
         }
@@ -501,7 +529,6 @@ class UsuarioService
 
     private function createPersonaFromData(array $data, ?int $idUsuario): Persona
     {
-        // Si el usuario ya tiene una persona asociada, actualizarla en lugar de crear una nueva
         if ($idUsuario !== null) {
             $existente = Persona::where('id_usuario', $idUsuario)->first();
             if ($existente) {
@@ -521,12 +548,10 @@ class UsuarioService
             }
         }
 
-        // Si no se proporciona tipo de documento, usar Cédula de Ciudadanía como predeterminado
         if (!isset($personaData['tipo_documento_id'])) {
             $personaData['tipo_documento_id'] = self::DEFAULT_TIPO_DOCUMENTO_ID;
         }
 
-        // Si no se proporciona tipo de persona, usar 'natural' como predeterminado
         if (!isset($personaData['tipo_persona'])) {
             $personaData['tipo_persona'] = 'natural';
         }
@@ -547,14 +572,11 @@ class UsuarioService
             }
         }
 
-        // Crear persona sin id_usuario inicialmente
         return $this->createPersonaFromData($data, null);
     }
 
     private function createUsuarioRecord(array $data, Persona $persona, bool $desdeDashboard): Usuario
     {
-        // Si viene desde dashboard generamos password genérico y lo marcamos para correo.
-        // Si viene de SSO (no desde dashboard) permitimos password null y se enviará luego cuando complete perfil desde dashboard.
         $password = null;
         if ($desdeDashboard) {
             $password = $this->generarPasswordGenerico($persona);
@@ -760,11 +782,9 @@ class UsuarioService
 
             DB::beginTransaction();
 
-            // Si los permisos vienen como objetos con propiedad concedido, filtrarlos
             if (isset($permisos[0]) && is_array($permisos[0]) && isset($permisos[0]['concedido'])) {
                 $permisosIds = $this->filtrarPermisosConcedidos($permisos);
             } else {
-                // Si vienen como array simple de IDs, usarlos directamente
                 $permisosIds = $permisos;
             }
 
@@ -805,7 +825,7 @@ class UsuarioService
                 return isset($permiso['concedido']) && $permiso['concedido'] === true;
             })
             ->pluck('id_permiso')
-            ->filter() // Remover valores null o vacíos
+            ->filter()
             ->values()
             ->toArray();
     }
@@ -876,7 +896,6 @@ class UsuarioService
                 $fake->perfil_completado = true;
                 $fake->terminos_condiciones = true;
                 $fake->creado_en = $b->creado_en;
-                // Alinear con UsuariosResource que espera 'ultimo_acceso'
                 $fake->ultimo_acceso = null;
 
                 $persona = new \stdClass();
@@ -905,7 +924,6 @@ class UsuarioService
 
             return $usuarios->concat($beneficiariosComoUsuarios)->values();
         } catch (\Throwable $e) {
-            // En caso de error, retornar solo usuarios
             return $usuarios;
         }
     }

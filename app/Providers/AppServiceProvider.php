@@ -31,9 +31,8 @@ class AppServiceProvider extends ServiceProvider
      */
     private function loadUnabConfig(): bool
     {
-        // Advertir si la configuración está en caché
         if (function_exists('app') && app()->configurationIsCached()) {
-            Log::debug('Configuración de Laravel está en caché (config:cache activo).');
+            Log::info('Configuración de Laravel está en caché (config:cache activo).');
         }
 
         $this->unab_host = config('app.unab_host');

@@ -239,4 +239,33 @@ class PersonaController extends Controller
             ], $e->getCode() ?: 500);
         }
     }
+
+    /**
+     * Listar personas de facturación con filtros opcionales por número de documento y tipo de documento
+     */
+    public function facturacionIndex(Request $request): JsonResponse
+    {
+        try {
+            $perPage = (int) $request->get('per_page', 15);
+            $numeroDocumento = $request->get('numero_documento');
+            $tipoDocumentoId = $request->get('tipo_documento_id');
+
+            $resultado = $this->personaService->filtrarPersonasFacturacion(
+                $perPage,
+                $numeroDocumento,
+                $tipoDocumentoId ? (int) $tipoDocumentoId : null
+            );
+
+            return response()->json([
+                'success' => true,
+                'data' => $resultado,
+                'message' => 'Personas de facturación obtenidas exitosamente'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], $e->getCode() ?: 500);
+        }
+    }
 }

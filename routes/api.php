@@ -69,6 +69,8 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/', [PersonaController::class, 'index']);
         Route::post('/', [PersonaController::class, 'store']);
         Route::get('/buscar-documento', [PersonaController::class, 'buscarPorDocumento']);
+        // Listado de personas de facturación con filtros
+        Route::get('/facturacion', [PersonaController::class, 'facturacionIndex']);
         Route::get('/{id}', [PersonaController::class, 'show']);
         Route::patch('/{id}', [PersonaController::class, 'update']);
         Route::delete('/{id}', [PersonaController::class, 'destroy']);

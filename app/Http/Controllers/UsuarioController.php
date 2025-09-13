@@ -298,9 +298,8 @@ class UsuarioController extends Controller
         Usuario $usuario,
     ) {
         try {
-            // $this->authorize('actualizarDesdeDashboard', $usuario);
             $data = $request->validated();
-
+            $data['__desde_dashboard'] = true;
             $usuarioActualizado = $this->usuarioService->update(
                 $usuario->id_usuario,
                 $data,
