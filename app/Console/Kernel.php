@@ -11,6 +11,7 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\CronJobUnoCommand::class,
         \App\Console\Commands\CronJobDosCommand::class,
         \App\Console\Commands\CronJobTresCommand::class,
+        \App\Console\Commands\ConfirmarPagosCommand::class,
     ];
 
     protected function schedule(Schedule $schedule): void
@@ -18,6 +19,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('cron:reservas-sin-pago')->everyMinute()->runInBackground();
         $schedule->command('cron:procesar-novedades')->dailyAt('00:00')->runInBackground();
         $schedule->command('cron:reportar-reservas-mensualidades')->hourly()->runInBackground();
+        $schedule->command('cron:confirmar-pagos')->everyMinute()->runInBackground();
 
         // Referencia oficial: https://laravel.com/docs/12.x/scheduling
     }

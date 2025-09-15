@@ -837,6 +837,77 @@ class CronJobsService
     }
 
     /**
+     * Procesa pagos pendientes que requieren validación con el proveedor.
+     * Criterios:
+     *  - Pagos cuyo estado NO es FAILED, EXPIRED o NON_AUTHORIZED
+     *  - No eliminados (soft delete)
+     *  - Llama a get_info_pago para validar y actualizar estado
+     * Se ejecuta cada minuto desde el scheduler.
+     */
+    public function procesarPagosPendientes(): void
+    {
+        $inicio = microtime(true);
+
+        Log::channel('cronjobs')->info('[CRON] Inicio procesarPagosPendientes');
+
+        $estadosExcluidos = ['FAILED', 'EXPIRED', 'NON_AUTHORIZED'];
+
+        $totalEvaluados = 0;
+        $totalActualizados = 0;
+        $totalErrores = 0;
+
+        $pagoService = app(PagoService::class);
+
+        Pago::query()
+            ->whereNull('eliminado_en')
+            ->whereNotIn('estado', $estadosExcluidos)
+            ->orderBy('creado_en', 'asc')
+            ->chunkById(100, function ($pagos) use (&$totalEvaluados, &$totalActualizados, &$totalErrores, $pagoService) {
+                foreach ($pagos as $pago) {
+                    $totalEvaluados++;
+                    try {
+                        Log::channel('cronjobs')->info('[CRON] Procesando pago', [
+                            'pago_codigo' => $pago->codigo,
+                            'estado_actual' => $pago->estado,
+                        ]);
+
+                        // Llamar a get_info_pago para validar con el proveedor
+                        $resultado = $pagoService->get_info_pago($pago->codigo);
+
+                        // Verificar si el estado cambió (asumiendo que get_info_pago actualiza el pago)
+                        $pago->refresh();
+                        if ($pago->estado !== 'PENDING' && $pago->estado !== 'CREATED' && $pago->estado !== 'inicial') {
+                            $totalActualizados++;
+                            Log::channel('cronjobs')->info('[CRON] Pago actualizado exitosamente', [
+                                'pago_codigo' => $pago->codigo,
+                                'nuevo_estado' => $pago->estado,
+                            ]);
+                        } else {
+                            Log::channel('cronjobs')->info('[CRON] Pago sigue pendiente', [
+                                'pago_codigo' => $pago->codigo,
+                                'estado' => $pago->estado,
+                            ]);
+                        }
+                    } catch (\Throwable $e) {
+                        $totalErrores++;
+                        Log::channel('cronjobs')->error('[CRON] Error procesando pago', [
+                            'pago_codigo' => $pago->codigo,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            });
+
+        $duracion = round((microtime(true) - $inicio) * 1000, 1);
+        Log::channel('cronjobs')->info('[CRON] Fin procesarPagosPendientes', [
+            'evaluados' => $totalEvaluados,
+            'actualizados' => $totalActualizados,
+            'errores' => $totalErrores,
+            'ms' => $duracion,
+        ]);
+    }
+
+    /**
      * Normaliza la respuesta del servicio externo.
      * El servicio puede responder como un array envolviendo un único objeto con llaves: estado, mensaje, datos.
      * Retorna un array asociativo con esas llaves o null si no cumple.
