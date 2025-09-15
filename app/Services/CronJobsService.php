@@ -473,7 +473,7 @@ class CronJobsService
                         continue;
                     }
 
-                    $medioPago = $consultaPago ? ($consultaPago->medio_pago === 'PSE' ? 0 : 1) : null;
+                    $medioPago = $consultaPago->medio_pago === 'PSE' ? '0' : '1';
                 }
 
                 if (!$pago && $reserva->estado != 'completada') {
