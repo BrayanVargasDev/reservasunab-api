@@ -107,13 +107,15 @@ class ReservaService
         $query = Reservas::query()
             ->withTrashed()
             ->with([
-                'espacio:id,nombre,id_sede,id_categoria,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores',
+                'espacio',
                 'espacio.sede:id,nombre',
                 'espacio.categoria:id,nombre',
                 'usuarioReserva:id_usuario,email',
                 'configuracion',
                 'configuracion.franjas_horarias',
-                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento'
+                'usuarioReserva.persona:id_persona,id_usuario,primer_nombre,segundo_nombre,primer_apellido,segundo_apellido,numero_documento',
+                'aprobadoPor',
+                'aprobadoPor.persona'
             ]);
 
         if (!$esAdministrador) {
@@ -123,25 +125,7 @@ class ReservaService
         $query->orderBy('creado_en', 'desc');
 
         if ($search) {
-            $query->where(function ($q) use ($search) {
-                $q->where('codigo', 'ilike', "%$search%")
-                    ->orWhereHas('espacio', function ($qEspacio) use ($search) {
-                        $qEspacio->where('nombre', 'like', "%$search%");
-                    })
-                    ->orWhereHas('espacio.sede', function ($qSede) use ($search) {
-                        $qSede->where('nombre', 'like', "%$search%");
-                    })
-                    ->orWhereHas('espacio.categoria', function ($qCategoria) use ($search) {
-                        $qCategoria->where('nombre', 'like', "%$search%");
-                    })
-                    ->orWhereHas('usuarioReserva.persona', function ($userQuery) use ($search) {
-                        $userQuery->where('numero_documento', 'ilike', "%$search%")
-                            ->orWhere('primer_nombre', 'ilike', "%$search%")
-                            ->orWhere('segundo_nombre', 'ilike', "%$search%")
-                            ->orWhere('primer_apellido', 'ilike', "%$search%")
-                            ->orWhere('segundo_apellido', 'ilike', "%$search%");
-                    });
-            });
+            $query->search($search);
         }
 
         $reservas = $query->paginate($per_page);
@@ -2391,6 +2375,8 @@ class ReservaService
                 return false;
             }
             $reserva->estado = 'completada';
+            $reserva->aprobado_por = Auth::id();
+            $reserva->aprobado_en = Carbon::now();
             $reserva->save();
             return true;
         } catch (\Throwable $th) {

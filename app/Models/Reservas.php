@@ -39,6 +39,8 @@ class Reservas extends Model
         'precio_espacio',
         'precio_elementos',
         'precio_total',
+        'aprobado_por',
+        'aprobado_en',
     ];
 
     protected $casts = [
@@ -61,6 +63,8 @@ class Reservas extends Model
         'precio_espacio' => 'decimal:2',
         'precio_elementos' => 'decimal:2',
         'precio_total' => 'decimal:2',
+        'aprobado_por' => 'integer',
+        'aprobado_en' => 'datetime',
     ];
 
     protected $hidden = [
@@ -152,5 +156,69 @@ class Reservas extends Model
         }
 
         return $minutosHastaReserva >= $tiempoCancelacion;
+    }
+
+    public function aprobadoPor()
+    {
+        return $this->belongsTo(Usuario::class, 'aprobado_por', 'id_usuario');
+    }
+
+    public function scopeSearch($query, string $input)
+    {
+        $tokens = preg_split('/\s+/', trim($input));
+
+        foreach ($tokens as $token) {
+            $query->where(function ($q) use ($token) {
+                // Fecha
+                try {
+                    $fecha = Carbon::createFromFormat('d/m/Y', $token);
+                    $q->orWhereDate('reservas.fecha', $fecha);
+                } catch (\Exception $e) {
+                    try {
+                        $fecha = Carbon::createFromFormat('d/m/y', $token);
+                        $q->orWhereDate('reservas.fecha', $fecha);
+                    } catch (\Exception $e) {
+                    }
+                }
+
+                // Hora (HH:mm)
+                if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $token)) {
+                    $q->orWhereTime('reservas.hora_inicio', $token);
+                }
+
+                // Código de reserva
+                if (is_numeric($token)) {
+                    $q->orWhere('reservas.codigo', 'ilike', "%{$token}%");
+                }
+
+                // Estado
+                $estados = ['completada', 'creada', 'cancelada', 'pendiente', 'inicial', 'pagada'];
+                if (in_array(strtolower($token), $estados)) {
+                    $token = strtolower($token) == 'creada' ? 'inicial' : strtolower($token);
+                    $token = strtolower($token) == 'pagada' ? 'completada' : strtolower($token);
+
+                    $q->orWhere('reservas.estado', 'ilike', "%{$token}%");
+                }
+
+                // Usuario
+                $q->orWhereHas('usuarioReserva', function ($qu) use ($token) {
+                    $qu->whereRaw('LOWER(email) ILIKE ?', ['%' . strtolower($token) . '%'])
+                        ->orWhereHas('persona', function ($qp) use ($token) {
+                            $qp->whereRaw('LOWER(primer_nombre) ILIKE ?', ['%' . strtolower($token) . '%'])
+                                ->orWhereRaw('LOWER(segundo_nombre) ILIKE ?', ['%' . strtolower($token) . '%'])
+                                ->orWhereRaw('LOWER(primer_apellido) ILIKE ?', ['%' . strtolower($token) . '%'])
+                                ->orWhereRaw('LOWER(segundo_apellido) ILIKE ?', ['%' . strtolower($token) . '%']);
+                        });
+                });
+
+                // Espacio
+                $q->orWhereHas('espacio', function ($qe) use ($token) {
+                    $qe->where('nombre', 'ilike', "%{$token}%")
+                        ->orWhere('codigo', 'ilike', "%{$token}%");
+                });
+            });
+        }
+
+        return $query;
     }
 }
