@@ -839,7 +839,7 @@ class CronJobsService
     /**
      * Procesa pagos pendientes que requieren validación con el proveedor.
      * Criterios:
-     *  - Pagos cuyo estado NO es FAILED, EXPIRED o NON_AUTHORIZED
+     *  - Pagos cuyo estado NO es FAILED, EXPIRED o NOT_AUTHORIZED
      *  - No eliminados (soft delete)
      *  - Llama a get_info_pago para validar y actualizar estado
      * Se ejecuta cada minuto desde el scheduler.
@@ -850,7 +850,7 @@ class CronJobsService
 
         Log::channel('cronjobs')->info('[CRON] Inicio procesarPagosPendientes');
 
-        $estadosExcluidos = ['FAILED', 'EXPIRED', 'NON_AUTHORIZED'];
+        $estadosExcluidos = ['FAILED', 'EXPIRED', 'NOT_AUTHORIZED'];
 
         $totalEvaluados = 0;
         $totalActualizados = 0;

@@ -239,7 +239,7 @@ class PagoService
                 throw new Exception("Esperando resolución del pago actual");
             }
 
-            if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'EXPIRED', 'NON_AUTHORIZED'], true)) {
+            if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'EXPIRED', 'NOT_AUTHORIZED'], true)) {
                 Log::info('Eliminando pago existente con estado ' . $pagoExistente->estado . ' para crear uno nuevo', [
                     'id_reserva' => $id_reserva,
                     'pago_codigo' => $pagoExistente->codigo,
