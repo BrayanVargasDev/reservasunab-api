@@ -126,6 +126,7 @@ class EspacioService
             return Espacio::with([
                 'sede',
                 'categoria',
+                'elementos',
                 'configuraciones' => function ($query) {
                     $query->with(['franjas_horarias']);
                 },
@@ -225,7 +226,7 @@ class EspacioService
     {
         try {
             DB::beginTransaction();
-
+            Log::debug('Datos para actualizar espacio', ['data' => $data]);
             $espacio = $this->getById($id);
 
             $updateData = [
@@ -249,6 +250,10 @@ class EspacioService
             ];
 
             $espacio->update($updateData);
+
+            if (isset($data['elementosEnlazados'])) {
+                $espacio->elementos()->sync($data['elementosEnlazados']);
+            }
 
             if ($espacio->getOriginal('aprobar_reserva')) {
                 try {

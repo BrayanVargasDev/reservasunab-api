@@ -104,6 +104,11 @@ class Espacio extends Model
         return $this->belongsTo(Edificio::class, 'id_edificio', 'id');
     }
 
+    public function elementos()
+    {
+        return $this->belongsToMany(Elemento::class, 'elementos_espacios', 'id_espacio', 'id_elemento');
+    }
+
     public function scopeFiltros($query, $sede, $categoria, $grupo)
     {
         return $query->when($sede, fn($q) => $q->where('id_sede', $sede))

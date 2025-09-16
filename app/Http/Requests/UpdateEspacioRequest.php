@@ -41,6 +41,8 @@ class UpdateEspacioRequest extends FormRequest
             'reservasSimultaneas' => 'sometimes|integer|min:1',
             'sede' => 'sometimes|exists:sedes,id',
             'categoria' => 'sometimes|exists:categorias,id',
+            'elementosEnlazados' => 'sometimes|array',
+            'elementosEnlazados.*' => 'integer|exists:elementos,id',
             'imagen' => 'sometimes|nullable|file|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5 MB or data URL
         ];
     }
@@ -81,6 +83,9 @@ class UpdateEspacioRequest extends FormRequest
             'aprobarReservas.boolean' => 'El campo "Aprobar Reserva" debe ser verdadero o falso.',
             'codigoEspacio.string' => 'El campo "codigo espacio" debe ser una cadena de texto.',
             'codigoEspacio.max' => 'El campo "codigo espacio" no puede exceder los 50 caracteres.',
+            'elementosEnlazados.array' => 'El campo "elementosEnlazados" debe ser un arreglo.',
+            'elementosEnlazados.*.integer' => 'Cada elemento en "elementosEnlazados" debe ser un número entero.',
+            'elementosEnlazados.*.exists' => 'Uno o más elementos en "elementosEnlazados" no existen.',
         ];
     }
 

@@ -35,4 +35,9 @@ class Elemento extends Model
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
     ];
+
+    public function espacios()
+    {
+        return $this->belongsToMany(Espacio::class, 'elementos_espacios', 'id_elemento', 'id_espacio');
+    }
 }

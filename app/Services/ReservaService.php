@@ -223,6 +223,7 @@ class ReservaService
         $espacio = Espacio::query()
             ->with([
                 'imagen',
+                'elementos',
                 'sede:id,nombre',
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
@@ -272,6 +273,7 @@ class ReservaService
             }
             $espacio->usuario_mensualidad_activa = $tieneActiva || ($valorMensualDescuento === 0.0 && (bool)($espacio->pago_mensual ?? false));
             $espacio->mensualidad = $espacio->usuario_mensualidad_activa ? $usuario->mensualidadActivaMasActual() : null;
+            $espacio->puede_agregar_elementos = $espacio->elementos && $espacio->elementos->isNotEmpty();
         } catch (\Throwable $th) {
             $espacio->usuario_mensualidad_activa = false;
             Log::warning('Error calculando usuario_mensualidad_activa', [
@@ -576,7 +578,7 @@ class ReservaService
             $this->validarTiempoAperturaReserva($espacioId, $usuario->tipos_usuario, $fecha);
             $this->validarLimitesReservasPorCategoria($espacioId, $usuario->id_usuario, $usuario->tipos_usuario, $fecha);
 
-            $espacio = Espacio::with(['sede'])->find($espacioId);
+            $espacio = Espacio::with(['sede', 'elementos'])->find($espacioId);
             if (!$espacio) {
                 throw new Exception('Espacio no encontrado.');
             }
@@ -698,6 +700,7 @@ class ReservaService
                 'puede_agregar_jugadores' => ($espacio->agregar_jugadores ?? false) &&
                     (($espacio->maximo_jugadores ?? 0) == 0 || count($jugadoresEntrada) < ($espacio->maximo_jugadores ?? 0)),
                 'pago' => null,
+                'puede_agregar_elementos' => $espacio->elementos && $espacio->elementos->isNotEmpty(),
             ];
 
             return $resumenReserva;
@@ -1753,6 +1756,7 @@ class ReservaService
             $reserva = Reservas::withTrashed()->with([
                 'espacio:id,nombre,id_sede,agregar_jugadores,permite_externos,minimo_jugadores,maximo_jugadores,aprobar_reserva,pago_mensual,valor_mensualidad',
                 'espacio.sede:id,nombre',
+                'espacio.elementos:id',
                 'usuarioReserva',
                 'configuracion',
                 'configuracion.franjas_horarias',
@@ -1975,6 +1979,7 @@ class ReservaService
                 // Información de pago con detalles (polimórfica por tipo_concepto)
                 'pago' => $pagoResumen,
                 'creado_en' => Carbon::parse($reserva->creado_en)->format('d/m/Y h:i A'),
+                'puede_agregar_elementos' => $reserva->espacio->elementos && $reserva->espacio->elementos->isNotEmpty(),
             ];
 
             return $resumenReserva;
