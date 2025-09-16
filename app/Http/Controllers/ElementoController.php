@@ -17,11 +17,18 @@ class ElementoController extends Controller
     public function index()
     {
         $search = strtolower(trim(request('search', '')));
+        $id_espacio = request('id_espacio', null);
 
         $elementos = Elemento::withTrashed()
             ->orderByDesc('creado_en')
             ->when($search, function ($query, $search) {
                 $query->whereRaw('LOWER(nombre) LIKE ?', ["%{$search}%"]);
+            })
+            ->when($id_espacio, function ($query, $id_espacio) {
+                $query->whereHas('espacios', function ($q) use ($id_espacio) {
+                    // Calificar la columna para evitar ambigüedad en el EXISTS generado
+                    $q->where('espacios.id', $id_espacio);
+                });
             });
 
         return response()->json([

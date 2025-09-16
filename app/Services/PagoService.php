@@ -126,51 +126,37 @@ class PagoService
         $esAdministrador = $usuario && optional($usuario->rol)->nombre === 'Administrador';
 
         $query = Pago::withTrashed()->with([
-            'reserva',
+            'reserva' => function ($q) {
+                $q->withTrashed()->with([
+                    'espacio',
+                    'configuracion',
+                    'usuarioReserva',
+                    'usuarioReserva.persona',
+                    'usuarioReserva.persona.tipoDocumento',
+                ]);
+            },
             'detalles',
-            'reserva.espacio',
-            'reserva.configuracion',
-            'reserva.usuarioReserva',
-            'reserva.usuarioReserva.persona',
-            'reserva.usuarioReserva.persona.tipoDocumento',
+            'mensualidad' => function ($q) {
+                $q->withTrashed()->with([
+                    'usuario',
+                    'usuario.persona',
+                    'usuario.persona.tipoDocumento',
+                    'espacio',
+                ]);
+            },
+            'elementos',
         ])
             ->orderBy('creado_en', 'desc');
 
         if (!$esAdministrador) {
-            $query->whereHas('reserva.usuarioReserva', function ($q) use ($usuario) {
-                $q->where('id_usuario', $usuario->id_usuario);
+            $query->where(function ($q) use ($usuario) {
+                $q->whereHas('reserva.usuarioReserva', fn($sq) => $sq->where('id_usuario', $usuario->id_usuario))
+                    ->orWhereHas('mensualidad.usuario', fn($sq) => $sq->where('id_usuario', $usuario->id_usuario));
             });
         }
 
         if (!empty($search)) {
-            $query->where(function ($q) use ($search) {
-                $q->where('codigo', 'ilike', "%$search%")
-                    ->orWhere('ticket_id', 'ilike', "%$search%")
-                    ->orWhereRaw("to_char(creado_en, 'YYYY-MM-DD') ILIKE ?", ["%$search%"])
-                    ->orWhereRaw("to_char(creado_en, 'DD/MM/YYYY') ILIKE ?", ["%$search%"])
-                    ->orWhereRaw("to_char(creado_en, 'YYYYMMDD') ILIKE ?", ["%$search%"])
-                    ->orWhereRaw("to_char(creado_en, 'YYYY-MM') ILIKE ?", ["%$search%"])
-                    ->orWhereRaw("to_char(creado_en, 'MM/YYYY') ILIKE ?", ["%$search%"]);
-
-                $q->orWhereHas('reserva.usuarioReserva.persona', function ($userQuery) use ($search) {
-                    $userQuery->where('numero_documento', 'ilike', "%$search%")
-                        ->orWhere('primer_nombre', 'ilike', "%$search%")
-                        ->orWhere('segundo_nombre', 'ilike', "%$search%")
-                        ->orWhere('primer_apellido', 'ilike', "%$search%")
-                        ->orWhere('segundo_apellido', 'ilike', "%$search%");
-                });
-
-                $q->orWhereHas('reserva.espacio', function ($espacioQ) use ($search) {
-                    $espacioQ->where('nombre', 'ilike', "%$search%");
-                });
-
-                $q->orWhereHas('reserva', function ($reservaQ) use ($search) {
-                    $reservaQ->whereRaw("to_char(fecha, 'YYYY-MM-DD') ILIKE ?", ["%$search%"])
-                        ->orWhereRaw("to_char(fecha, 'DD/MM/YYYY') ILIKE ?", ["%$search%"])
-                        ->orWhereRaw("to_char(fecha, 'YYYY-MM') ILIKE ?", ["%$search%"])
-                        ->orWhereRaw("to_char(fecha, 'MM/YYYY') ILIKE ?", ["%$search%"]);
-                });
-            });
+            $query->search($search);
         }
 
         return $query->paginate($perPage);
