@@ -364,8 +364,10 @@ class PagoService
     public function get_info_pago(string $codigo)
     {
         try {
-            $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
-            Log::debug('pagoConsulta', ['pagoConsulta' => $pagoConsulta]);
+            $pagoConsulta = PagoConsulta::where('codigo', $codigo)
+                ->where('estado', 'OK')
+                ->first();
+
             if ($pagoConsulta) {
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
@@ -632,6 +634,20 @@ class PagoService
                 'tipo_concepto' => 'mensualidad',
                 'id_concepto' => $pago->mensualidad->id,
             ];
+        }
+
+        $pagoConsultaExistente = PagoConsulta::where('codigo', $pago->codigo)
+            ->first();
+
+        if ($pagoConsultaExistente) {
+            $estadoExistente = strtoupper((string) $pagoConsultaExistente->estado);
+            if (in_array($estadoExistente, ['CREATED', 'PENDING'], true)) {
+                $pagoConsultaExistente->fill($payload);
+                $pagoConsultaExistente->save();
+                return $pagoConsultaExistente;
+            }
+
+            return $pagoConsultaExistente;
         }
 
         return PagoConsulta::create($payload);
