@@ -54,7 +54,7 @@ class CategoriaController extends Controller
             'reservas_estudiante' => 'required|integer|min:1',
             'reservas_administrativo' => 'required|integer|min:1',
             'reservas_egresado' => 'required|integer|min:1',
-            'reservas_externo' => 'required|integer|min:1',
+            'reservas_externo' => 'required|integer|min:0',
         ]);
 
         try {
@@ -89,7 +89,7 @@ class CategoriaController extends Controller
             'reservas_estudiante' => 'sometimes|integer|min:1',
             'reservas_administrativo' => 'sometimes|integer|min:1',
             'reservas_egresado' => 'sometimes|integer|min:1',
-            'reservas_externo' => 'sometimes|integer|min:1',
+            'reservas_externo' => 'sometimes|integer|min:0',
         ]);
 
         try {
