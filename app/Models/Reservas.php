@@ -132,10 +132,6 @@ class Reservas extends Model
             return false;
         }
 
-        if ($this->movimientos()->exists()) {
-            return false;
-        }
-
         if ($this->estado === 'cancelada') {
             return false;
         }

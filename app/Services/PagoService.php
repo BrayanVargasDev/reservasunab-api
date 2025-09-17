@@ -637,17 +637,11 @@ class PagoService
         }
 
         $pagoConsultaExistente = PagoConsulta::where('codigo', $pago->codigo)
+            ->whereIn('estado', ['PENDING', 'CREATED'])
             ->first();
 
         if ($pagoConsultaExistente) {
-            $estadoExistente = strtoupper((string) $pagoConsultaExistente->estado);
-            if (in_array($estadoExistente, ['CREATED', 'PENDING'], true)) {
-                $pagoConsultaExistente->fill($payload);
-                $pagoConsultaExistente->save();
-                return $pagoConsultaExistente;
-            }
-
-            return $pagoConsultaExistente;
+            $pagoConsultaExistente->delete();
         }
 
         return PagoConsulta::create($payload);

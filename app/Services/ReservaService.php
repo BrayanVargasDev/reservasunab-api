@@ -2121,7 +2121,7 @@ class ReservaService
     {
         DB::beginTransaction();
         try {
-            $reserva = Reservas::with(['pago', 'usuarioReserva'])
+            $reserva = Reservas::with(['pago', 'usuarioReserva', 'movimientos'])
                 ->lockForUpdate()
                 ->find($idReserva);
 
@@ -2160,8 +2160,9 @@ class ReservaService
 
             $reserva->delete();
 
+            $tieneMovimientoAsociados = count($reserva->movimientos) > 0;
             $movimiento = null;
-            if ($tienePagoOk && $valorMovimiento > 0) {
+            if (($tienePagoOk || $tieneMovimientoAsociados) && $valorMovimiento > 0) {
                 $movimiento = Movimientos::create([
                     'id_usuario' => $reserva->id_usuario,
                     'id_reserva' => $reserva->id,
