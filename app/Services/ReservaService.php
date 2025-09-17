@@ -1343,12 +1343,14 @@ class ReservaService
             return 'Usuario sin nombre';
         }
 
-        return trim(
-            ($persona->primer_nombre ?? '') . ' ' .
-                ($persona->segundo_nombre ?? '') . ' ' .
-                ($persona->primer_apellido ?? '') . ' ' .
-                ($persona->segundo_apellido ?? '')
-        );
+        $partes = array_filter([
+            trim($persona->primer_nombre ?? ''),
+            trim($persona->segundo_nombre ?? ''),
+            trim($persona->primer_apellido ?? ''),
+            trim($persona->segundo_apellido ?? '')
+        ]);
+
+        return implode(' ', $partes);
     }
 
     private function copiarConfiguracion($configuracionOriginal, $fecha)

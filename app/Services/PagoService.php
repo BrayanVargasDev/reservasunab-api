@@ -365,7 +365,7 @@ class PagoService
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)->first();
-
+            Log::debug('pagoConsulta', ['pagoConsulta' => $pagoConsulta]);
             if ($pagoConsulta) {
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
@@ -567,6 +567,7 @@ class PagoService
 
     public function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
     {
+        Log::debug($pagoInfo);
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
 
         $pago->loadMissing([
