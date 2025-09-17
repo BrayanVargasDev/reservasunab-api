@@ -2152,15 +2152,15 @@ class ReservaService
             }
 
             $tienePagoOk = $reserva->pago && strtoupper($reserva->pago->estado) === 'OK';
-            $valorMovimiento = (float)($reserva->pago->valor ?? $reserva->valor ?? 0);
+            $valorMovimiento = (float)($reserva->pago->valor ?? $reserva->precio_total ?? 0);
 
             $reserva->estado = 'cancelada';
             $reserva->cancelado_por = $usuarioAuthId;
             $reserva->save();
 
-            $reserva->delete();
 
             $tieneMovimientoAsociados = count($reserva->movimientos) > 0;
+
             $movimiento = null;
             if (($tienePagoOk || $tieneMovimientoAsociados) && $valorMovimiento > 0) {
                 $movimiento = Movimientos::create([
@@ -2174,6 +2174,7 @@ class ReservaService
                 ]);
             }
 
+            $reserva->delete();
             DB::commit();
 
             return [

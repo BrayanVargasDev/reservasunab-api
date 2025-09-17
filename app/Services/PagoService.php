@@ -569,7 +569,6 @@ class PagoService
 
     public function crearRegistroPagoConsulta(Pago $pago, array $pagoInfo): PagoConsulta
     {
-        Log::debug($pagoInfo);
         $transaccionFormateada = $this->formatearTransaccion($pagoInfo);
 
         $pago->loadMissing([
