@@ -51,7 +51,12 @@ class Pago extends Model
             'id',
             'codigo',
             'id_concepto'
-        )->where('pagos_detalles.tipo_concepto', 'reserva');
+        )
+            // Incluir detalles de pago eliminados lógicamente en la relación through
+            ->withTrashedParents()
+            // Incluir reservas eliminadas lógicamente
+            ->withTrashed()
+            ->where('pagos_detalles.tipo_concepto', 'reserva');
     }
 
     public function mensualidad()
@@ -63,7 +68,12 @@ class Pago extends Model
             'id',
             'codigo',
             'id_concepto'
-        )->where('pagos_detalles.tipo_concepto', 'mensualidad');
+        )
+            // Incluir detalles de pago eliminados lógicamente en la relación through
+            ->withTrashedParents()
+            // Incluir mensualidades eliminadas lógicamente
+            ->withTrashed()
+            ->where('pagos_detalles.tipo_concepto', 'mensualidad');
     }
 
     public function elementos()
@@ -75,7 +85,12 @@ class Pago extends Model
             'id',
             'codigo',
             'id_concepto'
-        )->where('pagos_detalles.tipo_concepto', 'elemento');
+        )
+            // Incluir detalles de pago eliminados lógicamente en la relación through
+            ->withTrashedParents()
+            // Incluir elementos eliminados lógicamente si aplica
+            ->withTrashed()
+            ->where('pagos_detalles.tipo_concepto', 'elemento');
     }
 
     public function scopeSearch($query, string $input)
@@ -152,9 +167,6 @@ class Pago extends Model
                 });
             });
         }
-
-        Log::debug(['query pago', $query->toSql()]);
-        Log::debug(['bindings pago', $query->getBindings()]);
 
         return $query;
     }

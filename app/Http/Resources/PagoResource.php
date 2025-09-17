@@ -24,6 +24,8 @@ class PagoResource extends JsonResource
             'url_ecollect' => $this->url_ecollect,
             'valor' => $this->valor,
             'reserva' => $this->reserva,
+            'mensualidad' => $this->mensualidad,
+            'elementos' => $this->elementos,
             'detalles' => $this->whenLoaded('detalles', function () {
                 return $this->detalles->map(function ($d) {
                     return [

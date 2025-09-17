@@ -507,7 +507,7 @@ class CronJobsService
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => $hayPagoOk ? 'PAGO_ONLINE' : '',
                     'descuentoTotal' => 0.00,
-                    'totalPagar' => round((float)$reserva->precio_total, 2),
+                    'totalPagar' => $hayPagoOk ? round((float)$reserva->precio_total, 2) : 0.00,
                     'Ecollect' => $hayPagoOk ? [
                         'ticketId' => (string)$pago->ticket_id,
                         'paymentId' => $codigoTrazaPago ?? null,
@@ -538,7 +538,7 @@ class CronJobsService
                         'horaInicio' => $horaInicio,
                         'horaFin' => $horaFin,
                         'descuentoReserva' => 0.00,
-                        'precioTotal' => round((float)$reserva->precio_total, 2),
+                        'precioTotal' => $hayPagoOk ? round((float)$reserva->precio_total, 2) : 0.00,
                     ]],
                 ];
 
@@ -587,7 +587,7 @@ class CronJobsService
                     'canalVenta' => 'RESERVA_EN_LINEA',
                     'formaPago' => 'PAGO_ONLINE',
                     'descuentoTotal' => 0.00,
-                    'totalPagar' => round((float)$mensualidad->valor, 2),
+                    'totalPagar' => $hayPagoOk ? round((float)$pago->valor, 2) : 0.00,
                     'Ecollect' => [
                         'ticketId' => $pago->ticket_id,
                         'paymentId' => PagoConsulta::where('codigo', $pago->codigo)->first()->codigo_traza ?? null,
@@ -613,7 +613,7 @@ class CronJobsService
                         'horaInicio' => '0000',
                         'horaFin' => '2359',
                         'descuentoReserva' => 0.00,
-                        'precioTotal' => round((float)$mensualidad->valor, 2),
+                        'precioTotal' => $hayPagoOk ? round((float)$pago->valor, 2) : 0.00,
                     ]],
                 ];
 

@@ -42,4 +42,14 @@ class PagosDetalles extends Model
     {
         return $this->belongsTo(Reservas::class, 'id_concepto', 'id');
     }
+
+    public function mensualidad()
+    {
+        return $this->belongsTo(Mensualidades::class, 'id_concepto', 'id');
+    }
+
+    public function elemento()
+    {
+        return $this->belongsTo(Elemento::class, 'id_concepto', 'id');
+    }
 }

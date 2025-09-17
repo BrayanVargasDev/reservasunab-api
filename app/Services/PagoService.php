@@ -372,15 +372,25 @@ class PagoService
 
             $pago = Pago::where('codigo', $codigo)->firstOrFail();
 
+            // Incluir posibles registros soft-deleted en reserva/mensualidad
             $pago->load([
-                'reserva',
-                'reserva.espacio',
-                'reserva.configuracion',
-                'reserva.usuarioReserva',
-                'reserva.usuarioReserva.persona',
-                'reserva.usuarioReserva.persona.tipoDocumento',
-                'mensualidad',
-                'mensualidad.usuario.persona.tipoDocumento',
+                'reserva' => function ($q) {
+                    $q->withTrashed()->with([
+                        'espacio',
+                        'configuracion',
+                        'usuarioReserva',
+                        'usuarioReserva.persona',
+                        'usuarioReserva.persona.tipoDocumento',
+                    ]);
+                },
+                'mensualidad' => function ($q) {
+                    $q->withTrashed()->with([
+                        'usuario',
+                        'usuario.persona',
+                        'usuario.persona.tipoDocumento',
+                        'espacio',
+                    ]);
+                },
             ]);
 
             $pagoInfo = $this->consultarPasarelaPago($pago->ticket_id);

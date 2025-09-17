@@ -226,7 +226,6 @@ class EspacioService
     {
         try {
             DB::beginTransaction();
-            Log::debug('Datos para actualizar espacio', ['data' => $data]);
             $espacio = $this->getById($id);
 
             $updateData = [
