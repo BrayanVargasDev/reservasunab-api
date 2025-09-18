@@ -316,12 +316,11 @@ class PagoService
             'tipo_concepto' => 'reserva',
             'cantidad' => 1,
             'id_concepto' => $reserva->id,
-            'total' => $reserva->precio_total,
+            'total' => $reserva->precio_espacio,
             'creado_en' => now(),
             'actualizado_en' => now(),
         ];
 
-        $tipos = (array) optional($reserva->usuarioReserva)->tipos_usuario ?: [];
         foreach ($reserva->detalles ?? [] as $d) {
             $elem = $d->elemento;
             $cant = (int) ($d->cantidad ?? 0);
@@ -334,7 +333,7 @@ class PagoService
                 'tipo_concepto' => 'elemento',
                 'cantidad' => $cant,
                 'id_concepto' => $elem->id,
-                'total' => $elem->valor_unitario * $cant,
+                'total' => $d->valor_unitario * $cant,
                 'creado_en' => now(),
                 'actualizado_en' => now(),
             ];

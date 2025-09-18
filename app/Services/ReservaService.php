@@ -966,6 +966,7 @@ class ReservaService
 
                     $valorUnit = null;
                     $tipos = (array)($usuario->tipos_usuario ?? []);
+
                     if (in_array('estudiante', $tipos) && $elem->valor_estudiante !== null) $valorUnit = (float)$elem->valor_estudiante;
                     elseif (in_array('egresado', $tipos) && $elem->valor_egresado !== null) $valorUnit = (float)$elem->valor_egresado;
                     elseif (in_array('administrativo', $tipos) && $elem->valor_administrativo !== null) $valorUnit = (float)$elem->valor_administrativo;
@@ -1792,10 +1793,7 @@ class ReservaService
                 if ($pago) {
                     $reserva->setRelation('pago', $pago);
                 } else {
-                    Log::warning('Reserva sin pago asociado', [
-                        'reserva_id' => $id_reserva,
-                        'usuario_id' => $reserva->id_usuario ?? null,
-                    ]);
+                    //
                 }
             }
 
