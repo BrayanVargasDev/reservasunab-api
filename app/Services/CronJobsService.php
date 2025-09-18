@@ -871,10 +871,8 @@ class CronJobsService
                             'estado_actual' => $pago->estado,
                         ]);
 
-                        // Llamar a get_info_pago para validar con el proveedor
-                        $resultado = $pagoService->get_info_pago($pago->codigo);
+                        $resultado = $pagoService->get_info_pago($pago->codigo, true);
 
-                        // Verificar si el estado cambió (asumiendo que get_info_pago actualiza el pago)
                         $pago->refresh();
                         if ($pago->estado !== 'PENDING' && $pago->estado !== 'CREATED' && $pago->estado !== 'inicial') {
                             $totalActualizados++;

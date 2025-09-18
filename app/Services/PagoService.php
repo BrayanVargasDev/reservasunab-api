@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Mail\ConfirmacionReservaEmail;
 use App\Models\Espacio;
 use App\Models\Pago;
 use App\Models\PagoConsulta;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Throwable;
 use App\Models\PagosDetalles;
 use App\Models\Mensualidades;
@@ -83,6 +85,22 @@ class PagoService
             $reserva->save();
 
             DB::commit();
+
+            // Enviar correo de confirmación al pagar con saldo
+            try {
+                $reserva->loadMissing(['espacio.sede', 'usuarioReserva:id_usuario,email']);
+                Mail::to($reserva->usuarioReserva->email)
+                    ->send(new ConfirmacionReservaEmail(
+                        $reserva,
+                        (float)($reserva->precio_base ?? 0),
+                        (float)($reserva->precio_espacio ?? 0),
+                    ));
+            } catch (Throwable $mailTh) {
+                Log::warning('Error enviando correo de confirmación tras pagar con saldo', [
+                    'reserva_id' => $reserva->id,
+                    'error' => $mailTh->getMessage(),
+                ]);
+            }
 
             $saldoRestante = max(0, $saldoFavor - $reserva->precio_total);
             $resumen = $this->reserva_service->getMiReserva($reserva->id);
@@ -361,7 +379,7 @@ class PagoService
         return $pago;
     }
 
-    public function get_info_pago(string $codigo)
+    public function get_info_pago(string $codigo, bool $from_cron = false)
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)
@@ -416,6 +434,24 @@ class PagoService
                     }
 
                     DB::commit();
+
+                    if ($pago->reserva && ($pagoInfo['TranState'] ?? null) === 'OK' && !$from_cron) {
+                        try {
+                            $pago->reserva->loadMissing(['espacio.sede', 'usuarioReserva:id_usuario,email']);
+                            Mail::to($pago->reserva->usuarioReserva->email)
+                                ->send(new ConfirmacionReservaEmail(
+                                    $pago->reserva,
+                                    (float)($pago->reserva->precio_base ?? 0),
+                                    (float)($pago->reserva->precio_espacio ?? 0),
+                                ));
+                        } catch (Throwable $mailTh) {
+                            Log::warning('Error enviando correo de confirmación post-pago', [
+                                'reserva_id' => optional($pago->reserva)->id,
+                                'pago_codigo' => $pago->codigo,
+                                'error' => $mailTh->getMessage(),
+                            ]);
+                        }
+                    }
 
                     return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
                 } catch (Exception $e) {

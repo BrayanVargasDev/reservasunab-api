@@ -1080,13 +1080,15 @@ class ReservaService
             }
 
             try {
-                $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
-                Mail::to($reserva->usuarioReserva->email)
-                    ->send(new ConfirmacionReservaEmail(
-                        $reserva,
-                        $valoresReserva['valor_real'] ?? 0,
-                        $valoresReserva['valor_descuento'] ?? 0,
-                    ));
+                if ((float)($valorTotal ?? 0) <= 0) {
+                    $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
+                    Mail::to($reserva->usuarioReserva->email)
+                        ->send(new ConfirmacionReservaEmail(
+                            $reserva,
+                            $valoresReserva['valor_real'] ?? 0,
+                            $valoresReserva['valor_descuento'] ?? 0,
+                        ));
+                }
             } catch (Throwable $mailTh) {
                 Log::warning('Error enviando correo de confirmación', ['reserva_id' => $reserva->id, 'error' => $mailTh->getMessage()]);
             }
