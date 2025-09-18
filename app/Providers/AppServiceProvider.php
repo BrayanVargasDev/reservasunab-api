@@ -178,6 +178,7 @@ class AppServiceProvider extends ServiceProvider
                     'ESTUDIANTE' => 'estudiante',
                     'EMPLEADO' => 'administrativo',
                     'EGRESADO' => 'egresado',
+                    'GRADUADO' => 'egresado',
                 ];
 
 
@@ -191,13 +192,13 @@ class AppServiceProvider extends ServiceProvider
                         if (!is_array($entrada)) continue;
                         $tipoUpper = strtoupper($entrada['tipo'] ?? '');
                         if ($tipoUpper === '') continue;
-                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
+                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'egresado';
                     }
                 }
 
                 $tiposUsuario = array_values(array_unique($tiposUsuario));
                 if (empty($tiposUsuario)) {
-                    $tiposUsuario = ['externo'];
+                    $tiposUsuario = ['egresado'];
                 }
 
                 $payload = [

@@ -17,7 +17,26 @@ class ElementoController extends Controller
     public function index()
     {
         $search = strtolower(trim(request('search', '')));
-        $id_espacio = request('id_espacio', null);
+        $rawIdEspacio = request('id_espacio', null);
+        if (is_string($rawIdEspacio)) {
+            $trimmed = trim($rawIdEspacio);
+            $lower = strtolower($trimmed);
+            if ($trimmed === '' || $lower === 'null' || $lower === 'undefined') {
+                $id_espacio = null;
+            } elseif (ctype_digit($trimmed)) {
+                $id_espacio = (int) $trimmed;
+            } else {
+                $id_espacio = null;
+            }
+        } elseif (is_numeric($rawIdEspacio)) {
+            $id_espacio = (int) $rawIdEspacio;
+        } else {
+            $id_espacio = null;
+        }
+
+        if ($id_espacio === 0) {
+            $id_espacio = null;
+        }
 
         $elementos = Elemento::withTrashed()
             ->orderByDesc('creado_en')
