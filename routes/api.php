@@ -22,6 +22,7 @@ use App\Http\Controllers\UsuarioController;
 use App\Http\Controllers\BeneficiarioController;
 use App\Http\Controllers\ElementoController;
 use App\Http\Controllers\MensualidadesController;
+use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
@@ -243,6 +244,15 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::post('/saldos', [PagoController::class, 'pagarConSaldo']);
         Route::post('/mensualidad', [PagoController::class, 'mensualidad']);
         Route::get('/info', [PagoController::class, 'info']);
+    });
+
+    Route::group(['prefix' => 'dashboard'], function () {
+        Route::get('/indicadores', [DashboardController::class, 'indicadoresDashboard']);
+        Route::get('/promedio-por-horas', [DashboardController::class, 'promedioPorHoras']);
+        Route::get('/recaudo-mensual', [DashboardController::class, 'recaudoMensual']);
+        Route::get('/reservas-por-categoria', [DashboardController::class, 'reservasPorCategoria']);
+        Route::get('/reservas-por-mes', [DashboardController::class, 'reservasPorMes']);
+        Route::get('/anios-con-reservas', [DashboardController::class, 'aniosConReservas']);
     });
 
     Route::get('/edificios', [SharedController::class, 'edificios']);

@@ -18,6 +18,8 @@ class ElementoController extends Controller
     {
         $search = strtolower(trim(request('search', '')));
         $rawIdEspacio = request('id_espacio', null);
+        $from_crud = filter_var(request('from_crud', false), FILTER_VALIDATE_BOOLEAN);
+
         if (is_string($rawIdEspacio)) {
             $trimmed = trim($rawIdEspacio);
             $lower = strtolower($trimmed);
@@ -45,9 +47,11 @@ class ElementoController extends Controller
             })
             ->when($id_espacio, function ($query, $id_espacio) {
                 $query->whereHas('espacios', function ($q) use ($id_espacio) {
-                    // Calificar la columna para evitar ambigüedad en el EXISTS generado
                     $q->where('espacios.id', $id_espacio);
                 });
+            })
+            ->when(!$from_crud, function ($query) {
+                $query->whereNull('eliminado_en');
             });
 
         return response()->json([
