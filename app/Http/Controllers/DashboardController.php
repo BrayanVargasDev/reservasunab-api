@@ -289,6 +289,7 @@ class DashboardController extends Controller
             $reservasTotales = Reservas::selectRaw('EXTRACT(MONTH FROM fecha) as mes, COUNT(*) as cantidad')
                 ->whereYear('fecha', $anio)
                 ->withTrashed()
+                ->whereNotIn('estado', ['inicial'])
                 ->groupByRaw('EXTRACT(MONTH FROM fecha)')
                 ->orderByRaw('EXTRACT(MONTH FROM fecha)')
                 ->pluck('cantidad', 'mes')
