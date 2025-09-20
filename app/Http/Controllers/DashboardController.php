@@ -297,6 +297,7 @@ class DashboardController extends Controller
             // Consultar reservas completadas (estado 'completada' o 'pagada')
             $reservasCompletadas = Reservas::selectRaw('EXTRACT(MONTH FROM fecha) as mes, COUNT(*) as cantidad')
                 ->whereYear('fecha', $anio)
+                ->withTrashed()
                 ->whereIn('estado', ['completada', 'pagada'])
                 ->groupByRaw('EXTRACT(MONTH FROM fecha)')
                 ->orderByRaw('EXTRACT(MONTH FROM fecha)')
