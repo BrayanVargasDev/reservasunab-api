@@ -6,10 +6,13 @@ use App\Models\Pago;
 use App\Models\Reservas;
 use App\Models\FranjaHoraria;
 use App\Services\ReservaService;
+use App\Exports\ReservasExport;
+use App\Exports\PagosExport;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
 
 class DashboardController extends Controller
 {
@@ -370,6 +373,72 @@ class DashboardController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Error interno del servidor al obtener los años con reservas'
+            ], 500);
+        }
+    }
+
+    public function descargarReservasExcel(Request $request)
+    {
+        try {
+            $mes = $request->input('mes');
+            $anio = $request->input('anio', Carbon::now()->year);
+
+            // Validar parámetros
+            if (!$mes || !is_numeric($mes) || $mes < 1 || $mes > 12) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El mes es requerido y debe ser un número entre 1 y 12'
+                ], 400);
+            }
+
+            if (!is_numeric($anio) || $anio < 2020 || $anio > Carbon::now()->year + 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El año debe ser un número válido'
+                ], 400);
+            }
+
+            $nombreArchivo = "reservas_{$mes}_{$anio}.xlsx";
+
+            return Excel::download(new ReservasExport($mes, $anio), $nombreArchivo);
+        } catch (Exception $e) {
+            Log::error('Error al descargar reservas Excel: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error interno del servidor al descargar el archivo Excel de reservas'
+            ], 500);
+        }
+    }
+
+    public function descargarPagosExcel(Request $request)
+    {
+        try {
+            $mes = $request->input('mes');
+            $anio = $request->input('anio', Carbon::now()->year);
+
+            // Validar parámetros
+            if (!$mes || !is_numeric($mes) || $mes < 1 || $mes > 12) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El mes es requerido y debe ser un número entre 1 y 12'
+                ], 400);
+            }
+
+            if (!is_numeric($anio) || $anio < 2020 || $anio > Carbon::now()->year + 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El año debe ser un número válido'
+                ], 400);
+            }
+
+            $nombreArchivo = "pagos_{$mes}_{$anio}.xlsx";
+
+            return Excel::download(new PagosExport($mes, $anio), $nombreArchivo);
+        } catch (Exception $e) {
+            Log::error('Error al descargar pagos Excel: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Error interno del servidor al descargar el archivo Excel de pagos'
             ], 500);
         }
     }

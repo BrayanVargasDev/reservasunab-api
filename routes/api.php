@@ -253,6 +253,8 @@ Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], func
         Route::get('/reservas-por-categoria', [DashboardController::class, 'reservasPorCategoria']);
         Route::get('/reservas-por-mes', [DashboardController::class, 'reservasPorMes']);
         Route::get('/anios-con-reservas', [DashboardController::class, 'aniosConReservas']);
+        Route::get('/descargar-reservas-excel', [DashboardController::class, 'descargarReservasExcel']);
+        Route::get('/descargar-pagos-excel', [DashboardController::class, 'descargarPagosExcel']);
     });
 
     Route::get('/edificios', [SharedController::class, 'edificios']);
