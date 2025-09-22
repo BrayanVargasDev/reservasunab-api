@@ -182,11 +182,12 @@ class AuthController extends Controller
                     'id' => $usuario->id_usuario,
                     'email' => $usuario->email,
                     'nombre' => $datosNombre['nombre'],
+                    'rol' => $usuario->rol,
                     'apellido' => $datosNombre['apellido'],
                     'celular' => $request->celular,
                     'tipo_usuario' => $usuario->tipos_usuario,
                     'activo' => $usuario->activo,
-                    'token' => $usuario->createToken('auth-token')->plainTextToken,
+                    'token' => $this->token_service->generarAccessToken($usuario)['token'],
                 ],
             ], 201);
         } catch (Exception $th) {
@@ -271,6 +272,7 @@ class AuthController extends Controller
                     'access_token'     => $token['token'],
                     'id'               => $usuario->id_usuario,
                     'email'            => $usuario->email,
+                    'rol'              => $usuario->rol,
                     'nombre'           => $usuario->persona->nombre ?? null,
                     'apellido'         => $usuario->persona->apellido ?? null,
                     'tipo_usuario'     => $usuario->tipos_usuario,
@@ -355,6 +357,7 @@ class AuthController extends Controller
                 'file'  => $th->getFile(),
                 'line'  => $th->getLine()
             ]);
+            return;
         }
     }
 
@@ -387,12 +390,6 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
-            $usuario = $request->user();
-
-            if ($usuario) {
-                $usuario->tokens()->delete();
-            }
-
             return response()->json([
                 'status' => 'success',
                 'message' => 'Sesión cerrada correctamente.',

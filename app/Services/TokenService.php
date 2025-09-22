@@ -23,7 +23,7 @@ class TokenService
         $finalExpiresAt = $model->expires_at ?? $expiresAt;
 
         return [
-            'token' => $newToken->plainTextToken,
+            'token' => $newToken->accessToken,
             'expires_at' => $finalExpiresAt instanceof Carbon ? $finalExpiresAt : ($finalExpiresAt ? Carbon::parse($finalExpiresAt) : null),
         ];
     }

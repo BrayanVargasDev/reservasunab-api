@@ -34,7 +34,7 @@ Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
 Route::post('/refresh', [AuthController::class, 'refresh']);
 Route::post('/intercambiar', [AuthController::class, 'intercambiar']);
 
-Route::group(['middleware' => ['auth:sanctum', 'verify.token.expiration']], function () {
+Route::group(['middleware' => ['auth:api']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'user']);
     Route::post('/refresh-token', [AuthController::class, 'refreshToken']);
