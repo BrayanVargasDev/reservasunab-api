@@ -131,7 +131,7 @@ class CronJobsService
      *  - No inserta novedades que estén dentro de la ventana de apertura (configuración del espacio)
      * Se ejecuta diariamente a medianoche desde el scheduler.
      */
-    public function procesarNovedades(): void
+    public function procesarNovedades($espacioId = null): void
     {
         $inicio = microtime(true);
         Log::channel('cronjobs')->info('[CRON] Inicio procesarNovedades (tarea 2)');
@@ -155,6 +155,7 @@ class CronJobsService
                 $q->whereNull('eliminado_en');
             }])
             ->whereNull('eliminado_en')
+            ->when($espacioId, fn($q) => $q->where('id', $espacioId))
             ->orderBy('id')
             ->chunkById(30, function ($espacios) use (&$totalEspacios, &$totalSinCodigos, &$totalConsultados, &$totalNovedadesInsertadas, &$totalNovedadesSaltadasPorApertura, &$totalNovedadesDuplicadas, &$errores, $fechaInicioConsulta, $fechaFinConsulta, $urlBase, $hoy) {
                 foreach ($espacios as $espacio) {
@@ -354,7 +355,7 @@ class CronJobsService
         ]);
     }
 
-    public function procesarReporteReservasMensualidades(): void
+    public function procesarReporteReservasMensualidades($id = null): void
     {
         $inicio = microtime(true);
         Log::channel('cronjobs')->info('[CRON] Inicio procesarReporteReservasMensualidades (tarea 3)');
@@ -391,6 +392,7 @@ class CronJobsService
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
+            ->when($id, fn($q) => $q->where('id', $id))
             ->limit(300)
             ->get();
 
@@ -411,6 +413,7 @@ class CronJobsService
             ->where(function ($q) use ($maxFallos) {
                 $q->whereNull('fallos_reporte')->orWhere('fallos_reporte', '<', $maxFallos);
             })
+            ->when($id, fn($q) => $q->where('id', $id))
             ->limit(300)
             ->get();
 
