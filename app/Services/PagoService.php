@@ -27,8 +27,9 @@ class PagoService
     private $service_code;
     private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
     private $session_token;
+    private CronJobsService $cron_service;
 
-    public function __construct(ReservaService $reserva_service)
+    public function __construct(ReservaService $reserva_service, CronJobsService $cron_service)
     {
         $this->reserva_service = $reserva_service;
         $this->api_key = config('app.key_pagos');
@@ -36,6 +37,7 @@ class PagoService
         $this->entity_code = config('app.entity_code');
         $this->service_code = config('app.service_code');
         $this->session_token = null;
+        $this->cron_service = $cron_service;
     }
 
     public function pagarConSaldo(int $id_reserva): array
@@ -436,6 +438,7 @@ class PagoService
 
                     if ($pago->reserva && ($pagoInfo['TranState'] ?? null) === 'OK' && !$from_cron) {
                         try {
+                            $this->cron_service->procesarReporteReservasMensualidades();
                             $pago->reserva->loadMissing(['espacio.sede', 'usuarioReserva:id_usuario,email']);
                             Mail::to($pago->reserva->usuarioReserva->email)
                                 ->send(new ConfirmacionReservaEmail(

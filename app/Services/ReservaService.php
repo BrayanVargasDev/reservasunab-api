@@ -42,8 +42,9 @@ class ReservaService
     private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
     private $session_token;
     private $activarAgregarElementos;
+    private CronJobsService $cron_service;
 
-    public function __construct()
+    public function __construct(CronJobsService $cron_service)
     {
         $this->api_key = config('app.key_pagos');
         $this->url_pagos = config('app.url_pagos');
@@ -51,6 +52,7 @@ class ReservaService
         $this->service_code = config('app.service_code');
         $this->activarAgregarElementos = config('app.activar_agregar_elementos', false);
         $this->session_token = null;
+        $this->cron_service = $cron_service;
     }
 
     public function getSessionToken()
@@ -282,6 +284,17 @@ class ReservaService
                 'error' => $th->getMessage(),
             ]);
         }
+
+        try {
+            $this->cron_service->procesarNovedades($espacio->id);
+        } catch (\Throwable $th) {
+            Log::warning('Error procesando novedades para espacio en getEspacioDetalles', [
+                'espacio_id' => $espacio->id ?? null,
+                'fecha' => $fechaConsulta,
+                'error' => $th->getMessage(),
+            ]);
+        }
+
 
         $espacio->disponibilidad = $this->construirDisponibilidad($espacio, $fechaConsulta);
         return $espacio;
@@ -1082,6 +1095,7 @@ class ReservaService
 
             try {
                 if ((float)($valorTotal ?? 0) <= 0) {
+                    $this->cron_service->procesarReporteReservasMensualidades($reserva->id);
                     $reserva->load(['espacio.sede', 'usuarioReserva:id_usuario,email']);
                     Mail::to($reserva->usuarioReserva->email)
                         ->send(new ConfirmacionReservaEmail(
