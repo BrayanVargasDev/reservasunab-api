@@ -11,8 +11,11 @@ use App\Exports\PagosExport;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Maatwebsite\Excel\Facades\Excel;
+
+use function Psy\debug;
 
 class DashboardController extends Controller
 {
@@ -25,10 +28,18 @@ class DashboardController extends Controller
 
     public function indicadoresDashboard()
     {
-        $reservas_query = Reservas::with('usuarioReserva')->whereDate('fecha', today())->get();
-        $reservas_hoy = $reservas_query->count();
-        $usuarios_con_reservas_hoy = $reservas_query->pluck('id_usuario')->unique()->count();
-        $pagos_hoy = Pago::whereDate('creado_en', today())->where('estado', 'OK')->sum('valor');
+        $fechaHoy = today()->toDateString();
+
+        // Contar reservas del día
+        $reservas_hoy = Reservas::whereDate('fecha', $fechaHoy)->count();
+
+        // Contar usuarios únicos con reservas hoy (excluyendo null)
+        $usuarios_con_reservas_hoy = Reservas::whereDate('fecha', $fechaHoy)
+            ->whereNotNull('id_usuario')
+            ->distinct('id_usuario')
+            ->count('id_usuario');
+
+        $pagos_hoy = Pago::whereDate('creado_en', $fechaHoy)->where('estado', 'OK')->sum('valor');
 
         return response()->json([
             'status' => 'success',
@@ -46,38 +57,108 @@ class DashboardController extends Controller
     {
         try {
             $fechaHoy = Carbon::today()->toDateString();
-
+            Log::debug("Calculando ocupación para la fecha: $fechaHoy");
             $espacios = $this->reservaService->getAllEspacios($fechaHoy);
+
+            // Optimización: cargar todas las reservas y novedades de hoy en una sola query
+            $reservasHoy = Reservas::whereDate('fecha', $fechaHoy)
+                ->whereNull('eliminado_en')
+                ->select('id_espacio', 'hora_inicio', 'hora_fin', 'estado')
+                ->get()
+                ->groupBy('id_espacio');
+
+            $novedadesHoy = \App\Models\EspacioNovedad::whereDate('fecha', $fechaHoy)
+                ->whereNull('eliminado_en')
+                ->select('id_espacio', 'hora_inicio', 'hora_fin')
+                ->get()
+                ->groupBy('id_espacio');
+
             $totalSlots = 0;
             $slotsOcupados = 0;
             $espaciosConsultados = 0;
             $espaciosConError = 0;
             $slotsConError = 0;
+
             foreach ($espacios as $espacio) {
                 try {
                     if (!$espacio->configuraciones) {
                         continue;
                     }
-                    $primeraConfig = $espacio->configuraciones->first();
-                    if (!$primeraConfig || empty($primeraConfig->franjas_horarias)) {
+                    $configuracion = $espacio->configuraciones->first();
+                    if (!$configuracion || empty($configuracion->franjas_horarias)) {
                         continue;
                     }
 
-                    $espacioDetalles = $this->reservaService->getEspacioDetalles($espacio->id, $fechaHoy);
+                    $reservasEspacio = $reservasHoy->get($espacio->id, collect());
+                    $novedadesEspacio = $novedadesHoy->get($espacio->id, collect());
 
-                    if (isset($espacioDetalles->disponibilidad) && is_array($espacioDetalles->disponibilidad)) {
-                        foreach ($espacioDetalles->disponibilidad as $slot) {
-                            try {
-                                $totalSlots++;
-                                if ((isset($slot['reservada']) && $slot['reservada']) || (isset($slot['novedad']) && $slot['novedad'])) {
-                                    $slotsOcupados++;
-                                }
-                            } catch (Exception $eSlot) {
-                                $slotsConError++;
+                    $minutosUso = $configuracion->minutos_uso ?? 60;
+                    $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
+
+                    foreach ($configuracion->franjas_horarias as $franja) {
+                        try {
+                            if (!$franja->hora_inicio || !$franja->hora_fin) {
                                 continue;
                             }
+
+                            $franjaInicio = Carbon::createFromFormat('H:i:s', $franja->hora_inicio);
+                            $franjaFin = Carbon::createFromFormat('H:i:s', $franja->hora_fin);
+
+                            $horaActual = $franjaInicio->copy();
+
+                            while ($horaActual->lessThan($franjaFin)) {
+                                $horaFinSlot = $horaActual->copy()->addMinutes($minutosUso);
+
+                                if ($horaFinSlot->greaterThan($franjaFin)) {
+                                    break;
+                                }
+
+                                $totalSlots++;
+
+                                // Contar reservas en el slot y verificar si alcanza el límite de simultáneas
+                                $numeroReservasEnSlot = $reservasEspacio->filter(function ($reserva) use ($horaActual, $horaFinSlot, $fechaHoy) {
+                                    try {
+                                        $reservaInicio = Carbon::parse($fechaHoy . ' ' . $reserva->hora_inicio);
+                                        $reservaFin = Carbon::parse($fechaHoy . ' ' . $reserva->hora_fin);
+
+                                        $noHayConflicto = $horaFinSlot->lessThanOrEqualTo($reservaInicio) ||
+                                            $horaActual->greaterThanOrEqualTo($reservaFin);
+
+                                        return !$noHayConflicto;
+                                    } catch (Exception $e) {
+                                        return false;
+                                    }
+                                })->count();
+
+                                $ocupadoPorReserva = $numeroReservasEnSlot >= $reservasSimultaneasPermitidas;
+
+                                // Verificar si el slot tiene novedad
+                                $ocupadoPorNovedad = $novedadesEspacio->contains(function ($novedad) use ($horaActual, $horaFinSlot, $fechaHoy) {
+                                    try {
+                                        $novedadInicio = Carbon::parse($fechaHoy . ' ' . $novedad->hora_inicio);
+                                        $novedadFin = Carbon::parse($fechaHoy . ' ' . $novedad->hora_fin);
+
+                                        $noHaySolapamiento = $horaFinSlot->lessThanOrEqualTo($novedadInicio) ||
+                                            $horaActual->greaterThanOrEqualTo($novedadFin);
+
+                                        return !$noHaySolapamiento;
+                                    } catch (Exception $e) {
+                                        return false;
+                                    }
+                                });
+
+                                if ($ocupadoPorReserva || $ocupadoPorNovedad) {
+                                    $slotsOcupados++;
+                                }
+
+                                $horaActual->addMinutes($minutosUso);
+                            }
+                        } catch (Exception $eFranja) {
+                            $slotsConError++;
+                            continue;
                         }
                     }
+
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
                     $espaciosConError++;
@@ -95,62 +176,115 @@ class DashboardController extends Controller
         }
     }
 
-    public function promedioPorHoras()
+    public function promedioPorHoras(Request $request)
     {
         try {
-            // Obtener todas las horas disponibles de las franjas horarias activas
-            $horasDisponibles = FranjaHoraria::where('activa', true)
-                ->selectRaw('DISTINCT EXTRACT(HOUR FROM hora_inicio) as hora')
-                ->orderBy('hora')
-                ->pluck('hora')
-                ->toArray();
+            $mes = $request->input('mes', Carbon::now()->month);
+            $anio = $request->input('anio', Carbon::now()->year);
 
-            if (empty($horasDisponibles)) {
+            // Validar parámetros
+            if (!is_numeric($mes) || $mes < 1 || $mes > 12) {
                 return response()->json([
-                    'status' => 'success',
-                    'message' => 'No hay franjas horarias configuradas',
-                    'data' => []
-                ]);
+                    'status' => 'error',
+                    'message' => 'El mes debe ser un número entre 1 y 12'
+                ], 400);
             }
 
-            $horaMinima = min($horasDisponibles);
-            $horaMaxima = max($horasDisponibles);
+            if (!is_numeric($anio) || $anio < 2020 || $anio > Carbon::now()->year + 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El año debe ser un número válido'
+                ], 400);
+            }
 
-            // Obtener todas las reservas con sus horas de inicio
-            $reservasPorHora = Reservas::withTrashed()
-                ->selectRaw('EXTRACT(HOUR FROM hora_inicio) as hora, COUNT(*) as cantidad')
-                ->whereNotNull('hora_inicio')
-                ->groupByRaw('EXTRACT(HOUR FROM hora_inicio)')
-                ->pluck('cantidad', 'hora')
-                ->toArray();
+            // Query optimizada usando SQL raw similar a la lógica proporcionada
+            $query = "
+                WITH fechas AS (
+                    SELECT
+                        make_date(?, ?, 1) AS inicio_mes,
+                        (make_date(?, ?, 1) + INTERVAL '1 month - 1 day')::date AS fin_mes
+                ),
+                dias AS (
+                    SELECT generate_series(
+                        (SELECT inicio_mes FROM fechas),
+                        (SELECT fin_mes FROM fechas),
+                        INTERVAL '1 day'
+                    )::date AS dia
+                ),
+                rango_horas AS (
+                    SELECT
+                        MIN(EXTRACT(HOUR FROM r.hora_inicio))::int AS hmin,
+                        MAX(EXTRACT(HOUR FROM r.hora_inicio))::int AS hmax
+                    FROM reservas r, fechas f
+                    WHERE r.estado = 'completada'
+                      AND r.fecha >= f.inicio_mes
+                      AND r.fecha <= f.fin_mes
+                      AND r.hora_inicio IS NOT NULL
+                ),
+                horas AS (
+                    SELECT generate_series(
+                        COALESCE((SELECT hmin FROM rango_horas), 0),
+                        COALESCE((SELECT hmax FROM rango_horas), 23)
+                    ) AS hora
+                ),
+                base AS (
+                    SELECT
+                        d.dia,
+                        h.hora,
+                        COUNT(r.id) AS reservas_en_dia_hora
+                    FROM dias d
+                    CROSS JOIN horas h
+                    LEFT JOIN reservas r
+                           ON DATE(r.fecha) = d.dia
+                          AND EXTRACT(HOUR FROM r.hora_inicio)::int = h.hora
+                          AND r.estado = 'completada'
+                          AND r.hora_inicio IS NOT NULL
+                    GROUP BY d.dia, h.hora
+                ),
+                promedios AS (
+                    SELECT
+                        hora,
+                        AVG(reservas_en_dia_hora)::NUMERIC(10,2) AS promedio_reservas
+                    FROM base
+                    GROUP BY hora
+                )
+                SELECT hora, promedio_reservas
+                FROM promedios
+                ORDER BY hora
+            ";
 
-            // Formatear respuesta con todas las horas desde mínima hasta máxima
-            $resultado = [];
-            $totalReservas = 0;
+            $resultados = DB::select($query, [$anio, $mes, $anio, $mes]);
 
-            for ($h = $horaMinima; $h <= $horaMaxima; $h++) {
-                $cantidad = isset($reservasPorHora[$h]) ? (int) $reservasPorHora[$h] : 0;
-                $hora24 = str_pad($h, 2, '0', STR_PAD_LEFT) . ':00';
-                $hora12 = Carbon::createFromTime($h)->format('h:00 A');
-                $resultado[] = [
+            // Formatear respuesta
+            $data = [];
+            $totalPromedio = 0;
+
+            foreach ($resultados as $row) {
+                $hora = (int) $row->hora;
+                $promedio = (float) $row->promedio_reservas;
+                $hora24 = str_pad($hora, 2, '0', STR_PAD_LEFT) . ':00';
+                $hora12 = Carbon::createFromTime($hora)->format('h:00 A');
+                $data[] = [
                     'hora_24h' => $hora24,
                     'hora' => $hora12,
-                    'promedio' => $cantidad
+                    'promedio' => $promedio
                 ];
-                $totalReservas += $cantidad;
+                $totalPromedio += $promedio;
             }
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'Reservas por hora obtenidas correctamente',
-                'data' => $resultado,
-                'total_reservas' => $totalReservas
+                'message' => 'Promedio de reservas por hora obtenido correctamente',
+                'data' => $data,
+                'mes' => $mes,
+                'anio' => $anio,
+                'total_promedio' => round($totalPromedio, 2)
             ]);
         } catch (Exception $e) {
-            Log::error('Error al obtener reservas por horas: ' . $e->getMessage());
+            Log::error('Error al obtener promedio de reservas por horas: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error interno del servidor al obtener las reservas por horas'
+                'message' => 'Error interno del servidor al obtener el promedio de reservas por horas'
             ], 500);
         }
     }
@@ -222,40 +356,82 @@ class DashboardController extends Controller
         }
     }
 
-    public function reservasPorCategoria()
+    public function reservasPorCategoria(Request $request)
     {
         try {
-            $totalReservas = Reservas::withTrashed()->count();
+            $mes = $request->input('mes', Carbon::now()->month);
+            $anio = $request->input('anio', Carbon::now()->year);
 
-            if ($totalReservas == 0) {
+            // Validar parámetros
+            if (!is_numeric($mes) || $mes < 1 || $mes > 12) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El mes debe ser un número entre 1 y 12'
+                ], 400);
+            }
+
+            if (!is_numeric($anio) || $anio < 2020 || $anio > Carbon::now()->year + 1) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'El año debe ser un número válido'
+                ], 400);
+            }
+
+            // Query optimizada usando SQL raw
+            $query = "
+                WITH fechas AS (
+                    SELECT
+                        make_date(?, ?, 1) AS inicio_mes,
+                        (make_date(?, ?, 1) + INTERVAL '1 month - 1 day')::date AS fin_mes
+                ),
+                reservas_filtradas AS (
+                    SELECT r.id, e.id_categoria
+                    FROM reservas r
+                    JOIN espacios e ON r.id_espacio = e.id
+                    JOIN fechas f ON r.fecha >= f.inicio_mes AND r.fecha <= f.fin_mes
+                    WHERE r.estado = 'completada'
+                ),
+                totales AS (
+                    SELECT COUNT(*)::numeric AS total_reservas
+                    FROM reservas_filtradas
+                )
+                SELECT
+                    c.nombre AS categoria,
+                    COUNT(rf.id) AS cantidad_reservas,
+                    ROUND(100 * COUNT(rf.id) / t.total_reservas, 2) AS porcentaje
+                FROM reservas_filtradas rf
+                JOIN categorias c ON rf.id_categoria = c.id
+                CROSS JOIN totales t
+                GROUP BY c.nombre, t.total_reservas
+                ORDER BY cantidad_reservas DESC
+            ";
+
+            $resultados = DB::select($query, [$anio, $mes, $anio, $mes]);
+
+            if (empty($resultados)) {
                 return response()->json([
                     'status' => 'success',
-                    'message' => 'No hay reservas registradas',
-                    'data' => []
+                    'message' => 'No hay reservas completadas en el período seleccionado',
+                    'data' => [],
+                    'mes' => $mes,
+                    'anio' => $anio
                 ]);
             }
 
-            $reservasPorCategoria = Reservas::withTrashed()
-                ->join('espacios', 'reservas.id_espacio', '=', 'espacios.id')
-                ->join('categorias', 'espacios.id_categoria', '=', 'categorias.id')
-                ->selectRaw('categorias.nombre as categoria, COUNT(*) as cantidad')
-                ->groupBy('categorias.id', 'categorias.nombre')
-                ->orderBy('cantidad', 'desc')
-                ->get();
-
-            $resultado = [];
-            foreach ($reservasPorCategoria as $item) {
-                $porcentaje = round(($item->cantidad / $totalReservas) * 100);
-                $resultado[] = [
-                    'categoria' => $item->categoria,
-                    'cantidad' => $porcentaje
+            $data = [];
+            foreach ($resultados as $row) {
+                $data[] = [
+                    'categoria' => $row->categoria,
+                    'cantidad' => (float) $row->porcentaje
                 ];
             }
 
             return response()->json([
                 'status' => 'success',
                 'message' => 'Reservas por categoría obtenidas correctamente',
-                'data' => $resultado,
+                'data' => $data,
+                'mes' => $mes,
+                'anio' => $anio
             ]);
         } catch (Exception $e) {
             Log::error('Error al obtener reservas por categoría: ' . $e->getMessage());

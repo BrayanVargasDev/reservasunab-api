@@ -19,11 +19,11 @@ class TokenService
             $newToken = $user->createToken('access', ['*']);
         }
 
-        $model = $newToken->accessToken ?? null;
+        $model = $newToken->plainTextToken ?? null;
         $finalExpiresAt = $model->expires_at ?? $expiresAt;
 
         return [
-            'token' => $newToken->accessToken,
+            'token' => $newToken->plainTextToken,
             'expires_at' => $finalExpiresAt instanceof Carbon ? $finalExpiresAt : ($finalExpiresAt ? Carbon::parse($finalExpiresAt) : null),
         ];
     }
@@ -111,7 +111,7 @@ class TokenService
         }
 
         // Emitir access token
-        $access = $this->generarAccessToken($user, $accessTtlMinutes ?? (int) (config('sanctum.expiration') ?? 60));
+        $access = $this->generarAccessToken($user, $accessTtlMinutes ?? 15);
 
         return [
             'access_token' => $access['token'],

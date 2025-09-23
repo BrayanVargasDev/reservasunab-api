@@ -18,7 +18,6 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
-            'jwt.auth' => \App\Http\Middleware\JwtAuthMiddleware::class,
         ]);
 
         // Deshabilitamos la validación CSRF para las rutas API

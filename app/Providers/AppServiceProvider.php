@@ -13,7 +13,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Services\TokenService;
-use Laravel\Passport\Passport;
 use Carbon\CarbonInterval;
 
 class AppServiceProvider extends ServiceProvider
@@ -79,11 +78,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Sanctum::usePersonalAccessTokenModel(\Laravel\Sanctum\PersonalAccessToken::class);
-
-        // Configuración de Passport
-        Passport::tokensExpireIn(CarbonInterval::days(15));
-        Passport::refreshTokensExpireIn(CarbonInterval::days(30));
-        Passport::personalAccessTokensExpireIn(CarbonInterval::months(6));
 
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {

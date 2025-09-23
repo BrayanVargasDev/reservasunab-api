@@ -422,56 +422,19 @@ class AuthController extends Controller
 
             $usuario->load(['persona', 'rol']);
 
-            $currentToken = $usuario->currentAccessToken();
-            $refreshThreshold = 15;
-
-            $shouldRefreshToken = false;
-            if (
-                $currentToken && $currentToken->expires_at &&
-                $currentToken->expires_at->subMinutes($refreshThreshold)->isPast()
-            ) {
-                $shouldRefreshToken = true;
-            }
-
-            $data = [
-                'id' => $usuario->id_usuario,
-                'email' => $usuario->email,
-                'nombre' => $usuario->persona?->primer_nombre,
-                'apellido' => $usuario->persona?->primer_apellido,
-                'tipo_usuario' => $usuario->tipos_usuario,
-                'activo' => $usuario->activo,
-                'rol' => $usuario->rol,
-                'token_expires_at' => $currentToken?->expires_at,
-                'permisos' => $usuario->obtenerTodosLosPermisos(),
-            ];
-
-            if ($shouldRefreshToken) {
-                $currentToken->delete();
-
-                $expirationConfig = config('sanctum.expiration', 1440);
-                $expirationMinutes = is_numeric($expirationConfig) ? (int)$expirationConfig : 1440;
-                $tokenName = 'auth-token-' . now()->format('Y-m-d-H-i-s');
-
-                $newToken = $usuario->createToken(
-                    $tokenName,
-                    ['*'],
-                    now()->addMinutes($expirationMinutes)
-                );
-
-                $data['access_token'] = $newToken->plainTextToken;
-                $data['token_expires_at'] = $newToken->accessToken->expires_at;
-
-                return response()->json([
-                    'status' => 'success',
-                    'message' => 'Token refrescado correctamente.',
-                    'data' => $data
-                ], 200);
-            }
-
             return response()->json([
                 'status' => 'success',
                 'message' => 'Usuario autenticado correctamente.',
-                'data' => $data
+                'data' => [
+                    'id' => $usuario->id_usuario,
+                    'email' => $usuario->email,
+                    'nombre' => $usuario->persona?->primer_nombre,
+                    'apellido' => $usuario->persona?->primer_apellido,
+                    'tipo_usuario' => $usuario->tipos_usuario,
+                    'activo' => $usuario->activo,
+                    'rol' => $usuario->rol,
+                    'permisos' => $usuario->obtenerTodosLosPermisos(),
+                ]
             ], 200);
         } catch (Exception $e) {
             Log::error('Error al obtener datos del usuario', [
