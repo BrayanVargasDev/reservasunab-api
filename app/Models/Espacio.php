@@ -118,4 +118,57 @@ class Espacio extends Model
                 fn($q) => $q->whereKey($grupo)
             ));
     }
+
+    public function scopeSearch($query, string $input)
+    {
+        $tokens = explode(' ', trim($input));
+
+        foreach ($tokens as $token) {
+            $query->where(function ($q) use ($token) {
+                $tokenLower = strtolower($token);
+
+                // Estado basado en soft deletes
+                $estadoMap = [
+                    'activo' => null, // whereNull(eliminado_en)
+                    'inactivo' => 'not_null', // whereNotNull(eliminado_en)
+                ];
+
+                if (array_key_exists($tokenLower, $estadoMap)) {
+                    if ($estadoMap[$tokenLower] === null) {
+                        $q->whereNull('espacios.eliminado_en');
+                    } else {
+                        $q->whereNotNull('espacios.eliminado_en');
+                    }
+                }
+
+                // Nombre del espacio
+                $q->orWhereRaw('LOWER(espacios.nombre) ILIKE ?', ['%' . $tokenLower . '%']);
+
+                // Código del espacio
+                $q->orWhereRaw('LOWER(espacios.codigo) ILIKE ?', ['%' . $tokenLower . '%']);
+
+                // Nombre de la sede
+                $q->orWhereHas('sede', function ($qs) use ($tokenLower) {
+                    $qs->whereRaw('LOWER(sedes.nombre) ILIKE ?', ['%' . $tokenLower . '%']);
+                });
+
+                // Nombre de la categoria
+                $q->orWhereHas('categoria', function ($qc) use ($tokenLower) {
+                    $qc->whereRaw('LOWER(categorias.nombre) ILIKE ?', ['%' . $tokenLower . '%']);
+                });
+
+                // Nombre del grupo
+                $q->orWhereHas('categoria.grupo', function ($qg) use ($tokenLower) {
+                    $qg->whereRaw('LOWER(grupos.nombre) ILIKE ?', ['%' . $tokenLower . '%']);
+                });
+
+                // Nombre del edificio
+                $q->orWhereHas('edificio', function ($qe) use ($tokenLower) {
+                    $qe->whereRaw('LOWER(edificios.nombre) ILIKE ?', ['%' . $tokenLower . '%']);
+                });
+            });
+        }
+
+        return $query;
+    }
 }
