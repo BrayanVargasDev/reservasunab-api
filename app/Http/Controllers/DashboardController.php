@@ -8,6 +8,7 @@ use App\Models\FranjaHoraria;
 use App\Services\ReservaService;
 use App\Exports\ReservasExport;
 use App\Exports\PagosExport;
+use App\Models\EspacioConfiguracion;
 use App\Models\EspacioNovedad;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -58,23 +59,11 @@ class DashboardController extends Controller
     {
         try {
             $fechaHoy = Carbon::today()->toDateString();
-            Log::debug("Calculando ocupación para la fecha: $fechaHoy");
+            $diaSemana = Carbon::today()->dayOfWeek + 1;
+
             $espacios = $this->reservaService->getAllEspacios($fechaHoy);
-
-            // Optimización: cargar todas las reservas y novedades de hoy en una sola query (sin groupBy para obtener todas)
-            $reservasHoy = Reservas::whereDate('fecha', $fechaHoy)
-                ->whereNull('eliminado_en')
-                // ->where('estado', 'confirmada') // Opcional: filtrar solo estados que ocupan (ajusta según tu lógica)
-                ->select('id_espacio', 'hora_inicio', 'hora_fin', 'estado')
-                ->get();
-
-            $novedadesHoy = EspacioNovedad::whereDate('fecha', $fechaHoy)
-                ->whereNull('eliminado_en')
-                ->select('id_espacio', 'hora_inicio', 'hora_fin')
-                ->get();
-
-            $totalSpots = 0; // Cambiado: ahora suma capacidades disponibles
-            $spotsOcupados = 0; // Cambiado: suma ocupaciones reales o bloqueadas
+            $totalSlots = 0;
+            $slotsOcupados = 0;
             $espaciosConsultados = 0;
             $espaciosConError = 0;
             $slotsConError = 0;
@@ -84,85 +73,31 @@ class DashboardController extends Controller
                     if (!$espacio->configuraciones) {
                         continue;
                     }
-                    $configuracion = $espacio->configuraciones->first();
-                    if (!$configuracion || empty($configuracion->franjas_horarias)) {
+                    $primeraConfig = $espacio->configuraciones->first();
+
+                    if (!$primeraConfig || empty($primeraConfig->franjas_horarias)) {
                         continue;
                     }
 
-                    // Filtrar colecciones por espacio (usa where en lugar de get)
-                    $reservasEspacio = $reservasHoy->where('id_espacio', $espacio->id);
-                    $novedadesEspacio = $novedadesHoy->where('id_espacio', $espacio->id);
+                    $espacio->configuracion = $primeraConfig;
+                    $espacioDetalles = $this->reservaService->construirDisponibilidad($espacio, $fechaHoy);
 
-                    $minutosUso = $configuracion->minutos_uso ?? 60;
-                    $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
-
-                    foreach ($configuracion->franjas_horarias as $franja) {
-                        try {
-                            if (!$franja->hora_inicio || !$franja->hora_fin) {
+                    if (isset($espacioDetalles) && is_array($espacioDetalles)) {
+                        foreach ($espacioDetalles as $slot) {
+                            try {
+                                $reservasMaximas = $slot['reservas_maximas'] ?? 1;
+                                $totalSlots += $reservasMaximas;
+                                if (isset($slot['novedad']) && $slot['novedad']) {
+                                    $slotsOcupados += $reservasMaximas;
+                                } else {
+                                    $slotsOcupados += $slot['reservas_actuales'] ?? 0;
+                                }
+                            } catch (Exception $eSlot) {
+                                $slotsConError++;
                                 continue;
                             }
-
-                            $franjaInicio = Carbon::createFromFormat('H:i:s', $franja->hora_inicio);
-                            $franjaFin = Carbon::createFromFormat('H:i:s', $franja->hora_fin);
-
-                            $horaActual = $franjaInicio->copy();
-
-                            while ($horaActual->lessThan($franjaFin)) {
-                                $horaFinSlot = $horaActual->copy()->addMinutes($minutosUso);
-
-                                if ($horaFinSlot->greaterThan($franjaFin)) {
-                                    break;
-                                }
-
-                                $totalSpots += $reservasSimultaneasPermitidas; // Suma la capacidad por slot
-
-                                // Contar reservas en el slot
-                                $numeroReservasEnSlot = $reservasEspacio->filter(function ($reserva) use ($horaActual, $horaFinSlot, $fechaHoy) {
-                                    try {
-                                        $reservaInicio = Carbon::parse($fechaHoy . ' ' . $reserva->hora_inicio);
-                                        $reservaFin = Carbon::parse($fechaHoy . ' ' . $reserva->hora_fin);
-
-                                        $noHayConflicto = $horaFinSlot->lessThanOrEqualTo($reservaInicio) ||
-                                            $horaActual->greaterThanOrEqualTo($reservaFin);
-
-                                        return !$noHayConflicto;
-                                    } catch (Exception $e) {
-                                        return false;
-                                    }
-                                })->count();
-
-                                // Verificar si el slot tiene novedad
-                                Log::debug("Verificando novedades para espacio ID {$espacio->id} en el slot {$horaActual->toTimeString()} - {$horaFinSlot->toTimeString()}");
-                                $ocupadoPorNovedad = $novedadesEspacio->contains(function ($novedad) use ($horaActual, $horaFinSlot, $fechaHoy) {
-                                    try {
-                                        $novedadInicio = Carbon::parse($fechaHoy . ' ' . $novedad->hora_inicio);
-                                        Log::debug("Novedad inicio: " . $novedadInicio->toDateTimeString());
-                                        $novedadFin = Carbon::parse($fechaHoy . ' ' . $novedad->hora_fin);
-                                        Log::debug("Novedad fin: " . $novedadFin->toDateTimeString());
-
-                                        $noHaySolapamiento = $horaFinSlot->lessThanOrEqualTo($novedadInicio) ||
-                                            $horaActual->greaterThanOrEqualTo($novedadFin);
-
-                                        return !$noHaySolapamiento;
-                                    } catch (Exception $e) {
-                                        return false;
-                                    }
-                                });
-
-                                if ($ocupadoPorNovedad) {
-                                    $spotsOcupados += $reservasSimultaneasPermitidas; // Bloqueo total: 100% ocupado
-                                } else {
-                                    $spotsOcupados += $numeroReservasEnSlot; // Ocupación parcial basada en reservas reales
-                                }
-
-                                $horaActual->addMinutes($minutosUso);
-                            }
-                        } catch (Exception $eFranja) {
-                            $slotsConError++;
-                            continue;
                         }
                     }
-
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
                     $espaciosConError++;
@@ -172,13 +107,16 @@ class DashboardController extends Controller
             }
 
             Log::info([
-                'total_spots' => $totalSpots,
-                'spots_ocupados' => $spotsOcupados,
-                'espacios_consultados' => $espaciosConsultados,
-                'espacios_con_error' => $espaciosConError,
-                'slots_con_error' => $slotsConError,
+                'Ocupación Hoy',
+                'Fecha' => $fechaHoy,
+                'Espacios Consultados' => $espaciosConsultados,
+                'Espacios con Error' => $espaciosConError,
+                'Total Slots' => $totalSlots,
+                'Slots con Error' => $slotsConError,
+                'Slots Ocupados' => $slotsOcupados,
             ]);
-            $porcentajeOcupacion = $totalSpots > 0 ? round(($spotsOcupados / $totalSpots) * 100, 2) : 0;
+
+            $porcentajeOcupacion = $totalSlots > 0 ? round(($slotsOcupados / $totalSlots) * 100, 2) : 0;
 
             return $porcentajeOcupacion;
         } catch (Exception $e) {

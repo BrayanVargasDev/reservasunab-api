@@ -300,7 +300,7 @@ class ReservaService
         return $espacio;
     }
 
-    private function construirDisponibilidad($espacio, string $fechaConsulta): array
+    public function construirDisponibilidad($espacio, string $fechaConsulta): array
     {
         $disponibilidad = [];
         $configuracion = $espacio->configuracion;
