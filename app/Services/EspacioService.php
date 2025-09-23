@@ -29,7 +29,7 @@ class EspacioService
 
     public function getWithoutFilters()
     {
-        return Espacio::with(['sede', 'categoria', 'creadoPor'])
+        return Espacio::select('id', 'nombre')
             ->orderBy('nombre', 'asc')
             ->get();
     }

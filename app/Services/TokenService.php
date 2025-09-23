@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class TokenService
 {
-    public function generarAccessToken(Usuario $user, $ttlMinutes = 15)
+    public function generarAccessToken(Usuario $user, $ttlMinutes = 60 * 8)
     {
         $expiresAt = $ttlMinutes ? now()->addMinutes($ttlMinutes) : null;
 

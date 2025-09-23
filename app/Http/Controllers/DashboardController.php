@@ -171,6 +171,13 @@ class DashboardController extends Controller
                 }
             }
 
+            Log::info([
+                'total_spots' => $totalSpots,
+                'spots_ocupados' => $spotsOcupados,
+                'espacios_consultados' => $espaciosConsultados,
+                'espacios_con_error' => $espaciosConError,
+                'slots_con_error' => $slotsConError,
+            ]);
             $porcentajeOcupacion = $totalSpots > 0 ? round(($spotsOcupados / $totalSpots) * 100, 2) : 0;
 
             return $porcentajeOcupacion;

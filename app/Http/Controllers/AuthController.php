@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
@@ -390,6 +391,25 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         try {
+
+            $user = $request->user();
+
+            if (!$user) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Usuario no autenticado.',
+                ], 401);
+            }
+
+            RefreshToken::where('id_usuario', $user->id_usuario)
+                ->whereNull('revocado_en')
+                ->update(['revocado_en' => now()]);
+
+            $user->tokens()->delete();
+            Auth::logout();
+
+
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Sesión cerrada correctamente.',
@@ -433,6 +453,7 @@ class AuthController extends Controller
                     'tipo_usuario' => $usuario->tipos_usuario,
                     'activo' => $usuario->activo,
                     'rol' => $usuario->rol,
+                    'token_expires_at' => $request->user()->currentAccessToken()->expires_at ?? null,
                     'permisos' => $usuario->obtenerTodosLosPermisos(),
                 ]
             ], 200);
@@ -528,5 +549,91 @@ class AuthController extends Controller
     {
         // Delegar a refreshToken para mantener una sola lógica
         return $this->refreshToken($request);
+    }
+
+    public function checkAuthStatus(Request $request)
+    {
+        try {
+            $raw = $request->query('refreshToken');
+            if (!$raw) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Refresh token requerido.',
+                ], 400);
+            }
+
+            $authHeader = $request->header('Authorization');
+            Log::debug('Authorization header', ['header' => $authHeader]);
+            $bearerToken = str_replace('Bearer ', '', $authHeader);
+
+            $esTokenValido = PersonalAccessToken::findToken($bearerToken);
+
+            if (!$esTokenValido) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Access token inválido.',
+                ], 401);
+            }
+
+            $dispositivo = $request->header('User-Agent');
+            $ip = $request->ip();
+
+            $rt = $this->token_service->validarRefreshToken($raw, $ip, $dispositivo);
+            if (!$rt) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Refresh token inválido.',
+                ], 400);
+            }
+
+            $usuario = $rt->usuario;
+            $proximoExpirar = $rt->expira_en && now()->diffInHours($rt->expira_en, false) <= 1;
+
+            if ($proximoExpirar) {
+                RefreshToken::where('id_usuario', $usuario->id_usuario)
+                    ->whereNull('revocado_en')
+                    ->update(['revocado_en' => now()]);
+                $usuario->tokens()->delete();
+
+                $token = $this->token_service->generarAccessToken($usuario);
+                $refresh_token = $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw'];
+            } else {
+                $token = $this->token_service->generarAccessToken($usuario);
+                $refresh_token = $raw;
+            }
+
+            if ($this->loadUnabConfig()) {
+                $this->consultarYActualizarTiposUsuario($usuario, $usuario->email);
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'access_token' => $token['token'],
+                    'id' => $usuario->id_usuario,
+                    'email' => $usuario->email,
+                    'rol' => $usuario->rol,
+                    'nombre' => $usuario->persona->nombre ?? null,
+                    'apellido' => $usuario->persona->apellido ?? null,
+                    'tipo_usuario' => $usuario->tipos_usuario,
+                    'activo' => $usuario->activo,
+                    'token_expires_at' => $token['expires_at'],
+                    'refresh_token' => $refresh_token,
+                    'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
+                ]
+            ], 200);
+        } catch (Exception $e) {
+            Log::error('Error en checkAuthStatus', [
+                'error' => $e->getMessage(),
+                'archivo' => $e->getFile(),
+                'linea' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Ha ocurrido un error inesperado. Por favor, intente nuevamente más tarde.',
+            ], 500);
+        }
     }
 }

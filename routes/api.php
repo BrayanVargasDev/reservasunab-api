@@ -33,6 +33,7 @@ Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
     ->where('ruta', '.*');
 Route::post('/refresh', [AuthController::class, 'refresh']);
 Route::post('/intercambiar', [AuthController::class, 'intercambiar']);
+Route::get('/check-status', [AuthController::class, 'checkAuthStatus']);
 
 Route::group(['middleware' => ['auth:api']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
