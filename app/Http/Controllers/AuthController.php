@@ -406,9 +406,6 @@ class AuthController extends Controller
                 ->update(['revocado_en' => now()]);
 
             $user->tokens()->delete();
-            Auth::logout();
-
-
 
             return response()->json([
                 'status' => 'success',
