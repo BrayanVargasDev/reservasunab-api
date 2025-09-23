@@ -132,10 +132,13 @@ class DashboardController extends Controller
                                 })->count();
 
                                 // Verificar si el slot tiene novedad
+                                Log::debug("Verificando novedades para espacio ID {$espacio->id} en el slot {$horaActual->toTimeString()} - {$horaFinSlot->toTimeString()}");
                                 $ocupadoPorNovedad = $novedadesEspacio->contains(function ($novedad) use ($horaActual, $horaFinSlot, $fechaHoy) {
                                     try {
                                         $novedadInicio = Carbon::parse($fechaHoy . ' ' . $novedad->hora_inicio);
+                                        Log::debug("Novedad inicio: " . $novedadInicio->toDateTimeString());
                                         $novedadFin = Carbon::parse($fechaHoy . ' ' . $novedad->hora_fin);
+                                        Log::debug("Novedad fin: " . $novedadFin->toDateTimeString());
 
                                         $noHaySolapamiento = $horaFinSlot->lessThanOrEqualTo($novedadInicio) ||
                                             $horaActual->greaterThanOrEqualTo($novedadFin);
