@@ -8,6 +8,7 @@ use App\Models\FranjaHoraria;
 use App\Services\ReservaService;
 use App\Exports\ReservasExport;
 use App\Exports\PagosExport;
+use App\Models\EspacioNovedad;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
 use Exception;
@@ -60,21 +61,20 @@ class DashboardController extends Controller
             Log::debug("Calculando ocupación para la fecha: $fechaHoy");
             $espacios = $this->reservaService->getAllEspacios($fechaHoy);
 
-            // Optimización: cargar todas las reservas y novedades de hoy en una sola query
+            // Optimización: cargar todas las reservas y novedades de hoy en una sola query (sin groupBy para obtener todas)
             $reservasHoy = Reservas::whereDate('fecha', $fechaHoy)
                 ->whereNull('eliminado_en')
+                // ->where('estado', 'confirmada') // Opcional: filtrar solo estados que ocupan (ajusta según tu lógica)
                 ->select('id_espacio', 'hora_inicio', 'hora_fin', 'estado')
-                ->get()
-                ->groupBy('id_espacio');
+                ->get();
 
-            $novedadesHoy = \App\Models\EspacioNovedad::whereDate('fecha', $fechaHoy)
+            $novedadesHoy = EspacioNovedad::whereDate('fecha', $fechaHoy)
                 ->whereNull('eliminado_en')
                 ->select('id_espacio', 'hora_inicio', 'hora_fin')
-                ->get()
-                ->groupBy('id_espacio');
+                ->get();
 
-            $totalSlots = 0;
-            $slotsOcupados = 0;
+            $totalSpots = 0; // Cambiado: ahora suma capacidades disponibles
+            $spotsOcupados = 0; // Cambiado: suma ocupaciones reales o bloqueadas
             $espaciosConsultados = 0;
             $espaciosConError = 0;
             $slotsConError = 0;
@@ -89,8 +89,9 @@ class DashboardController extends Controller
                         continue;
                     }
 
-                    $reservasEspacio = $reservasHoy->get($espacio->id, collect());
-                    $novedadesEspacio = $novedadesHoy->get($espacio->id, collect());
+                    // Filtrar colecciones por espacio (usa where en lugar de get)
+                    $reservasEspacio = $reservasHoy->where('id_espacio', $espacio->id);
+                    $novedadesEspacio = $novedadesHoy->where('id_espacio', $espacio->id);
 
                     $minutosUso = $configuracion->minutos_uso ?? 60;
                     $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
@@ -113,9 +114,9 @@ class DashboardController extends Controller
                                     break;
                                 }
 
-                                $totalSlots++;
+                                $totalSpots += $reservasSimultaneasPermitidas; // Suma la capacidad por slot
 
-                                // Contar reservas en el slot y verificar si alcanza el límite de simultáneas
+                                // Contar reservas en el slot
                                 $numeroReservasEnSlot = $reservasEspacio->filter(function ($reserva) use ($horaActual, $horaFinSlot, $fechaHoy) {
                                     try {
                                         $reservaInicio = Carbon::parse($fechaHoy . ' ' . $reserva->hora_inicio);
@@ -129,8 +130,6 @@ class DashboardController extends Controller
                                         return false;
                                     }
                                 })->count();
-
-                                $ocupadoPorReserva = $numeroReservasEnSlot >= $reservasSimultaneasPermitidas;
 
                                 // Verificar si el slot tiene novedad
                                 $ocupadoPorNovedad = $novedadesEspacio->contains(function ($novedad) use ($horaActual, $horaFinSlot, $fechaHoy) {
@@ -147,8 +146,10 @@ class DashboardController extends Controller
                                     }
                                 });
 
-                                if ($ocupadoPorReserva || $ocupadoPorNovedad) {
-                                    $slotsOcupados++;
+                                if ($ocupadoPorNovedad) {
+                                    $spotsOcupados += $reservasSimultaneasPermitidas; // Bloqueo total: 100% ocupado
+                                } else {
+                                    $spotsOcupados += $numeroReservasEnSlot; // Ocupación parcial basada en reservas reales
                                 }
 
                                 $horaActual->addMinutes($minutosUso);
@@ -167,7 +168,7 @@ class DashboardController extends Controller
                 }
             }
 
-            $porcentajeOcupacion = $totalSlots > 0 ? round(($slotsOcupados / $totalSlots) * 100, 2) : 0;
+            $porcentajeOcupacion = $totalSpots > 0 ? round(($spotsOcupados / $totalSpots) * 100, 2) : 0;
 
             return $porcentajeOcupacion;
         } catch (Exception $e) {
