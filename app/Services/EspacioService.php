@@ -123,7 +123,7 @@ class EspacioService
         }
 
         try {
-            return Espacio::with([
+            return Espacio::withTrashed()->with([
                 'sede',
                 'categoria',
                 'elementos',
