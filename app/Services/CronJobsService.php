@@ -869,20 +869,11 @@ class CronJobsService
                 foreach ($pagos as $pago) {
                     $totalEvaluados++;
                     try {
-                        Log::channel('cronjobs')->info('[CRON] Procesando pago', [
-                            'pago_codigo' => $pago->codigo,
-                            'estado_actual' => $pago->estado,
-                        ]);
-
                         $resultado = $pagoService->get_info_pago($pago->codigo, true);
 
                         $pago->refresh();
                         if ($pago->estado !== 'PENDING' && $pago->estado !== 'CREATED' && $pago->estado !== 'inicial') {
                             $totalActualizados++;
-                            Log::channel('cronjobs')->info('[CRON] Pago actualizado exitosamente', [
-                                'pago_codigo' => $pago->codigo,
-                                'nuevo_estado' => $pago->estado,
-                            ]);
                         } else {
                             Log::channel('cronjobs')->info('[CRON] Pago sigue pendiente', [
                                 'pago_codigo' => $pago->codigo,
