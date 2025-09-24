@@ -74,7 +74,6 @@ class AppServiceProvider extends ServiceProvider
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
-            Log::info(request()->input('RelayState'));
 
             // $messageId = $event->getAuth()->getLastMessageId();
 
@@ -244,8 +243,11 @@ class AppServiceProvider extends ServiceProvider
                     'consumido' => false,
                 ]);
 
-                // Forzar redirección cambiando el RelayState para evitar que vaya al RelayState original
-                request()->merge(['RelayState' => "{$frontendUrl}/auth/callback?code={$codigo}"]);
+                $relayState = request()->input('RelayState') ?? $frontendUrl . '/auth/callback';
+                $separator = str_contains($relayState, '?') ? '&' : '?';
+                $finalRedirect = "{$relayState}{$separator}code={$codigo}";
+
+                request()->merge(['RelayState' => $finalRedirect]);
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [
                     'error' => $e->getMessage(),
