@@ -2324,7 +2324,7 @@ class ReservaService
     private function getMensualidadActivaParaFecha(int $usuarioId, Carbon $fecha, int $espacioId): ?Mensualidades
     {
         $fecha = $fecha->copy()->startOfDay();
-        Log::info($fecha);
+
         try {
             return Mensualidades::where('id_usuario', $usuarioId)
                 ->where('estado', 'activa')

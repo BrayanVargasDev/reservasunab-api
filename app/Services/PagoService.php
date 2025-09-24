@@ -233,11 +233,6 @@ class PagoService
                 ->first();
 
             if ($pagoExistente && $pagoExistente->estado == 'CREATED') {
-                Log::info('Reutilizando pago existente CREATED para la reserva', [
-                    'id_reserva' => $id_reserva,
-                    'pago_codigo' => $pagoExistente->codigo,
-                    'estado' => $pagoExistente->estado,
-                ]);
                 return $pagoExistente->url_ecollect;
             }
 
@@ -246,11 +241,6 @@ class PagoService
             }
 
             if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'EXPIRED', 'NOT_AUTHORIZED'], true)) {
-                Log::info('Eliminando pago existente con estado ' . $pagoExistente->estado . ' para crear uno nuevo', [
-                    'id_reserva' => $id_reserva,
-                    'pago_codigo' => $pagoExistente->codigo,
-                    'estado' => $pagoExistente->estado,
-                ]);
                 $pagoExistente->forceDelete();
                 $pagoExistente = null;
             }

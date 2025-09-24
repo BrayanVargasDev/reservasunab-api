@@ -89,12 +89,6 @@ class RolController extends Controller
     {
         try {
             // Log para depurar los datos que llegan
-            Log::info('Datos recibidos para crear rol', [
-                'raw_data' => $request->all(),
-                'validated_data' => $request->validated(),
-                'usuario_id' => Auth::id() ?? 'no autenticado',
-            ]);
-
             $rol = $this->rolService->create($request->validated());
 
             return response()->json(
@@ -138,14 +132,6 @@ class RolController extends Controller
     {
         try {
             $data = $request->validated();
-
-            // Log para depurar los datos que llegan
-            Log::info('Datos recibidos para actualizar rol', [
-                'raw_data' => $request->all(),
-                'validated_data' => $data,
-                'rol_id' => $idRol,
-                'usuario_id' => Auth::id() ?? 'no autenticado',
-            ]);
 
             $rol = $this->rolService->update($idRol, $data);
 

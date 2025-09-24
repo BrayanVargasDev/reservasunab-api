@@ -595,7 +595,6 @@ class AuthController extends Controller
             }
 
             $authHeader = $request->header('Authorization');
-            Log::debug('Authorization header', ['header' => $authHeader]);
             $bearerToken = str_replace('Bearer ', '', $authHeader);
 
             $esTokenValido = PersonalAccessToken::findToken($bearerToken);

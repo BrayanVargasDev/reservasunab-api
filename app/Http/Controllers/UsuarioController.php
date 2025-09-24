@@ -66,11 +66,6 @@ class UsuarioController extends Controller
             // Creación desde formulario público: no dashboard, no SSO
             $usuario = $this->usuarioService->create($data, false, false);
 
-            Log::info('Usuario creado', [
-                'usuario_id' => Auth::id(),
-                'usuario_creado_id' => $usuario->id_usuario,
-            ]);
-
             return response()->json(
                 [
                     'status' => 'success',
@@ -114,11 +109,6 @@ class UsuarioController extends Controller
             $data = $request->validated();
             // Creación desde dashboard: dashboard=true, no SSO
             $usuario = $this->usuarioService->create($data, true, false);
-
-            Log::info('Usuario creado desde el dashboard', [
-                'usuario_id' => Auth::id(),
-                'usuario_creado_id' => $usuario->id_usuario,
-            ]);
 
             return response()->json(
                 [
@@ -252,11 +242,6 @@ class UsuarioController extends Controller
                 $data,
             );
 
-            Log::info('Usuario actualizado', [
-                'usuario_id' => Auth::id(),
-                'usuario_actualizado_id' => $usuario->id_usuario,
-            ]);
-
             return response()->json(
                 [
                     'status' => 'success',
@@ -304,11 +289,6 @@ class UsuarioController extends Controller
                 $usuario->id_usuario,
                 $data,
             );
-
-            Log::info('Usuario actualizado desde el dashboard', [
-                'usuario_id' => Auth::id(),
-                'usuario_actualizado_id' => $usuario->id_usuario,
-            ]);
 
             return response()->json(
                 [
@@ -367,11 +347,6 @@ class UsuarioController extends Controller
 
             $this->usuarioService->delete($usuario_id);
 
-            Log::info('Usuario eliminado (softDelete)', [
-                'usuario_id' => Auth::id(),
-                'usuario_eliminado_id' => $usuario_id,
-            ]);
-
             return response()->json(
                 [
                     'status' => 'success',
@@ -423,11 +398,6 @@ class UsuarioController extends Controller
             // $this->authorize('restaurar', $usuario);
 
             $usuario = $this->usuarioService->restore($id);
-
-            Log::info('Usuario restaurado', [
-                'usuario_id' => Auth::id(),
-                'usuario_restaurado_id' => $id,
-            ]);
 
             return response()->json(
                 [
@@ -504,12 +474,6 @@ class UsuarioController extends Controller
     {
         try {
             $data = $request->validated();
-
-            Log::info('Actualizando permisos de usuario', [
-                'id_usuario' => $idUsuario,
-                'permisos_count' => count($data['permisos']),
-                'usuario_id' => Auth::id() ?? 'no autenticado',
-            ]);
 
             $usuario = $this->usuarioService->actualizarPermisos($idUsuario, $data['permisos']);
 
@@ -597,11 +561,6 @@ class UsuarioController extends Controller
             $usuarioId = Auth::id();
 
             $usuario = $this->usuarioService->cambiarPassword($usuarioId, $data['newPassword']);
-
-            Log::info('Contraseña cambiada desde el controlador', [
-                'usuario_id' => $usuarioId,
-                'email' => $usuario->email,
-            ]);
 
             return response()->json([
                 'status' => 'success',

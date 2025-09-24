@@ -225,6 +225,12 @@ class UsuarioService
 
             $desdeDashboard = $data['__desde_dashboard'] ?? false;
             $forzarGeneracion = $data['generar_password'] ?? false;
+
+            Log::info([
+                'desde_dashboard' => $desdeDashboard,
+                'forzar_generacio' => $forzarGeneracion,
+                'passwrod-hash' => $usuario->password_hash,
+            ]);
             if (($desdeDashboard || $forzarGeneracion) && empty($usuario->password_hash)) {
                 $passwordPlano = $this->generarPasswordGenerico($usuario->persona ?? new Persona());
                 $usuario->password_hash = Hash::make($passwordPlano);
@@ -947,11 +953,6 @@ class UsuarioService
             $usuario->save();
 
             DB::commit();
-
-            Log::info('Contraseña cambiada exitosamente', [
-                'usuario_id' => $usuarioId,
-                'email' => $usuario->email,
-            ]);
 
             return $usuario->load('persona');
         } catch (UsuarioException $e) {

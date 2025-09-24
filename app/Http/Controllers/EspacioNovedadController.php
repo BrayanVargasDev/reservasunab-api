@@ -126,12 +126,6 @@ class EspacioNovedadController extends Controller
             $novedad->update($data);
             $novedad->load('espacio');
 
-            Log::info('Novedad de espacio actualizada', [
-                'novedad_id' => $novedad->id,
-                'espacio_id' => $novedad->id_espacio,
-                'usuario_id' => Auth::id()
-            ]);
-
             return response()->json([
                 'success' => true,
                 'message' => 'Novedad actualizada exitosamente',
@@ -164,12 +158,6 @@ class EspacioNovedadController extends Controller
             // Actualizar el campo eliminado_por antes del soft delete
             $novedad->update(['eliminado_por' => Auth::id()]);
             $novedad->delete();
-
-            Log::info('Novedad de espacio eliminada (soft delete)', [
-                'novedad_id' => $id,
-                'espacio_id' => $novedad->id_espacio,
-                'usuario_id' => Auth::id()
-            ]);
 
             return response()->json([
                 'success' => true,
@@ -209,12 +197,6 @@ class EspacioNovedadController extends Controller
             $novedad->update(['eliminado_por' => null]);
             $novedad->load('espacio');
 
-            Log::info('Novedad de espacio restaurada', [
-                'novedad_id' => $id,
-                'espacio_id' => $novedad->id_espacio,
-                'usuario_id' => Auth::id()
-            ]);
-
             return response()->json([
                 'success' => true,
                 'message' => 'Novedad restaurada exitosamente',
@@ -242,12 +224,6 @@ class EspacioNovedadController extends Controller
         try {
             $novedad = EspacioNovedad::withTrashed()->findOrFail($id);
             // $this->authorize('forceDelete', $novedad);
-
-            Log::info('Novedad de espacio eliminada permanentemente', [
-                'novedad_id' => $id,
-                'espacio_id' => $novedad->id_espacio,
-                'usuario_id' => Auth::id()
-            ]);
 
             $novedad->forceDelete();
 

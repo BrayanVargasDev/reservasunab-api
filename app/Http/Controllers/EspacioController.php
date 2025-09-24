@@ -248,11 +248,6 @@ class EspacioController extends Controller
 
             $this->espacios_service->delete($espacio_id);
 
-            Log::info('Espacio eliminado (softDelete)', [
-                'espacio_id' => Auth::id(),
-                'espacio_eliminado_id' => $espacio_id,
-            ]);
-
             return response()->json(
                 [
                     'status' => 'success',
@@ -304,11 +299,6 @@ class EspacioController extends Controller
             // $this->authorize('restaurar', $espacio);
 
             $espacio = $this->espacios_service->restore($id);
-
-            Log::info('Espacio restaurado', [
-                'espacio_id' => Auth::id(),
-                'espacio_restaurado_id' => $id,
-            ]);
 
             return response()->json(
                 [

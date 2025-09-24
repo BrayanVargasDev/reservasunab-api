@@ -56,14 +56,6 @@ class AppServiceProvider extends ServiceProvider
             return false;
         }
 
-        Log::info('Configuración UNAB cargada', [
-            'host' => $this->unab_host,
-            'endpoint' => $this->unab_endpoint,
-            'usuario' => $this->usuario_unab,
-            'tarea' => $this->tarea,
-            'password_set' => $this->password_unab ? true : false,
-        ]);
-
         return true;
     }
 
@@ -117,8 +109,6 @@ class AppServiceProvider extends ServiceProvider
                 if (!$email) {
                     $email = $samlUser->getUserId();
                 }
-
-                Log::info('Email extraido de google', ['email' => $email]);
 
                 if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     Log::error('Email inválido de usuario de Google', ['email' => $email]);
@@ -251,12 +241,6 @@ class AppServiceProvider extends ServiceProvider
                     'user_agent' => $device,
                     'expira_en' => now()->addSeconds(90),
                     'consumido' => false,
-                ]);
-
-                Log::info('Usuario autenticado a través de SSO, código de intercambio generado', [
-                    'user_id' => $user->id_usuario,
-                    'code_len' => strlen($codigo),
-                    'redirect' => "{$frontendUrl}/auth/callback?code={$codigo}",
                 ]);
 
                 // Forzar redirección cambiando el RelayState para evitar que vaya al RelayState original

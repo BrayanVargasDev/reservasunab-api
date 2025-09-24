@@ -106,16 +106,6 @@ class DashboardController extends Controller
                 }
             }
 
-            Log::info([
-                'Ocupación Hoy',
-                'Fecha' => $fechaHoy,
-                'Espacios Consultados' => $espaciosConsultados,
-                'Espacios con Error' => $espaciosConError,
-                'Total Slots' => $totalSlots,
-                'Slots con Error' => $slotsConError,
-                'Slots Ocupados' => $slotsOcupados,
-            ]);
-
             $porcentajeOcupacion = $totalSlots > 0 ? round(($slotsOcupados / $totalSlots) * 100, 2) : 0;
 
             return $porcentajeOcupacion;
