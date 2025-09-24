@@ -259,7 +259,8 @@ class AppServiceProvider extends ServiceProvider
                     'redirect' => "{$frontendUrl}/auth/callback?code={$codigo}",
                 ]);
 
-                return redirect()->away("{$frontendUrl}/auth/callback?code={$codigo}");
+                // Forzar redirección cambiando el RelayState para evitar que vaya al RelayState original
+                request()->merge(['RelayState' => "{$frontendUrl}/auth/callback?code={$codigo}"]);
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [
                     'error' => $e->getMessage(),
