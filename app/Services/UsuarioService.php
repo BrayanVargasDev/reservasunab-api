@@ -584,12 +584,6 @@ class UsuarioService
     private function createUsuarioRecord(array $data, Persona $persona, bool $desdeDashboard): Usuario
     {
         $password = null;
-        if ($desdeDashboard) {
-            $password = $this->generarPasswordGenerico($persona);
-        } elseif (!empty($data['password'])) {
-            $password = $data['password'];
-        }
-
         $tiposUsuario = $data['tiposUsuario'] ?? $data['tipos_usuario'] ?? ['egresado'];
 
         if (!is_array($tiposUsuario)) {
