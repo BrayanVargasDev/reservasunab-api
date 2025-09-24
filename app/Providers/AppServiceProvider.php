@@ -246,7 +246,7 @@ class AppServiceProvider extends ServiceProvider
                 $relayState = request()->input('RelayState') ?? $frontendUrl . '/auth/callback';
                 $separator = str_contains($relayState, '?') ? '&' : '?';
                 $finalRedirect = "{$relayState}{$separator}code={$codigo}";
-
+                Log::info('redirigiendo a: ' . $finalRedirect);
                 request()->merge(['RelayState' => $finalRedirect]);
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [
