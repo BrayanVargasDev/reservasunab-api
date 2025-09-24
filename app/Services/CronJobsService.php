@@ -441,10 +441,6 @@ class CronJobsService
 
                 if ($esGimnasio) {
                     $omitidasGimnasio++;
-                    Log::channel('cronjobs')->info('[CRON] Reserva omitida por ser de gimnasio', [
-                        'reserva_id' => $reserva->id,
-                        'espacio_id' => $espacio->id,
-                    ]);
                     continue;
                 }
 
@@ -664,7 +660,7 @@ class CronJobsService
                 if (strtolower((string)$resp['estado']) !== 'success') {
                     // Propagar mensaje del servicio para que quede en logs y en ultimo_error_reporte
                     $msgSrv = $resp['mensaje'] ?? 'sin_mensaje';
-                    throw new Exception('Estado respuesta: ' . ($resp['estado'] ?? 'error') . ' - ' . $msgSrv);
+                    throw new Exception('Respuesta del servicio unab: ' . ($resp['estado'] ?? 'error') . ' - ' . $msgSrv);
                 }
 
                 $model->reportado = true;
@@ -677,7 +673,7 @@ class CronJobsService
                 ]);
                 $reportadasOk++;
             } catch (\Throwable $e) {
-                $this->marcarFallo($model, 'Error reporte: ' . $e->getMessage());
+                $this->marcarFallo($model, 'Error: ' . $e->getMessage());
                 $fallidas++;
             }
         }
