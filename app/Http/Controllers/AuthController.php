@@ -527,19 +527,54 @@ class AuthController extends Controller
         $authCode->consumido = true;
         $authCode->save();
 
-        $user = $authCode->usuario;
+        $usuario = $authCode->usuario;
 
-        $access = $this->token_service->generarAccessToken($user);
+        $dispositivo = $req->header('User-Agent');
+        $ip = $req->ip();
+
+        $tiene_refresh_valido = RefreshToken::where('id_usuario', $usuario->id_usuario)
+            ->where(function ($q) use ($dispositivo, $ip) {
+                $q->where(function ($qq) use ($dispositivo, $ip) {
+                    $qq->where('dispositivo', $dispositivo)
+                        ->where('ip', $ip);
+                })->orWhere(function ($qq) use ($dispositivo, $ip) {
+                    $qq->where('dispositivo', $ip)
+                        ->where('ip', $dispositivo);
+                });
+            })
+            ->where(function ($q) {
+                $q->whereNull('expira_en')
+                    ->orWhere('expira_en', '>', now());
+            })
+            ->whereNull('revocado_en')
+            ->first();
+
+        $refresh_token = !$tiene_refresh_valido
+            ? $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw']
+            : $tiene_refresh_valido->token_hash;
+
+        $token = $this->token_service->generarAccessToken($usuario);
+
+        if ($this->loadUnabConfig()) {
+            $this->consultarYActualizarTiposUsuario($usuario, $usuario->email);
+        }
 
         return response()->json([
             'status' => 'success',
-            'message' => 'Código de intercambio generado correctamente.',
             'data' => [
-                'access_token' => $access['token'],
-                'token_expires_at' => $access['expires_at'],
-                'refresh_token' => $authCode->refresh_token_hash,
+                'access_token' => $token['token'],
+                'id' => $usuario->id_usuario,
+                'email' => $usuario->email,
+                'rol' => $usuario->rol,
+                'nombre' => $usuario->persona->nombre ?? null,
+                'apellido' => $usuario->persona->apellido ?? null,
+                'tipo_usuario' => $usuario->tipos_usuario,
+                'activo' => $usuario->activo,
+                'token_expires_at' => $token['expires_at'],
+                'refresh_token' => $refresh_token,
+                'permisos' => $usuario->obtenerTodosLosPermisos()->pluck('codigo'),
             ]
-        ]);
+        ], 200);
     }
 
     public function refresh(Request $request)

@@ -256,6 +256,7 @@ class AppServiceProvider extends ServiceProvider
                 Log::info('Usuario autenticado a través de SSO, código de intercambio generado', [
                     'user_id' => $user->id_usuario,
                     'code_len' => strlen($codigo),
+                    'redirect' => "{$frontendUrl}/auth/callback?code={$codigo}",
                 ]);
 
                 return redirect()->away("{$frontendUrl}/auth/callback?code={$codigo}");
