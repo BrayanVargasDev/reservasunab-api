@@ -74,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
         // Registrar eventos SAML directamente
         Event::listen(\Slides\Saml2\Events\SignedIn::class, function (\Slides\Saml2\Events\SignedIn $event) {
             Log::info('Evento SignedIn recibido');
+            Log::info(request()->input('RelayState'));
 
             // $messageId = $event->getAuth()->getLastMessageId();
 
