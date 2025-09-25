@@ -16,13 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Comentamos statefulApi() para usar solo tokens sin cookies
         // $middleware->statefulApi();
         $middleware->alias([
-            'security_headers' => \App\Http\Middleware\AddSecurityHeader::class,
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
 
-        $middleware->append([
-            'security_headers',
-        ]);
+        $middleware->append(\App\Http\Middleware\AddSecurityHeader::class);
 
         // Deshabilitamos la validación CSRF para las rutas API
         $middleware->validateCsrfTokens(except: [
