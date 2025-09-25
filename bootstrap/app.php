@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
 
+        $middleware->append([
+            'security_headers',
+        ]);
+
         // Deshabilitamos la validación CSRF para las rutas API
         $middleware->validateCsrfTokens(except: [
             'api/*',
