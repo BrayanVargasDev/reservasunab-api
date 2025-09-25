@@ -15,8 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Comentamos statefulApi() para usar solo tokens sin cookies
         // $middleware->statefulApi();
-
         $middleware->alias([
+            'security_headers' => \App\Http\Middleware\AddSecurityHeader::class,
             'verify.token.expiration' => \App\Http\Middleware\VerifyTokenExpiration::class,
         ]);
 
