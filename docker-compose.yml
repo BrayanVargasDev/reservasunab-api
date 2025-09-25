@@ -23,7 +23,6 @@ services:
             - sail
         depends_on:
             - pgsql
-            - keydb
     pgsql:
         image: 'postgres:16'
         ports:
@@ -62,29 +61,47 @@ services:
             - sail
         depends_on:
             - pgsql
-    keydb:
-        image: 'eqalpha/keydb:latest'
-        ports:
-            - '${FORWARD_KEYDB_PORT:-6379}:6379'
-        volumes:
-            - 'sail-keydb:/data'
-        networks:
-            - sail
-        healthcheck:
-            test: ["CMD", "keydb-cli", "ping"]
-            retries: 3
-            timeout: 5s
 
-    redis-commander:
-        image: 'rediscommander/redis-commander:latest'
-        ports:
-            - '${REDIS_COMMANDER_PORT:-8081}:8081'
+    keycloak:
+        image: keycloak/keycloak:latest
         environment:
-            REDIS_HOSTS: 'local:keydb:6379'
+        # Configuraciones generales
+            KC_HOSTNAME: ${KC_HOSTNAME:-localhost}  # En prod: tu dominio real
+            KC_HOSTNAME_STRICT: false
+            KC_HOSTNAME_STRICT_HTTPS: ${KC_HTTPS_ENABLED:-false}  # true en prod
+            KC_HTTP_ENABLED: true
+            # KC_PROXY: edge  # Si usas reverse proxy
+            KC_HEALTH_ENABLED: true
+            KC_METRICS_ENABLED: true
+            # Base de datos: En dev usa 'pgsql', en prod usa host del servidor
+            KC_DB: postgres
+            KC_DB_URL_HOST: pgsql
+            KC_DB_URL_PORT: 5432
+            KC_DB_URL_DATABASE: ${KC_DB_DATABASE:-laravel}
+            KC_DB_USERNAME: ${KC_DB_USER:-sail}
+            KC_DB_PASSWORD: ${KC_DB_PASSWORD:-password}
+            KC_DB_SCHEMA: public
+            # Admin
+            KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+            KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+            # Optimizaciones JVM
+            JAVA_OPTS_APPEND: "-XX:MaxRAMPercentage=75.0 -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m"
+        ports:
+        - "${KC_PORT:-8080}:8080"  # HTTP
+        - "${KC_HTTPS_PORT:-8443}:8443"  # HTTPS
+        volumes:
+        - './keycloak-data:/opt/keycloak/data'  # Persistencia externa
+        - './keycloak-themes:/opt/keycloak/themes'  # Opcional
+        - './keycloak-providers:/opt/keycloak/providers'  # Opcional
+        # Certificados: Monta desde disco del host
+        - './certs/fullchain.pem:/etc/x509/https/tls.crt'  # Si usas HTTPS en Keycloak
+        - './certs/privkey.pem:/etc/x509/https/tls.key'
+        command: start-dev
         networks:
             - sail
         depends_on:
-            - keydb
+            pgsql:
+                condition: service_healthy  # Solo en dev
 networks:
     sail:
         driver: bridge
