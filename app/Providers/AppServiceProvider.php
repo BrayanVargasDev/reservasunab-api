@@ -247,10 +247,7 @@ class AppServiceProvider extends ServiceProvider
                 $separator = str_contains($relayState, '?') ? '&' : '?';
                 $finalRedirect = "{$relayState}{$separator}code={$codigo}";
                 Log::info('redirigiendo a: ' . $finalRedirect);
-
-                redirect()->away($finalRedirect)->send();
-                exit;
-                // request()->merge(['RelayState' => $finalRedirect]);
+                request()->merge(['RelayState' => $finalRedirect]);
             } catch (\Exception $e) {
                 Log::error('Error en la autenticación con Google', [
                     'error' => $e->getMessage(),
