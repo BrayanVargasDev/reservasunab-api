@@ -560,8 +560,6 @@ class AuthController extends Controller
             $this->consultarYActualizarTiposUsuario($usuario, $usuario->email);
         }
 
-        Log::info('Proceso de intercambio generado correctamente');
-
         return response()->json([
             'status' => 'success',
             'data' => [
