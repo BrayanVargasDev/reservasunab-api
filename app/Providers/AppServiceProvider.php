@@ -202,7 +202,6 @@ class AppServiceProvider extends ServiceProvider
                 ];
 
                 $usuarioService = app(UsuarioService::class);
-                $email = 'bvargasdev@gmail.com';
                 $user = Usuario::where('email', $email)->first();
 
                 if (!$user) {
