@@ -529,19 +529,20 @@ class AuthController extends Controller
 
         $usuario = $authCode->usuario;
 
-        $dispositivo = $req->header('User-Agent');
+        // $dispositivo = $req->header('User-Agent');
         $ip = $req->ip();
 
         $tiene_refresh_valido = RefreshToken::where('id_usuario', $usuario->id_usuario)
-            ->where(function ($q) use ($dispositivo, $ip) {
-                $q->where(function ($qq) use ($dispositivo, $ip) {
-                    $qq->where('dispositivo', $dispositivo)
-                        ->where('ip', $ip);
-                })->orWhere(function ($qq) use ($dispositivo, $ip) {
-                    $qq->where('dispositivo', $ip)
-                        ->where('ip', $dispositivo);
-                });
-            })
+            // ->where(function ($q) use ($dispositivo, $ip) {
+            //     $q->where(function ($qq) use ($dispositivo, $ip) {
+            //         $qq->where('dispositivo', $dispositivo)
+            //             ->where('ip', $ip);
+            //     });
+            //     ->orWhere(function ($qq) use ($dispositivo, $ip) {
+            //         $qq->where('dispositivo', $ip)
+            //             ->where('ip', $dispositivo);
+            //     });
+            // })
             ->where(function ($q) {
                 $q->whereNull('expira_en')
                     ->orWhere('expira_en', '>', now());
@@ -550,7 +551,7 @@ class AuthController extends Controller
             ->first();
 
         $refresh_token = !$tiene_refresh_valido
-            ? $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw']
+            ? $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip)['raw']
             : $tiene_refresh_valido->token_hash;
 
         $token = $this->token_service->generarAccessToken($usuario);
@@ -609,7 +610,7 @@ class AuthController extends Controller
             $dispositivo = $request->header('User-Agent');
             $ip = $request->ip();
 
-            $rt = $this->token_service->validarRefreshToken($raw, $ip, $dispositivo);
+            $rt = $this->token_service->validarRefreshToken($raw, $ip);
             if (!$rt) {
                 return response()->json([
                     'status' => 'error',
@@ -627,7 +628,7 @@ class AuthController extends Controller
                 $usuario->tokens()->delete();
 
                 $token = $this->token_service->generarAccessToken($usuario);
-                $refresh_token = $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip, $dispositivo)['raw'];
+                $refresh_token = $this->token_service->crearRefreshTokenParaUsuario($usuario, $ip)['raw'];
             } else {
                 $token = $this->token_service->generarAccessToken($usuario);
                 $refresh_token = $raw;
