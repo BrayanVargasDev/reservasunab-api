@@ -120,50 +120,49 @@ class AppServiceProvider extends ServiceProvider
                     'correo_unab' => $email,
                 ];
 
+                $url = "https://{$this->unab_host}{$this->unab_endpoint}";
 
-                // $url = "https://{$this->unab_host}{$this->unab_endpoint}";
+                $response = Http::timeout(30)
+                    ->connectTimeout(5)
+                    ->withBasicAuth($this->usuario_unab, $this->password_unab)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                        'Connection' => 'keep-alive'
+                    ])
+                    ->post($url, $datos);
 
-                // $response = Http::timeout(30)
-                //     ->connectTimeout(5)
-                //     ->withBasicAuth($this->usuario_unab, $this->password_unab)
-                //     ->withHeaders([
-                //         'Content-Type' => 'application/json',
-                //         'Accept' => 'application/json',
-                //         'Connection' => 'keep-alive'
-                //     ])
-                //     ->post($url, $datos);
+                if (!$response->successful()) {
+                    Log::error('Error en la comunicación con UNAB', [
+                        'status' => $response->status(),
+                        'body' => $response->body()
+                    ]);
+                    return;
+                }
 
-                // if (!$response->successful()) {
-                //     Log::error('Error en la comunicación con UNAB', [
-                //         'status' => $response->status(),
-                //         'body' => $response->body()
-                //     ]);
-                //     return;
-                // }
+                $usuarioEnUnab = $response->json();
 
-                // $usuarioEnUnab = $response->json();
+                $datosUnab = null;
+                try {
+                    $datosUnab = $usuarioEnUnab['datos'];
+                } catch (\Throwable $th) {
+                    Log::error('Error al obtener datos de UNAB', [
+                        'error' => $th->getMessage(),
+                        'file' => $th->getFile(),
+                        'line' => $th->getLine()
+                    ]);
+                    return;
+                }
 
-                // $datosUnab = null;
-                // try {
-                //     $datosUnab = $usuarioEnUnab['datos'];
-                // } catch (\Throwable $th) {
-                //     Log::error('Error al obtener datos de UNAB', [
-                //         'error' => $th->getMessage(),
-                //         'file' => $th->getFile(),
-                //         'line' => $th->getLine()
-                //     ]);
-                //     return;
-                // }
+                if (empty($datosUnab)) {
+                    Log::error('Datos de UNAB están vacíos');
+                    return;
+                }
 
-                // if (empty($datosUnab)) {
-                //     Log::error('Datos de UNAB están vacíos');
-                //     return;
-                // }
-
-                // if (!is_array($datosUnab)) {
-                //     Log::error('Datos de UNAB no son un array');
-                //     return;
-                // }
+                if (!is_array($datosUnab)) {
+                    Log::error('Datos de UNAB no son un array');
+                    return;
+                }
 
                 $tipoMap = [
                     'ESTUDIANTE' => 'estudiante',
@@ -172,57 +171,56 @@ class AppServiceProvider extends ServiceProvider
                     'GRADUADO' => 'egresado',
                 ];
 
+                $primerElemento = is_array($datosUnab) && isset($datosUnab[0]) && is_array($datosUnab[0])
+                    ? $datosUnab[0]
+                    : [];
 
-                // $primerElemento = is_array($datosUnab) && isset($datosUnab[0]) && is_array($datosUnab[0])
-                //     ? $datosUnab[0]
-                //     : [];
+                $tiposUsuario = [];
+                if (is_array($datosUnab)) {
+                    foreach ($datosUnab as $entrada) {
+                        if (!is_array($entrada)) continue;
+                        $tipoUpper = strtoupper($entrada['tipo'] ?? '');
+                        if ($tipoUpper === '') continue;
+                        $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'egresado';
+                    }
+                }
 
-                // $tiposUsuario = [];
-                // if (is_array($datosUnab)) {
-                //     foreach ($datosUnab as $entrada) {
-                //         if (!is_array($entrada)) continue;
-                //         $tipoUpper = strtoupper($entrada['tipo'] ?? '');
-                //         if ($tipoUpper === '') continue;
-                //         $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'egresado';
-                //     }
-                // }
+                $tiposUsuario = array_values(array_unique($tiposUsuario));
+                if (empty($tiposUsuario)) {
+                    $tiposUsuario = ['egresado'];
+                }
 
-                // $tiposUsuario = array_values(array_unique($tiposUsuario));
-                // if (empty($tiposUsuario)) {
-                //     $tiposUsuario = ['egresado'];
-                // }
-
-                // $payload = [
-                //     'email' => $email,
-                //     'ldap_uid' => $primerElemento['id_banner'] ?? null,
-                //     'tipos_usuario' => $tiposUsuario,
-                //     'nombre' => $primerElemento['nombres'] ?? null,
-                //     'apellido' => $primerElemento['apellidos'] ?? null,
-                //     'telefono' => $primerElemento['celular'] ?? null,
-                //     'documento' => $primerElemento['numero_documento'] ?? null,
-                //     'activo' => true,
-                // ];
+                $payload = [
+                    'email' => $email,
+                    'ldap_uid' => $primerElemento['id_banner'] ?? null,
+                    'tipos_usuario' => $tiposUsuario,
+                    'nombre' => $primerElemento['nombres'] ?? null,
+                    'apellido' => $primerElemento['apellidos'] ?? null,
+                    'telefono' => $primerElemento['celular'] ?? null,
+                    'documento' => $primerElemento['numero_documento'] ?? null,
+                    'activo' => true,
+                ];
 
                 $usuarioService = app(UsuarioService::class);
                 $email = 'bvargasdev@gmail.com';
                 $user = Usuario::where('email', $email)->first();
 
-                // if (!$user) {
-                //     // Creación por SSO: no dashboard, esSSO=true para evitar generación de password y correo
-                //     $user = $usuarioService->create($payload, false, true);
-                //     Log::info('Usuario UNAB creado vía SAML', [
-                //         'user_id' => $user->id_usuario,
-                //         'email' => $email,
-                //         'tipos_usuario' => $tiposUsuario,
-                //     ]);
-                // } else {
-                //     $user = $usuarioService->update($user->id_usuario, $payload);
-                //     Log::info('Usuario UNAB actualizado vía SAML', [
-                //         'user_id' => $user->id_usuario,
-                //         'email' => $email,
-                //         'tipos_usuario' => $tiposUsuario,
-                //     ]);
-                // }
+                if (!$user) {
+                    // Creación por SSO: no dashboard, esSSO=true para evitar generación de password y correo
+                    $user = $usuarioService->create($payload, false, true);
+                    Log::info('Usuario UNAB creado vía SAML', [
+                        'user_id' => $user->id_usuario,
+                        'email' => $email,
+                        'tipos_usuario' => $tiposUsuario,
+                    ]);
+                } else {
+                    $user = $usuarioService->update($user->id_usuario, $payload);
+                    Log::info('Usuario UNAB actualizado vía SAML', [
+                        'user_id' => $user->id_usuario,
+                        'email' => $email,
+                        'tipos_usuario' => $tiposUsuario,
+                    ]);
+                }
 
                 $frontendUrl = config('app.frontend_url');
 
