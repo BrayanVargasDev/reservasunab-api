@@ -514,15 +514,18 @@ class AuthController extends Controller
 
         $authCode = AuthCode::where('consumido', false)
             ->where('expira_en', '>', now())
-            ->where('user_agent', $req->header('User-Agent'))
+            // ->where('user_agent', $req->header('User-Agent'))
             ->when($codigo, function ($query, $codigo) {
                 return $query->where('codigo', $codigo);
             })
             ->first();
 
-        if (!$authCode) return response()->json([
-            'error' => 'código no encontrado o expirado, o el dispositivo no coincide.'
-        ], 400);
+        if (!$authCode) {
+            Log::error('No se pudo procesar el código: ' . $codigo);
+            return response()->json([
+                'error' => 'código no encontrado o expirado, o el dispositivo no coincide.'
+            ], 400);
+        }
 
         $authCode->consumido = true;
         $authCode->save();
