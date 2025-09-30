@@ -2191,6 +2191,15 @@ class ReservaService
             $reserva->delete();
             DB::commit();
 
+            if (!$reserva->codigo_evento) {
+                Log::warning("No se envía cancelación de reserva con id {$reserva->id} porque no tiene código de evento");
+            } else if (!$reserva->usuarioReserva->ldap_uid) {
+                Log::warning("No se envía cancelación de reserva con id {$reserva->id} porque el suaurio no tiene banner");
+            } else {
+                $this->cron_service->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid, $reserva->codigo_evento);
+            }
+
+
             return [
                 'exito' => true,
                 'mensaje' => 'Reserva cancelada correctamente',
