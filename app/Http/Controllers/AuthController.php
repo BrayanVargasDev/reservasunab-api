@@ -343,15 +343,15 @@ class AuthController extends Controller
                 if (!is_array($entrada)) continue;
                 $tipoUpper = strtoupper($entrada['tipo'] ?? '');
                 if ($tipoUpper === '') continue;
-                $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'externo';
+                $tiposUsuario[] = $tipoMap[$tipoUpper] ?? 'egresado';
             }
 
             $tiposUsuario = array_values(array_unique($tiposUsuario));
             if (empty($tiposUsuario)) {
-                $tiposUsuario = ['externo'];
+                $tiposUsuario = ['egresado'];
             }
 
-            $this->actualizarTiposUsuario($usuario, $tiposUsuario);
+            $this->actualizarTiposUsuario($usuario, $tiposUsuario, $datosUnab);
         } catch (\Throwable $th) {
             Log::error('Error al procesar datos de UNAB', [
                 'error' => $th->getMessage(),
@@ -362,30 +362,26 @@ class AuthController extends Controller
         }
     }
 
-    private function actualizarTiposUsuario(Usuario $usuario, array $nuevosTipos)
+    private function actualizarTiposUsuario(Usuario $usuario, array $nuevosTipos, array $datosUnab = [])
     {
-        $tiposValidos = ['externo', 'estudiante', 'administrativo', 'egresado'];
+        $tiposValidos = ['estudiante', 'administrativo', 'egresado'];
         $tiposFiltrados = array_values(array_intersect($nuevosTipos, $tiposValidos));
 
         if (empty($tiposFiltrados)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Debe proporcionar al menos un tipo de usuario válido.',
-            ], 400);
+            $tiposFiltrados = ['egresado'];
         }
 
         $usuario->tipos_usuario = $tiposFiltrados;
-        $usuario->save();
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Tipos de usuario actualizados correctamente.',
-            'data' => [
-                'id' => $usuario->id_usuario,
-                'email' => $usuario->email,
-                'tipo_usuario' => $usuario->tipos_usuario,
-            ],
-        ], 200);
+        // Actualizar ldap_uid si viene en datosUnab
+        if (!empty($datosUnab)) {
+            $primerElemento = is_array($datosUnab) && isset($datosUnab[0]) && is_array($datosUnab[0])
+                ? $datosUnab[0]
+                : [];
+            $usuario->ldap_uid = $primerElemento['id_banner'] ?? $usuario->ldap_uid;
+        }
+
+        $usuario->save();
     }
 
     public function logout(Request $request)
