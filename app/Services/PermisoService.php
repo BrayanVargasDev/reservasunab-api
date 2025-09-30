@@ -57,12 +57,10 @@ class PermisoService
 
     public function getTodosLosPermisos()
     {
-        return Cache::remember('todos_los_permisos', 7200, function () {
-            return Permiso::with('pantalla:id_pantalla,nombre')
-                ->select('id_permiso', 'nombre', 'descripcion', 'codigo', 'icono', 'id_pantalla')
-                ->orderBy('nombre')
-                ->get();
-        });
+        return Permiso::with('pantalla:id_pantalla,nombre')
+            ->select('id_permiso', 'nombre', 'descripcion', 'codigo', 'icono', 'id_pantalla')
+            ->orderBy('nombre')
+            ->get();
     }
 
     private function procesarPermisosUsuario(Usuario $usuario, $todosLosPermisos)
@@ -118,49 +116,6 @@ class PermisoService
         }
 
         return $permisosConOrigen;
-    }
-
-    public function limpiarCache()
-    {
-        Cache::forget('todos_los_permisos');
-
-        $paginasPorLimpiar = range(1, 10);
-        $tamanosPagina = [10, 20, 50];
-
-        foreach ($tamanosPagina as $perPage) {
-            foreach ($paginasPorLimpiar as $page) {
-                $cacheKey = "permisos_usuarios_page_{$page}_per_page_{$perPage}";
-                Cache::forget($cacheKey);
-            }
-        }
-
-        $cacheKeysLegacy = [
-            'permisos_usuarios_page_10_10',
-            'permisos_usuarios_page_20_20',
-            'permisos_usuarios_page_50_50',
-            'permisos_usuarios_filtro_todos_page_10',
-            'permisos_usuarios_filtro_concedidos_page_10',
-            'permisos_usuarios_filtro_denegados_page_10',
-            'permisos_usuarios_filtro_todos_page_20',
-            'permisos_usuarios_filtro_concedidos_page_20',
-            'permisos_usuarios_filtro_denegados_page_20',
-        ];
-
-        foreach ($cacheKeysLegacy as $key) {
-            Cache::forget($key);
-        }
-
-        Log::info('Caché de permisos limpiado completamente');
-    }
-
-    public function limpiarCacheConTags()
-    {
-        try {
-            Cache::tags(['permisos', 'usuarios_permisos'])->flush();
-            Log::info('Caché de permisos limpiado usando tags');
-        } catch (\Exception $e) {
-            $this->limpiarCache();
-        }
     }
 
     public function obtenerPermisosUnicos(Usuario $usuario)
@@ -255,7 +210,7 @@ class PermisoService
     {
         $permiso = Permiso::create($data);
 
-        $this->limpiarCache();
+
 
         return $permiso;
     }
@@ -276,8 +231,6 @@ class PermisoService
             }
         });
 
-        $this->limpiarCache();
-
         return $createdPermisos;
     }
 
@@ -286,8 +239,6 @@ class PermisoService
         $permiso = Permiso::findOrFail($idPermiso);
         $permiso->update($data);
 
-        $this->limpiarCache();
-
         return $permiso;
     }
 
@@ -295,8 +246,6 @@ class PermisoService
     {
         $permiso = Permiso::findOrFail($idPermiso);
         $resultado = $permiso->delete();
-
-        $this->limpiarCache();
 
         return $resultado;
     }
@@ -345,8 +294,6 @@ class PermisoService
         }
 
         $usuario->permisosDirectos()->sync($permisosIds);
-
-        $this->limpiarCache();
 
         return $usuario->load(['permisosDirectos', 'rol.permisos']);
     }
