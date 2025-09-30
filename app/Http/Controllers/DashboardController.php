@@ -183,7 +183,7 @@ class DashboardController extends Controller
                 promedios AS (
                     SELECT
                         hora,
-                        AVG(reservas_en_dia_hora)::NUMERIC(10,2) AS promedio_reservas
+                        ROUND(AVG(reservas_en_dia_hora), 1) AS promedio_reservas
                     FROM base
                     GROUP BY hora
                 )
