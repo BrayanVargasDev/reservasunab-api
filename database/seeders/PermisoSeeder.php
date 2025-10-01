@@ -236,6 +236,22 @@ class PermisoSeeder extends Seeder
             'descripcion' => 'Desactivar elementos.',
             'id_pantalla' => 7,
         ],
+        // Dashboard id = 1
+        [
+            'nombre' => 'descargar_reservas_mes',
+            'codigo' => 'DSB000001',
+            'icono' => '',
+            'descripcion' => 'Descargar el informe de reservas por mes.',
+            'id_pantalla' => 1,
+        ],
+        [
+            'nombre' => 'descargar_recaudo_mes',
+            'codigo' => 'DSB000002',
+            'icono' => '',
+            'descripcion' => 'Descargar el informe de recaudo mensual.',
+            'id_pantalla' => 1,
+        ],
+
     ];
 
     /**
@@ -258,7 +274,7 @@ class PermisoSeeder extends Seeder
         $categorias = Categoria::withTrashed()->get();
 
         foreach ($categorias as $categoria) {
-            $permiso_codigo = 'ESP' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+            $permiso_codigo = 'ESP_CAT_' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
 
             // Solo crear si no existe
             if (!Permiso::where('codigo', $permiso_codigo)->exists()) {

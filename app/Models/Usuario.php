@@ -318,10 +318,10 @@ class Usuario extends Authenticatable
     /**
      * Obtener IDs de categorías permitidas por permisos de gestión de espacios
      */
-    public function getCategoriasPermitidas(): array
+    public function obtenerCategoriasPermitidas(): array
     {
         if ($this->esAdministrador()) {
-            return []; // Administradores ven todo, no filtrar
+            return [];
         }
 
         $permisosUsuario = $this->obtenerTodosLosPermisos();

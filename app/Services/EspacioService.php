@@ -23,7 +23,7 @@ class EspacioService
         // Filtrar por categorías permitidas si el usuario no es admin
         $usuario = Auth::user();
         if ($usuario && !$usuario->esAdministrador()) {
-            $categoriasPermitidas = $usuario->getCategoriasPermitidas();
+            $categoriasPermitidas = $usuario->obtenerCategoriasPermitidas();
             if (!empty($categoriasPermitidas)) {
                 $query->whereIn('id_categoria', $categoriasPermitidas);
             } else {

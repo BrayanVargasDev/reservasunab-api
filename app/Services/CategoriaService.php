@@ -108,7 +108,7 @@ class CategoriaService
      */
     private function crearPermisoCategoria(Categoria $categoria): void
     {
-        $codigo = 'ESP' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+        $codigo = 'ESP_CAT_' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
         $nombre = 'gestionar_espacios_categoria_' . $categoria->id;
 
         Permiso::updateOrCreate(

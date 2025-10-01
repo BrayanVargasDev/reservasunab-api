@@ -122,7 +122,7 @@ class ReservaService
 
         if (!$esAdministrador) {
             // Filtrar por categorías permitidas si el usuario no es admin
-            $categoriasPermitidas = $usuario->getCategoriasPermitidas();
+            $categoriasPermitidas = $usuario->obtenerCategoriasPermitidas();
             if (!empty($categoriasPermitidas)) {
                 $query->whereHas('espacio', function ($espacioQuery) use ($categoriasPermitidas) {
                     $espacioQuery->whereIn('id_categoria', $categoriasPermitidas);
