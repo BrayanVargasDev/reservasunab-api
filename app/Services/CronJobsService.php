@@ -62,7 +62,9 @@ class CronJobsService
             'PENDING',
             'PENDIENTE',
             'EXPIRADO',
-            'EXPIRED'
+            'EXPIRED',
+            'CREATED',
+            'inicial'
         ];
 
         $totalEvaluadas = 0;
@@ -71,6 +73,7 @@ class CronJobsService
         Reservas::query()
             ->with(['pago', 'usuarioReserva'])
             ->whereNull('eliminado_en')
+            ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
             ->where(function ($q) {
                 $q->whereDate('fecha', '>', Carbon::today())
@@ -79,14 +82,16 @@ class CronJobsService
                             ->whereTime('hora_inicio', '>=', Carbon::now()->format('H:i:s'));
                     });
             })
-            ->whereHas('pago', function ($q) use ($estadosPendientes) {
-                $q->whereNull('pagos.eliminado_en')
-                    ->whereRaw('UPPER(pagos.estado) <> ?', ['OK'])
-                    ->where(function ($q2) use ($estadosPendientes) {
-                        $upperList = array_map(fn($v) => strtoupper($v), $estadosPendientes);
-                        $placeholders = implode(',', array_fill(0, count($upperList), '?'));
-                        $q2->whereRaw('UPPER(pagos.estado) IN (' . $placeholders . ')', $upperList);
-                    });
+            ->where(function ($q) use ($estadosPendientes) {
+                $q->whereHas('pago', function ($q2) use ($estadosPendientes) {
+                    $q2->whereNull('pagos.eliminado_en')
+                        ->whereRaw('UPPER(pagos.estado) <> ?', ['OK'])
+                        ->where(function ($q3) use ($estadosPendientes) {
+                            $upperList = array_map(fn($v) => strtoupper($v), $estadosPendientes);
+                            $placeholders = implode(',', array_fill(0, count($upperList), '?'));
+                            $q3->whereRaw('UPPER(pagos.estado) IN (' . $placeholders . ')', $upperList);
+                        });
+                })->orWhereDoesntHave('pago');
             })
             ->orderBy('id')
             ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalCanceladas) {
