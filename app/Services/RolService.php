@@ -81,9 +81,6 @@ class RolService
 
         $rol->permisos()->sync($permisosIds);
 
-        $this->clearRolesCache();
-        $this->clearPermisosCache();
-
         return $rol->load('permisos');
     }
 
@@ -136,9 +133,6 @@ class RolService
                 }
             }
 
-            $this->clearRolesCache();
-            $this->clearPermisosCache();
-
             return $rol->load('permisos');
         });
     }
@@ -160,9 +154,6 @@ class RolService
                 $rol->permisos()->sync($permisosConcedidos);
             }
 
-            $this->clearRolesCache();
-            $this->clearPermisosCache();
-
             return $rol->load('permisos');
         });
     }
@@ -176,8 +167,6 @@ class RolService
         }
 
         $resultado = $rol->delete();
-
-        $this->clearRolesCache();
 
         return $resultado;
     }
