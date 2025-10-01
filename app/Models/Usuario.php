@@ -314,4 +314,26 @@ class Usuario extends Authenticatable
 
         return $masReciente;
     }
+
+    /**
+     * Obtener IDs de categorías permitidas por permisos de gestión de espacios
+     */
+    public function getCategoriasPermitidas(): array
+    {
+        if ($this->esAdministrador()) {
+            return []; // Administradores ven todo, no filtrar
+        }
+
+        $permisosUsuario = $this->obtenerTodosLosPermisos();
+
+        $categoriasPermitidas = [];
+        foreach ($permisosUsuario as $permiso) {
+            // Extraer ID de categoría del nombre del permiso
+            if (preg_match('/gestionar_espacios_categoria_(\d+)/', $permiso->nombre, $matches)) {
+                $categoriasPermitidas[] = (int) $matches[1];
+            }
+        }
+
+        return array_unique($categoriasPermitidas);
+    }
 }

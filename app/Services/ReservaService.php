@@ -121,7 +121,16 @@ class ReservaService
             ]);
 
         if (!$esAdministrador) {
-            $query->where('id_usuario', $usuario->id_usuario);
+            // Filtrar por categorías permitidas si el usuario no es admin
+            $categoriasPermitidas = $usuario->getCategoriasPermitidas();
+            if (!empty($categoriasPermitidas)) {
+                $query->whereHas('espacio', function ($espacioQuery) use ($categoriasPermitidas) {
+                    $espacioQuery->whereIn('id_categoria', $categoriasPermitidas);
+                });
+            } else {
+                // Si no tiene categorías permitidas, solo ver sus propias reservas
+                $query->where('id_usuario', $usuario->id_usuario);
+            }
         }
 
         $query->orderBy('creado_en', 'desc');

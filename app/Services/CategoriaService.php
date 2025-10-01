@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Categoria;
+use App\Models\Permiso;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -40,6 +41,10 @@ class CategoriaService
                 'reservas_egresado' => $data['reservas_egresado'],
                 'reservas_externo' => $data['reservas_externo'],
             ]);
+
+            // Crear permiso automáticamente para la categoría
+            $this->crearPermisoCategoria($categoria);
+
             DB::commit();
             return $categoria;
         } catch (Exception $e) {
@@ -96,5 +101,25 @@ class CategoriaService
             DB::rollBack();
             throw new Exception('Error al restaurar la categoría: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Crear permiso automáticamente para una categoría
+     */
+    private function crearPermisoCategoria(Categoria $categoria): void
+    {
+        $codigo = 'ESP' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+        $nombre = 'gestionar_espacios_categoria_' . $categoria->id;
+
+        Permiso::updateOrCreate(
+            ['codigo' => $codigo],
+            [
+                'nombre' => $nombre,
+                'codigo' => $codigo,
+                'icono' => '',
+                'descripcion' => 'Gestionar espacios de la categoría ' . $categoria->nombre,
+                'id_pantalla' => 4, // Pantalla de espacios
+            ]
+        );
     }
 }

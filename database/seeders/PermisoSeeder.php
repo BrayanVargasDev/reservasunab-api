@@ -245,28 +245,31 @@ class PermisoSeeder extends Seeder
      */
     public function run()
     {
-
-        // Consultar las categorías existentes y por cada categoría agregar un permiso
-        // de espacios
-        $categorias = Categoria::withTrashed()->get();
-
-        foreach ($categorias as $categoria) {
-            $permiso_codigo = 'ESP' . str_pad($categoria->id + 12, 6, '0', STR_PAD_LEFT);
-            $permiso = [
-                'nombre' => 'gestionar_espacios_categoria_' . $categoria->id,
-                'codigo' => $permiso_codigo,
-                'icono' => '',
-                'descripcion' => 'Gestionar espacios de la categoría ' . $categoria->nombre,
-                'id_pantalla' => 4,
-            ];
-            $this->permisos[] = $permiso;
-        }
-
+        // Crear permisos estáticos primero
         foreach ($this->permisos as $permiso) {
             Permiso::updateOrCreate(
                 ['codigo' => $permiso['codigo']],
                 $permiso
             );
+        }
+
+        // Para categorías existentes que no tengan permiso, crearlos
+        // (útil para migraciones o categorías creadas antes de implementar permisos automáticos)
+        $categorias = Categoria::withTrashed()->get();
+
+        foreach ($categorias as $categoria) {
+            $permiso_codigo = 'ESP' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+
+            // Solo crear si no existe
+            if (!Permiso::where('codigo', $permiso_codigo)->exists()) {
+                Permiso::create([
+                    'nombre' => 'gestionar_espacios_categoria_' . $categoria->id,
+                    'codigo' => $permiso_codigo,
+                    'icono' => '',
+                    'descripcion' => 'Gestionar espacios de la categoría ' . $categoria->nombre,
+                    'id_pantalla' => 4,
+                ]);
+            }
         }
     }
 }

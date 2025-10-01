@@ -20,6 +20,18 @@ class EspacioService
         $query = Espacio::withTrashed()
             ->with(['sede', 'categoria', 'creadoPor', 'categoria.grupo']);
 
+        // Filtrar por categorías permitidas si el usuario no es admin
+        $usuario = Auth::user();
+        if ($usuario && !$usuario->esAdministrador()) {
+            $categoriasPermitidas = $usuario->getCategoriasPermitidas();
+            if (!empty($categoriasPermitidas)) {
+                $query->whereIn('id_categoria', $categoriasPermitidas);
+            } else {
+                // Si no tiene categorías permitidas, no mostrar espacios
+                $query->whereRaw('1 = 0');
+            }
+        }
+
         if ($search) {
             $query->search($search);
         }
