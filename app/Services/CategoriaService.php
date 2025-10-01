@@ -67,6 +67,11 @@ class CategoriaService
                 'reservas_egresado' => $data['reservas_egresado'],
                 'reservas_externo' => $data['reservas_externo'],
             ]);
+
+            // Actualizar la descripción del permiso correspondiente
+            $codigo = 'ESP_CAT_' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+            Permiso::where('codigo', $codigo)->update(['descripcion' => 'Gestionar espacios de la categoría ' . $categoria->nombre]);
+
             DB::commit();
             return $categoria;
         } catch (Exception $e) {
@@ -81,6 +86,11 @@ class CategoriaService
             DB::beginTransaction();
             $categoria = Categoria::findOrFail($id);
             $categoria->delete();
+
+            // Eliminar el permiso correspondiente
+            $codigo = 'ESP_CAT_' . str_pad($categoria->id, 6, '0', STR_PAD_LEFT);
+            Permiso::where('codigo', $codigo)->delete();
+
             DB::commit();
             return $categoria;
         } catch (Exception $e) {
