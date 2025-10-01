@@ -72,7 +72,6 @@ class CronJobsService
 
         Reservas::query()
             ->with(['pago', 'usuarioReserva'])
-            ->whereNull('eliminado_en')
             ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
             ->where(function ($q) {
