@@ -87,6 +87,7 @@ class DashboardController extends Controller
                         foreach ($espacioDetalles as $slot) {
                             try {
                                 $reservasMaximas = $espacio->reservas_simultaneas ?? 1;
+                                Log::info("Slot {$slot['hora_inicio']} de espacio {$espacio->nombre}, tiene novedad {$slot['novedad']}");
                                 if (isset($slot['novedad']) && $slot['novedad']) {
                                     $slotsOcupados += $reservasMaximas;
                                 } else {
