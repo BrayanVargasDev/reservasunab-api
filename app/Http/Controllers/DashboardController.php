@@ -59,6 +59,7 @@ class DashboardController extends Controller
     {
         try {
             $fechaHoy = Carbon::today()->toDateString();
+            Log::info('fecha de hoy a consultar ' . $fechaHoy);
             $diaSemana = Carbon::today()->dayOfWeek + 1;
 
             $espacios = $this->reservaService->getAllEspacios($fechaHoy);
