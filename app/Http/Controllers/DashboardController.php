@@ -71,7 +71,7 @@ class DashboardController extends Controller
 
             foreach ($espacios as $espacio) {
                 try {
-                    Log::info(['espacio' => $espacio]);
+                    Log::info(['espacio' => $espacio->toArray()]);
                     if (!$espacio->configuraciones) {
                         continue;
                     }
