@@ -64,6 +64,9 @@ class CronJobsService
             'EXPIRADO',
             'EXPIRED',
             'CREATED',
+            'NOT_AUTHORIZED',
+            'FAILED',
+            'ERROR',
             'inicial'
         ];
 
