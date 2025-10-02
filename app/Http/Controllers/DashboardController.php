@@ -85,7 +85,6 @@ class DashboardController extends Controller
                         foreach ($espacioDetalles as $slot) {
                             try {
                                 $reservasMaximas = $espacio->reservas_simultaneas ?? 1;
-                                $totalSlots += $reservasMaximas;
                                 if (isset($slot['novedad']) && $slot['novedad']) {
                                     $slotsOcupados += $reservasMaximas;
                                 } else {
@@ -97,9 +96,10 @@ class DashboardController extends Controller
                             }
                         }
                     }
-                    Log::info([
-                        "Total slots {$espacio->nombre}" => $totalSlots,
-                    ]);
+                    $totalSlots += count($espacioDetalles) * $espacio->reservas_simultaneas;
+
+                    Log::info("Total de slots para {$espacio->nombre}: {$totalSlots}");
+
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
                     $espaciosConError++;
