@@ -99,7 +99,7 @@ class DashboardController extends Controller
                             }
                         }
                     }
-                    $totalSlots += count($espacioDetalles) * $espacio->reservas_simultaneas;
+                    $totalSlots = $totalSlots + ($totalSlotsCount * $espacio->reservas_simultaneas);
 
                     Log::info("Total de slots para {$espacio->nombre}: {$totalSlots}");
 
