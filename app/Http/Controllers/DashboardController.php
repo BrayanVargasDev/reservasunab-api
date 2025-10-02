@@ -100,7 +100,7 @@ class DashboardController extends Controller
                         }
                     }
                     Log::info("Reservas simultaneas para {$espacio->nombre}: " . $espacio->reservas_simultaneas);
-                    Log::info("Slots con reservas simultaneas: " . ($totalSlotsCount * (int)$espacio->reservas_simultaneas));
+                    Log::info("Slots con reservas simultaneas: " . (count($espacioDetalles) * (int)$espacio->reservas_simultaneas));
 
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
