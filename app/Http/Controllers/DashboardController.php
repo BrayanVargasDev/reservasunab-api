@@ -61,12 +61,13 @@ class DashboardController extends Controller
             $fechaHoy = Carbon::today()->toDateString();
             $diaSemana = Carbon::today()->dayOfWeek + 1;
 
-            $espacios = $this->reservaService->getAllEspacios($fechaHoy)->orderBy('id');
+            $espacios = $this->reservaService->getAllEspacios($fechaHoy);
             $totalSlots = 0;
             $slotsOcupados = 0;
             $espaciosConsultados = 0;
             $espaciosConError = 0;
             $slotsConError = 0;
+            $totalSlotsCount = 0;
 
             foreach ($espacios as $espacio) {
                 try {
@@ -81,6 +82,8 @@ class DashboardController extends Controller
 
                     $espacio->configuracion = $primeraConfig;
                     $espacioDetalles = $this->reservaService->construirDisponibilidad($espacio, $fechaHoy);
+                    Log::info("Slots de {$espacio->nombre}: " . count($espacioDetalles));
+                    $totalSlotsCount += count($espacioDetalles);
                     if (isset($espacioDetalles) && is_array($espacioDetalles)) {
                         foreach ($espacioDetalles as $slot) {
                             try {
@@ -107,6 +110,8 @@ class DashboardController extends Controller
                     continue;
                 }
             }
+
+            Log::info("Total slots count from construirDisponibilidad: {$totalSlotsCount}");
 
             $porcentajeOcupacion = $totalSlots > 0 ? round(($slotsOcupados / $totalSlots) * 100, 2) : 0;
 
