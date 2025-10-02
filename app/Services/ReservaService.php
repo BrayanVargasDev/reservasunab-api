@@ -200,6 +200,7 @@ class ReservaService
             ->with([
                 'imagen',
                 'sede:id,nombre',
+                'novedades',
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
                 'configuraciones' => function ($q) use ($filtroConfiguraciones) {
