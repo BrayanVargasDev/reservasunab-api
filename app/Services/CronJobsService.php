@@ -43,7 +43,7 @@ class CronJobsService
     /**
      * Procesa reservas que requieren pago y que llevan >= 30 minutos sin un pago exitoso (OK).
      * Criterios:
-     *  - Reserva NO pasada (fecha futura o fecha hoy y hora_inicio >= ahora)
+     *  - Reserva de hoy (fecha = hoy)
      *  - Tiene pago asociado cuyo estado está en pendiente / expirado (no OK)
      *  - Fue creada hace 30+ minutos y todavía no hay pago en estado OK
      *  - Se elimina vía soft-delete y se marca estado cancelada para trazabilidad
@@ -74,13 +74,7 @@ class CronJobsService
             ->with(['pago', 'usuarioReserva'])
             ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
-            ->where(function ($q) {
-                $q->whereDate('fecha', '>', Carbon::today())
-                    ->orWhere(function ($q2) {
-                        $q2->whereDate('fecha', Carbon::today())
-                            ->whereTime('hora_inicio', '>=', Carbon::now()->format('H:i:s'));
-                    });
-            })
+            ->whereDate('fecha', '>=', Carbon::today())
             ->where(function ($q) use ($estadosPendientes) {
                 $q->whereHas('pago', function ($q2) use ($estadosPendientes) {
                     $q2->whereNull('pagos.eliminado_en')
