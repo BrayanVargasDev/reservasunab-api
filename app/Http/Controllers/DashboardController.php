@@ -67,7 +67,6 @@ class DashboardController extends Controller
             $espaciosConsultados = 0;
             $espaciosConError = 0;
             $slotsConError = 0;
-            $totalSlotsCount = 0;
 
             foreach ($espacios as $espacio) {
                 try {
@@ -108,7 +107,10 @@ class DashboardController extends Controller
                 }
             }
 
-            Log::info("Total slots count from construirDisponibilidad: {$totalSlotsCount}");
+            Log::info([
+                'Total slots' => $totalSlots,
+                'Slots ocupados' => $slotsOcupados,
+            ]);
 
             $porcentajeOcupacion = $totalSlots > 0 ? round(($slotsOcupados / $totalSlots) * 100, 2) : 0;
 
