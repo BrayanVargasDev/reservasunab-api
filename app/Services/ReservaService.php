@@ -220,7 +220,7 @@ class ReservaService
                 }
             ])
             ->orderBy('nombre')
-            ->select(['id', 'nombre', 'id_sede', 'id_categoria'])
+            ->select(['id', 'nombre', 'reservas_simultaneas', 'id_sede', 'id_categoria'])
             ->get();
     }
 
