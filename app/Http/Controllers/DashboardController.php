@@ -99,9 +99,8 @@ class DashboardController extends Controller
                             }
                         }
                     }
-                    $totalSlots = $totalSlots + ($totalSlotsCount * $espacio->reservas_simultaneas);
 
-                    Log::info("Total de slots para {$espacio->nombre}: {$totalSlots}");
+                    Log::info("Slots con reservas simultaneas: " . $totalSlotsCount * $espacio->reservas_simultaneas);
 
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
