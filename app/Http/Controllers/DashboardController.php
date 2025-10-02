@@ -83,7 +83,7 @@ class DashboardController extends Controller
                     $espacio->configuracion = $primeraConfig;
                     $espacioDetalles = $this->reservaService->construirDisponibilidad($espacio, $fechaHoy);
                     Log::info("Slots de {$espacio->nombre}: " . count($espacioDetalles));
-                    $totalSlotsCount += count($espacioDetalles);
+                    $totalSlotsCount += count($espacioDetalles) * $espacio->reservas_simultaneas;
                     if (isset($espacioDetalles) && is_array($espacioDetalles)) {
                         foreach ($espacioDetalles as $slot) {
                             try {
@@ -100,7 +100,7 @@ class DashboardController extends Controller
                         }
                     }
                     Log::info("Reservas simultaneas para {$espacio->nombre}: " . $espacio->reservas_simultaneas);
-                    Log::info("Slots con reservas simultaneas: " . $totalSlotsCount * $espacio->reservas_simultaneas);
+                    Log::info("Slots con reservas simultaneas: " . ($totalSlotsCount * (int)$espacio->reservas_simultaneas));
 
                     $espaciosConsultados++;
                 } catch (Exception $eEspacio) {
