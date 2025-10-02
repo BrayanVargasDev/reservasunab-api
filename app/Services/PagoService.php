@@ -663,15 +663,18 @@ class PagoService
             ];
         }
 
-        $pagoConsultaExistente = PagoConsulta::where('codigo', $pago->codigo)
-            ->whereIn('estado', ['PENDING', 'CREATED'])
-            ->first();
+        $pagoConsultaExistente = PagoConsulta::where('codigo', $pago->codigo)->first();
 
         if ($pagoConsultaExistente) {
-            $pagoConsultaExistente->delete();
+            if ($pagoConsultaExistente->estado === 'OK') {
+                return $pagoConsultaExistente;
+            } else {
+                $pagoConsultaExistente->update($payload);
+                return $pagoConsultaExistente;
+            }
+        } else {
+            return PagoConsulta::create($payload);
         }
-
-        return PagoConsulta::create($payload);
     }
 
     private function formatearRespuestaDesdePagoConsulta(PagoConsulta $pagoConsulta): array
