@@ -200,7 +200,9 @@ class ReservaService
             ->with([
                 'imagen',
                 'sede:id,nombre',
-                'novedades',
+                'novedades' => function ($q) use ($fecha) {
+                    $q->whereDate('fecha', $fecha);
+                },
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
                 'configuraciones' => function ($q) use ($filtroConfiguraciones) {

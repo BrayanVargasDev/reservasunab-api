@@ -71,7 +71,6 @@ class DashboardController extends Controller
 
             foreach ($espacios as $espacio) {
                 try {
-                    Log::info(['espacio' => $espacio->toArray()]);
                     if (!$espacio->configuraciones) {
                         continue;
                     }
@@ -85,6 +84,7 @@ class DashboardController extends Controller
                     $espacioDetalles = $this->reservaService->construirDisponibilidad($espacio, $fechaHoy);
                     Log::info("Slots de {$espacio->nombre}: " . count($espacioDetalles));
                     $totalSlots += count($espacioDetalles) * (int)$espacio->reservas_simultaneas;
+
                     if (isset($espacioDetalles) && is_array($espacioDetalles)) {
                         foreach ($espacioDetalles as $slot) {
                             try {
