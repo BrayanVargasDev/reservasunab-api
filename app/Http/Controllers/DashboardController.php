@@ -81,11 +81,11 @@ class DashboardController extends Controller
 
                     $espacio->configuracion = $primeraConfig;
                     $espacioDetalles = $this->reservaService->construirDisponibilidad($espacio, $fechaHoy);
-
                     if (isset($espacioDetalles) && is_array($espacioDetalles)) {
                         foreach ($espacioDetalles as $slot) {
                             try {
                                 $reservasMaximas = $slot['reservas_maximas'] ?? 1;
+                                Log::debug("Slot {$slot['hora_inicio']}: Reservas máximas para el espacio con id {$espacio->id}: $reservasMaximas");
                                 $totalSlots += $reservasMaximas;
                                 if (isset($slot['novedad']) && $slot['novedad']) {
                                     $slotsOcupados += $reservasMaximas;
