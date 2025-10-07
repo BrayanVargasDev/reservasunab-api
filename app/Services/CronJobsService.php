@@ -989,7 +989,7 @@ class CronJobsService
                 'body' => $json,
             ]);
 
-            $reserva = Reservas::findOrFail($reservaId);
+            $reserva = Reservas::where('id', $reservaId)->get();
             $reserva->cancel_enviada = true;
             $reserva->save();
         } catch (\Throwable $e) {
