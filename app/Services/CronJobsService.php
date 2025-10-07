@@ -990,6 +990,14 @@ class CronJobsService
                 'body' => $json,
             ]);
 
+            if ($json['estado'] == 'error') {
+                Log::channel('cronjobs')->error('[CRON] Error en respuesta de cancelación: ', [
+                    'reserva_id' => $reservaId,
+                    'error' => $json['mensaje'],
+                ]);
+                return;
+            }
+
             $reserva = Reservas::withTrashed()->findOrFail($reservaId);
             $reserva->cancel_enviada = true;
             $reserva->save();
