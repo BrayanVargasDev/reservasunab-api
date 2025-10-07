@@ -863,7 +863,7 @@ class CronJobsService
 
         Log::channel('cronjobs')->info('[CRON] Inicio procesarPagosPendientes');
 
-        $estadosExcluidos = ['FAILED', 'EXPIRED', 'NOT_AUTHORIZED'];
+        $estadosExcluidos = ['FAILED', 'EXPIRED', 'NOT_AUTHORIZED', 'OK'];
 
         $totalEvaluados = 0;
         $totalActualizados = 0;
