@@ -105,6 +105,7 @@ class PagoService
             }
 
             $saldoRestante = max(0, $saldoFavor - $reserva->precio_total);
+            $this->cron_service->procesarReporteReservasMensualidades();
             $resumen = $this->reserva_service->getMiReserva($reserva->id);
 
             return [
