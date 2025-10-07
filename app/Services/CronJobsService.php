@@ -912,7 +912,7 @@ class CronJobsService
     /**
      * Procesa reservas canceladas que no han enviado la cancelación al servicio UNAB.
      * Criterios:
-     *  - Reserva con estado 'cancelada'
+     *  - Reserva con estado 'cancelada' (incluyendo soft-deleted)
      *  - cancel_enviada = false
      *  - Tiene código_evento (para enviar cancelación)
      * Se ejecuta periódicamente desde el scheduler.
@@ -926,6 +926,7 @@ class CronJobsService
         Log::channel('cronjobs')->info('[CRON] Inicio procesarCancelacionesPendientes');
 
         Reservas::query()
+            ->withTrashed()
             ->with(['usuarioReserva'])
             ->where('estado', 'cancelada')
             ->where('cancel_enviada', false)
@@ -934,9 +935,6 @@ class CronJobsService
             ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalEnviadas) {
                 foreach ($reservas as $reserva) {
                     $totalEvaluadas++;
-                    Log::channel('cronjobs')->info('[CRON] info de reserva en cancelación: ', [
-                        'reserva' => $reserva
-                    ]);
                     try {
                         $this->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid ?? '', $reserva->codigo_evento);
                         $totalEnviadas++;
@@ -992,7 +990,7 @@ class CronJobsService
                 'body' => $json,
             ]);
 
-            $reserva = Reservas::where('id', $reservaId)->get();
+            $reserva = Reservas::withTrashed()->findOrFail($reservaId);
             $reserva->cancel_enviada = true;
             $reserva->save();
         } catch (\Throwable $e) {
