@@ -260,7 +260,7 @@ class UsuarioController extends Controller
 
             return $e->render();
         } catch (Exception $e) {
-            Log::error('Error al actualizar usuario', [
+            Log::error('[CONTROLLER] Error al actualizar usuario', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
                 'usuario_id' => $usuario->id_usuario,
                 'error' => $e->getMessage(),
@@ -309,7 +309,7 @@ class UsuarioController extends Controller
 
             return $e->render();
         } catch (Exception $e) {
-            Log::error('Error al actualizar usuario desde el dashboard', [
+            Log::error('[CONTROLLER] Error al actualizar usuario desde el dashboard', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
                 'usuario_id' => $usuario->id_usuario,
                 'error' => $e->getMessage(),
