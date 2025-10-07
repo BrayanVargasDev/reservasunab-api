@@ -651,12 +651,14 @@ class CronJobsService
                 if (!$response->ok()) {
                     throw new Exception('HTTP status ' . $response->status());
                 }
+
                 $json = $response->json();
                 Log::channel('cronjobs')->info('[CRON] Respuesta reporte reserva/mensualidad', [
                     'tipo' => $item['tipo'],
                     'id' => $model->id ?? null,
                     'body' => $json,
                 ]);
+
                 if (!is_array($json)) {
                     throw new Exception('Respuesta no JSON');
                 }
@@ -665,6 +667,7 @@ class CronJobsService
                 if (!$resp) {
                     throw new Exception('Formato de respuesta inválido');
                 }
+
                 if (strtolower((string)$resp['estado']) !== 'success') {
                     // Propagar mensaje del servicio para que quede en logs y en ultimo_error_reporte
                     $msgSrv = $resp['mensaje'] ?? 'sin_mensaje';
@@ -675,7 +678,7 @@ class CronJobsService
                 $model->ultimo_error_reporte = null;
                 $model->save();
 
-                $this->procesarCodigosEventoReservas($item, $resp);
+                $this->procesarRespuestaServicio($item, $resp);
 
                 // Loguear casos exitosos solo en reportes
                 Log::channel('cronjobs')->info('[CRON] Reporte enviado con éxito', [
@@ -907,6 +910,51 @@ class CronJobsService
     }
 
     /**
+     * Procesa reservas canceladas que no han enviado la cancelación al servicio UNAB.
+     * Criterios:
+     *  - Reserva con estado 'cancelada'
+     *  - cancel_enviada = false
+     *  - Tiene código_evento (para enviar cancelación)
+     * Se ejecuta periódicamente desde el scheduler.
+     */
+    public function procesarCancelacionesPendientes(): void
+    {
+        $inicio = microtime(true);
+        $totalEvaluadas = 0;
+        $totalEnviadas = 0;
+
+        Log::channel('cronjobs')->info('[CRON] Inicio procesarCancelacionesPendientes');
+
+        Reservas::query()
+            ->with(['usuarioReserva'])
+            ->where('estado', 'cancelada')
+            ->where('cancel_enviada', false)
+            ->whereNotNull('codigo_evento')
+            ->orderBy('id')
+            ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalEnviadas) {
+                foreach ($reservas as $reserva) {
+                    $totalEvaluadas++;
+                    try {
+                        $this->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid ?? '', $reserva->codigo_evento);
+                        $totalEnviadas++;
+                    } catch (\Throwable $e) {
+                        Log::channel('cronjobs')->error('[CRON] Error procesando cancelación pendiente', [
+                            'reserva_id' => $reserva->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+            });
+
+        $duracion = round((microtime(true) - $inicio) * 1000, 1);
+        Log::channel('cronjobs')->info('[CRON] Fin procesarCancelacionesPendientes', [
+            'evaluadas' => $totalEvaluadas,
+            'enviadas' => $totalEnviadas,
+            'ms' => $duracion,
+        ]);
+    }
+
+    /**
      * Envía cancelación de reserva al servicio UNAB.
      */
     public function enviarCancelacionReserva(int $reservaId = 0, string $ldapUid = '', string $codEvento = ''): void
@@ -940,6 +988,10 @@ class CronJobsService
                 'reserva_id' => $reservaId,
                 'body' => $json,
             ]);
+
+            $reserva = Reservas::findOrFail($reservaId);
+            $reserva->cancel_enviada = true;
+            $reserva->save();
         } catch (\Throwable $e) {
             Log::channel('cronjobs')->error('[CRON] Error enviando cancelación reserva', [
                 'reserva_id' => $reservaId,
@@ -975,88 +1027,43 @@ class CronJobsService
     }
 
     /**
-     * Procesa códigos de evento para reservas desde la respuesta del servicio.
-     * Solo aplica a items de tipo 'reserva' con datos válidos.
+     * Procesa la respuesta del servicio para reservas y mensualidades.
+     * Actualiza códigos de evento para reservas y ldap_uid para ambos.
      */
-    private function procesarCodigosEventoReservas(array $item, array $respuestaServicio): void
+    private function procesarRespuestaServicio(array $item, array $respuestaServicio): void
     {
-        // Validar que sea un item de reserva y que la respuesta tenga datos
-        if ($item['tipo'] !== 'reserva' || !is_array($respuestaServicio['datos'] ?? null)) {
+        // Validar que la respuesta tenga datos
+        if (!is_array($respuestaServicio['datos'] ?? null)) {
             return;
         }
 
-        $registrosDatos = $respuestaServicio['datos'];
-        $idsReservasActualizar = [];
+        $registro = collect($respuestaServicio['datos'])->firstWhere('number_doc', $item['payload']['numberDoc']);
+        if (!$registro) {
+            return;
+        }
 
-        foreach ($registrosDatos as $registroDato) {
-            try {
-                if (!isset($registroDato['number_doc']) || !isset($registroDato['cod_evento'])) {
-                    continue;
-                }
-
-                $numeroDocumento = (string) $registroDato['number_doc'];
-                $codigoEvento = trim((string) $registroDato['cod_evento']);
-
-                if (!str_starts_with($numeroDocumento, self::PREFIJO_RESERVA)) {
-                    Log::channel('cronjobs')->warning('[CRON] Número de documento no válido para código evento', [
-                        'number_doc' => $numeroDocumento,
-                    ]);
-                    continue;
-                }
-
-                $idReservaCrudo = substr($numeroDocumento, self::LONGITUD_PREFIJO);
-                if (!is_numeric($idReservaCrudo)) {
-                    Log::channel('cronjobs')->warning('[CRON] ID de reserva no numérico', [
-                        'number_doc' => $numeroDocumento,
-                        'id_crudo' => $idReservaCrudo,
-                    ]);
-                    continue;
-                }
-
-                $idReserva = (int) $idReservaCrudo;
-                if ($idReserva <= 0) {
-                    Log::channel('cronjobs')->warning('[CRON] ID de reserva inválido (<=0)', [
-                        'id_reserva' => $idReserva,
-                    ]);
-                    continue;
-                }
-
-                if (empty($codigoEvento)) {
-                    Log::channel('cronjobs')->warning('[CRON] Código de evento vacío', [
-                        'id_reserva' => $idReserva,
-                    ]);
-                    continue;
-                }
-
-                $idsReservasActualizar[$idReserva] = $codigoEvento;
-            } catch (\Throwable $e) {
-                Log::channel('cronjobs')->error('[CRON] Error procesando registro de dato para código evento', [
-                    'registro' => $registroDato,
-                    'error' => $e->getMessage(),
+        if ($item['tipo'] === 'reserva') {
+            $codigoEvento = trim((string) ($registro['cod_evento'] ?? ''));
+            if (!empty($codigoEvento)) {
+                $item['model']->codigo_evento = $codigoEvento;
+                $item['model']->save();
+                Log::channel('cronjobs')->info('[CRON] Código evento actualizado', [
+                    'reserva_id' => $item['model']->id,
+                    'cod_evento' => $codigoEvento,
                 ]);
             }
         }
 
-        // Actualizar en lote para optimizar rendimiento
-        foreach ($idsReservasActualizar as $idReserva => $codigoEvento) {
-            try {
-                $actualizados = Reservas::where('id', $idReserva)->update(['codigo_evento' => $codigoEvento]);
-                if ($actualizados > 0) {
-                    Log::channel('cronjobs')->info('[CRON] Código evento actualizado para reserva', [
-                        'reserva_id' => $idReserva,
-                        'cod_evento' => $codigoEvento,
-                    ]);
-                } else {
-                    Log::channel('cronjobs')->warning('[CRON] Reserva no encontrada para actualización de código evento', [
-                        'reserva_id' => $idReserva,
-                    ]);
-                }
-            } catch (\Throwable $e) {
-                Log::channel('cronjobs')->error('[CRON] Error actualizando código evento para reserva', [
-                    'reserva_id' => $idReserva,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        $usuario = $item['tipo'] === 'reserva' ? $item['model']->usuarioReserva : $item['model']->usuario;
+        if ($usuario && isset($registro['id_persona'])) {
+            $usuario->ldap_uid = $registro['id_persona'];
+            $usuario->save();
+            Log::channel('cronjobs')->info('[CRON] ldap_uid actualizado', [
+                'usuario_id' => $usuario->id,
+                'id_persona' => $registro['id_persona'],
+                'tipo' => $item['tipo'],
+                'id_model' => $item['model']->id,
+            ]);
         }
     }
 }

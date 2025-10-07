@@ -41,6 +41,7 @@ class Reservas extends Model
         'precio_total',
         'aprobado_por',
         'aprobado_en',
+        'cancel_enviada',
     ];
 
     protected $casts = [
@@ -57,6 +58,7 @@ class Reservas extends Model
         'actualizado_en' => 'datetime',
         'eliminado_en' => 'datetime',
         'reportado' => 'boolean',
+        'cancel_enviada' => 'boolean',
         'fallos_reporte' => 'integer',
         'ultimo_error_reporte' => 'string',
         'precio_base' => 'decimal:2',
