@@ -969,10 +969,12 @@ class CronJobsService
         ];
 
         try {
+            $reserva = Reservas::withTrashed()->findOrFail($reservaId);
             Log::channel('cronjobs')->info('[CRON] Enviando cancelación de reserva', [
                 'reserva_id' => $reservaId,
                 'payload' => $payload,
             ]);
+
             $response = Http::timeout(30)
                 ->connectTimeout(5)
                 ->withBasicAuth($this->usuario_unab, $this->password_unab)
@@ -995,10 +997,11 @@ class CronJobsService
                     'reserva_id' => $reservaId,
                     'error' => $json['mensaje'],
                 ]);
+                $reserva->ultimo_error_reporte = $json['mensaje'];
+                $reserva->save();
                 return;
             }
 
-            $reserva = Reservas::withTrashed()->findOrFail($reservaId);
             $reserva->cancel_enviada = true;
             $reserva->save();
         } catch (\Throwable $e) {
