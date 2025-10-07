@@ -730,9 +730,8 @@ class ReservaService
 
             return $resumenReserva;
         } catch (Throwable $th) {
-            Log::error('Error al iniciar la reserva (preview)', [
+            Log::error('Error al iniciar la reserva', [
                 'usuario_id' => Auth::id() ?? 'no autenticado',
-                'data_received' => $data,
                 'error' => $th->getMessage(),
             ]);
             throw new Exception($th->getMessage());
@@ -2205,8 +2204,6 @@ class ReservaService
 
             if (!$reserva->codigo_evento) {
                 Log::warning("No se envía cancelación de reserva con id {$reserva->id} porque no tiene código de evento");
-            } else if (!$reserva->usuarioReserva->ldap_uid) {
-                Log::warning("No se envía cancelación de reserva con id {$reserva->id} porque el suaurio no tiene banner");
             } else {
                 $this->cron_service->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid, $reserva->codigo_evento);
             }

@@ -909,7 +909,7 @@ class CronJobsService
     /**
      * Envía cancelación de reserva al servicio UNAB.
      */
-    public function enviarCancelacionReserva(int $reservaId, string $ldapUid, string $codEvento): void
+    public function enviarCancelacionReserva(int $reservaId = '', string $ldapUid = '', string $codEvento = ''): void
     {
         $endpoint = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
         $payload = [
