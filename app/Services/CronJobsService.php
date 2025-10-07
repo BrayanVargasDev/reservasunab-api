@@ -934,6 +934,9 @@ class CronJobsService
             ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalEnviadas) {
                 foreach ($reservas as $reserva) {
                     $totalEvaluadas++;
+                    Log::channel('cronjobs')->info('[CRON] info de reserva en cancelación: ', [
+                        'reserva' => $reserva
+                    ]);
                     try {
                         $this->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid ?? '', $reserva->codigo_evento);
                         $totalEnviadas++;
