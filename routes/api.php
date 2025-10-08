@@ -23,6 +23,7 @@ use App\Http\Controllers\BeneficiarioController;
 use App\Http\Controllers\ElementoController;
 use App\Http\Controllers\MensualidadesController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GoogleAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/fechas', [SharedController::class, 'fechas']);
@@ -34,6 +35,9 @@ Route::get('/storage/{ruta}', [SharedController::class, 'servirArchivo'])
 Route::post('/refresh', [AuthController::class, 'refresh']);
 Route::post('/intercambiar', [AuthController::class, 'intercambiar']);
 Route::get('/check-status', [AuthController::class, 'checkAuthStatus']);
+Route::get('/google', [GoogleAuthController::class, 'redirectToGoogle']);
+Route::get('/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
+
 
 Route::group(['middleware' => ['auth:api']], function () {
     Route::post('/logout', [AuthController::class, 'logout']);
