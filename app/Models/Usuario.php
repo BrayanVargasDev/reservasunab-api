@@ -57,6 +57,7 @@ class Usuario extends Authenticatable
         'id_rol',
         'perfil_completado',
         'terminos_condiciones',
+        'google_id',
     ];
 
     protected $hidden = ['password_hash', 'remember_token'];
