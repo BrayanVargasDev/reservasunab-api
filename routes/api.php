@@ -36,7 +36,7 @@ Route::post('/refresh', [AuthController::class, 'refresh']);
 Route::post('/intercambiar', [AuthController::class, 'intercambiar']);
 Route::get('/check-status', [AuthController::class, 'checkAuthStatus']);
 Route::get('/google', [GoogleAuthController::class, 'redirectToGoogle']);
-Route::get('/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
+Route::post('/google/callback', [GoogleAuthController::class, 'handleGoogleCallback']);
 
 
 Route::group(['middleware' => ['auth:api']], function () {

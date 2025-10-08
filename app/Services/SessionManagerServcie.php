@@ -171,19 +171,47 @@ class SessionManagerServcie
 
             $tokenService = app(TokenService::class);
             $ip = request()->ip();
+            $dispositivo = request()->header('User-Agent');
 
-            $refresh = $tokenService->crearRefreshTokenParaUsuario($user, $ip);
+            $tiene_refresh_valido = \App\Models\RefreshToken::where('id_usuario', $user->id_usuario)
+                ->where(function ($q) use ($dispositivo, $ip) {
+                    $q->where(function ($qq) use ($dispositivo, $ip) {
+                        $qq->where('dispositivo', $dispositivo)
+                            ->where('ip', $ip);
+                    })->orWhere(function ($qq) use ($dispositivo, $ip) {
+                        $qq->where('dispositivo', $ip)
+                            ->where('ip', $dispositivo);
+                    });
+                })
+                ->where(function ($q) {
+                    $q->whereNull('expira_en')
+                        ->orWhere('expira_en', '>', now());
+                })
+                ->whereNull('revocado_en')
+                ->first();
 
-            $codigo = Str::random(64);
-            AuthCode::create([
-                'id_usuario' => $user->id_usuario,
-                'codigo' => $codigo,
-                'refresh_token_hash' => $refresh['model']->token_hash,
-                'expira_en' => now()->addSeconds(90),
-                'consumido' => false,
-            ]);
+            $refresh_token = !$tiene_refresh_valido
+                ? $tokenService->crearRefreshTokenParaUsuario($user, $ip, $dispositivo)['raw']
+                : $tiene_refresh_valido->token_hash;
 
-            return $codigo;
+            $token = $tokenService->generarAccessToken($user);
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'access_token' => $token['token'],
+                    'id' => $user->id_usuario,
+                    'email' => $user->email,
+                    'rol' => $user->rol,
+                    'nombre' => $user->persona->nombre ?? null,
+                    'apellido' => $user->persona->apellido ?? null,
+                    'tipo_usuario' => $user->tipos_usuario,
+                    'activo' => $user->activo,
+                    'token_expires_at' => $token['expires_at'],
+                    'refresh_token' => $refresh_token,
+                    'permisos' => $user->obtenerTodosLosPermisos()->pluck('codigo'),
+                ]
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Error en la autenticación con Google', [
                 'error' => $e->getMessage(),

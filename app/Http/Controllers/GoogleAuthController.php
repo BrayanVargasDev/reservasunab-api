@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Usuario;
 use App\Services\SessionManagerServcie;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Request;
 use Laravel\Socialite\Facades\Socialite;
 
 class GoogleAuthController extends Controller
@@ -25,15 +26,21 @@ class GoogleAuthController extends Controller
             ->redirect();
     }
 
-    public function handleGoogleCallback()
+    public function handleGoogleCallback(Request $request)
     {
-        $usuarioGoogle = Socialite::driver('google')->stateless()->user();
-        $usuario = Usuario::where('google_id', $usuarioGoogle->id)->orWhere('email', $usuarioGoogle->email)->first();
+        $request->validate(['idToken' => 'required|string']);
+
+        $usuarioGoogle = Socialite::driver('google')
+            ->stateless()
+            ->userFromToken($request->idToken);
+
+        $usuario = Usuario::where('google_id', $usuarioGoogle->id)
+            ->orWhere('email', $usuarioGoogle->email)
+            ->first();
+
         $usuario->google_id = $usuarioGoogle->id;
         Log::info('Usuario encontrado: ', ['usuario' => $usuario]);
 
-        $code = $this->session_manager_service->procesarEmailDeGoogle($usuario);
-
-        return redirect()->away('https://reservasunab.wgsoluciones.com/auth/callback' . "?code=$code");
+        return $this->session_manager_service->procesarEmailDeGoogle($usuario);
     }
 }
