@@ -13,6 +13,7 @@ use App\Models\Reservas;
 use App\Models\Movimientos;
 use App\Models\Mensualidades;
 use App\Models\Pago;
+use App\Models\PagoConsulta;
 use App\Models\Usuario;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
@@ -1831,43 +1832,35 @@ class ReservaService
             $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
+            $pagoInfo = $this->pago_service->consultarPagoInfo($reserva->pago);
             if ($reserva->pago && $reserva->pago->estado != 'OK') {
                 DB::beginTransaction();
                 try {
-
-                    $url = $this->url_pagos . "/getTransactionInformation";
-
-                    if (!$this->session_token) {
-                        $this->getSessionToken();
-                    }
-
-                    $response = Http::post($url, [
-                        'SessionToken' => $this->session_token,
-                        'EntityCode' => $this->entity_code,
-                        'TicketId' => $reserva->pago->ticket_id ?? null,
-                    ]);
-
-                    if (!$response->successful()) {
+                    if (!$pagoInfo) {
                         Log::warning('Error al obtener información de pago', [
                             'ticket_id' => $reserva->pago->ticket_id ?? null,
-                            'response' => $response->body()
+                            'response' => $pagoInfo
                         ]);
                         DB::rollBack();
                     } else {
-                        $pagoData = $response->json();
                         if ($reserva->pago) {
-                            $reserva->pago->estado = $pagoData['TranState'] ?? 'desconocido';
+                            $reserva->pago->estado = $pagoInfo['TranState'] ?? 'desconocido';
                             $reserva->pago->save();
                         }
-                        $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
+                        $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoInfo['TranState']);
                         $reserva->save();
-
-                        $this->pago_service->get_info_pago($reserva->pago->codigo);
                     }
                     DB::commit();
                 } catch (Throwable $th) {
                     DB::rollBack();
                     Log::error('Error obteniendo información de la reserva: ' . $th->getMessage());
+                }
+            }
+
+            if ($reserva->pago && $reserva->pago->estado == 'OK') {
+                $tiene_pago_consulta = PagoConsulta::where('codigo', $reserva->pago->codigo)->exists();
+                if (!$tiene_pago_consulta && !empty($pagoInfo)) {
+                    $this->pago_service->crearRegistroPagoConsulta($reserva->pago, $pagoInfo);
                 }
             }
 

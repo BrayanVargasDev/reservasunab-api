@@ -559,6 +559,11 @@ class PagoService
         return $data;
     }
 
+    public function consultarPagoInfo(Pago $pago): array
+    {
+        return $this->consultarPasarelaPago($pago->ticket_id);
+    }
+
     private function consultarPasarelaPago(int $ticketId): array
     {
         $url = "$this->url_pagos/getTransactionInformation";
