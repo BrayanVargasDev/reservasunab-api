@@ -43,7 +43,6 @@ class ReservaService
     private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
     private $session_token;
     private $activarAgregarElementos;
-    private PagoService $pago_service;
     private CronJobsService $cron_service;
 
     public function __construct(CronJobsService $cron_service)
@@ -55,7 +54,6 @@ class ReservaService
         $this->activarAgregarElementos = config('app.activar_agregar_elementos', false);
         $this->session_token = null;
         $this->cron_service = $cron_service;
-        $this->pago_service = app(PagoService::class);
     }
 
     public function getSessionToken()
@@ -1833,9 +1831,10 @@ class ReservaService
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
             $pagoInfo = null;
+            $pago_service = app(PagoService::class);
             if ($reserva->pago && $reserva->pago->estado != 'OK') {
                 DB::beginTransaction();
-                $pagoInfo = $this->pago_service->consultarPagoInfo($reserva->pago);
+                $pagoInfo = $pago_service->consultarPagoInfo($reserva->pago);
                 try {
                     if (!$pagoInfo) {
                         Log::warning('Error al obtener información de pago', [
@@ -1847,6 +1846,8 @@ class ReservaService
                         if ($reserva->pago) {
                             $reserva->pago->estado = $pagoInfo['TranState'] ?? 'desconocido';
                             $reserva->pago->save();
+                            // Invalidar cache cuando el estado cambia
+                            \Illuminate\Support\Facades\Cache::forget("pago_info_{$reserva->pago->codigo}");
                         }
                         $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoInfo['TranState']);
                         $reserva->save();
@@ -1859,10 +1860,10 @@ class ReservaService
             }
 
             if ($reserva->pago && $reserva->pago->estado == 'OK') {
-                $pagoInfo = !empty($pagoInfo) ? $pagoInfo : $this->pago_service->consultarPagoInfo($reserva->pago);
+                $pagoInfo = !empty($pagoInfo) ? $pagoInfo : $pago_service->consultarPagoInfo($reserva->pago);
                 $tiene_pago_consulta = PagoConsulta::where('codigo', $reserva->pago->codigo)->exists();
                 if (!$tiene_pago_consulta) {
-                    $this->pago_service->crearRegistroPagoConsulta($reserva->pago, $pagoInfo);
+                    $pago_service->crearRegistroPagoConsulta($reserva->pago, $pagoInfo);
                 }
             }
 
