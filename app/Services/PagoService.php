@@ -379,7 +379,7 @@ class PagoService
                 ->first();
 
             if ($pagoConsulta) {
-                $this->cron_service->procesarReporteReservasMensualidades();
+                $this->cron_service->procesarReporteReservasMensualidades($pagoConsulta->id_concepto);
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
 
