@@ -42,9 +42,10 @@ class ReservaService
     private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
     private $session_token;
     private $activarAgregarElementos;
+    private PagoService $pago_service;
     private CronJobsService $cron_service;
 
-    public function __construct(CronJobsService $cron_service)
+    public function __construct(CronJobsService $cron_service, PagoService $pago_service)
     {
         $this->api_key = config('app.key_pagos');
         $this->url_pagos = config('app.url_pagos');
@@ -53,6 +54,7 @@ class ReservaService
         $this->activarAgregarElementos = config('app.activar_agregar_elementos', false);
         $this->session_token = null;
         $this->cron_service = $cron_service;
+        $this->pago_service = $pago_service;
     }
 
     public function getSessionToken()
@@ -1859,6 +1861,8 @@ class ReservaService
                         }
                         $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoData['TranState']);
                         $reserva->save();
+
+                        $this->pago_service->get_info_pago($reserva->pago->codigo);
                     }
                     DB::commit();
                 } catch (Throwable $th) {
