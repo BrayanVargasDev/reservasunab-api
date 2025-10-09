@@ -46,7 +46,7 @@ class ReservaService
     private PagoService $pago_service;
     private CronJobsService $cron_service;
 
-    public function __construct(CronJobsService $cron_service, PagoService $pago_service)
+    public function __construct(CronJobsService $cron_service)
     {
         $this->api_key = config('app.key_pagos');
         $this->url_pagos = config('app.url_pagos');
@@ -55,7 +55,7 @@ class ReservaService
         $this->activarAgregarElementos = config('app.activar_agregar_elementos', false);
         $this->session_token = null;
         $this->cron_service = $cron_service;
-        $this->pago_service = $pago_service;
+        $this->pago_service = app(PagoService::class);
     }
 
     public function getSessionToken()
