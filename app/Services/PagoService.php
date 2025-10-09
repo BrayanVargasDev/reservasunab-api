@@ -50,7 +50,7 @@ class PagoService
                 throw new Exception('Reserva no encontrada');
             }
 
-            $estadosPagada = ['completada', 'pagada'];
+            $estadosPagada = ['completada'];
             if (in_array(strtolower((string) $reserva->estado), array_map('strtolower', $estadosPagada), true)) {
                 throw new Exception('La reserva ya se encuentra pagada o completada');
             }

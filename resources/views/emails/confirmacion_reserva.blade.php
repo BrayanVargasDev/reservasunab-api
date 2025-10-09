@@ -93,7 +93,7 @@
             $mensajeEstado = 'Tu reserva ya ha sido aprobada.';
             break;
             case 'pagada':
-            $mensajeEstado = 'Hemos recibido tu pago. La reserva está pagada.';
+            $mensajeEstado = 'Hemos recibido tu pago. La reserva está confirmada.';
             break;
             case 'confirmada':
             case 'completada':

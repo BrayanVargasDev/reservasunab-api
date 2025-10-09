@@ -612,7 +612,7 @@ class ReservaService
 
             $reservasConflicto = Reservas::where('id_espacio', $espacioId)
                 ->whereDate('fecha', $fecha)
-                ->whereIn('estado', ['inicial', 'completada', 'confirmada', 'pagada'])
+                ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
                 ->whereNull('eliminado_en')
                 ->where(function ($query) use ($horaInicio, $horaFin) {
                     $query->where(function ($q) use ($horaInicio, $horaFin) {
@@ -856,7 +856,7 @@ class ReservaService
             $reservasSimultaneasPermitidas = $espacio->reservas_simultaneas ?? 1;
             $reservasConflicto = Reservas::where('id_espacio', $espacioId)
                 ->whereDate('fecha', $fecha)
-                ->whereIn('estado', ['inicial', 'completada', 'confirmada', 'pendienteap', 'pagada'])
+                ->whereIn('estado', ['inicial', 'completada', 'confirmada', 'pendienteap'])
                 ->whereNull('eliminado_en')
                 ->where(function ($query) use ($horaInicio, $horaFin) {
                     $query->where(function ($q) use ($horaInicio, $horaFin) {
@@ -1492,7 +1492,7 @@ class ReservaService
             throw new Exception("Sin categoría.");
         }
 
-        $estadosActivos = ['inicial', 'pendienteap', 'completada', 'confirmada', 'pagada'];
+        $estadosActivos = ['inicial', 'pendienteap', 'completada', 'confirmada'];
 
         foreach ($tiposUsuario as $tipoUsuario) {
             $campoLimite = "reservas_{$tipoUsuario}";
@@ -1575,7 +1575,7 @@ class ReservaService
 
         $reservasEnHorario = Reservas::where('id_espacio', $espacioId)
             ->whereDate('fecha', $fecha)
-            ->whereIn('estado', ['inicial', 'completada', 'confirmada', 'pagada'])
+            ->whereIn('estado', ['inicial', 'completada', 'confirmada'])
             ->whereNull('eliminado_en')
             ->where(function ($query) use ($horaInicioCarbon, $horaFinCarbon) {
                 $query->where(function ($q) use ($horaInicioCarbon, $horaFinCarbon) {
@@ -1761,7 +1761,7 @@ class ReservaService
     {
         $query = Reservas::where('id_usuario', $usuarioId)
             // ->puedeCancelar()
-            // ->whereIn('estado', ['inicial', 'pagada', 'completada', 'confirmada', 'aprobada'])
+            // ->whereIn('estado', ['inicial', 'completada', 'confirmada', 'aprobada'])
             ->whereNull('eliminado_en');
 
         $query->orderBy('fecha', 'asc')
@@ -2018,7 +2018,7 @@ class ReservaService
     public function getReservaEstadoByPagoEstado($estado)
     {
         if ($estado === 'OK') {
-            return 'pagada';
+            return 'completada';
         }
 
         return 'inicial';
