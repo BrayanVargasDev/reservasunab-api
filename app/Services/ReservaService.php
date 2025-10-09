@@ -1832,9 +1832,10 @@ class ReservaService
             $duracionMinutos = $horaInicio->diffInMinutes($horaFin);
             $nombreCompleto = $this->construirNombreCompleto($reserva->usuarioReserva->persona ?? null);
 
-            $pagoInfo = $this->pago_service->consultarPagoInfo($reserva->pago);
+            $pagoInfo = null;
             if ($reserva->pago && $reserva->pago->estado != 'OK') {
                 DB::beginTransaction();
+                $pagoInfo = $this->pago_service->consultarPagoInfo($reserva->pago);
                 try {
                     if (!$pagoInfo) {
                         Log::warning('Error al obtener información de pago', [
@@ -1858,8 +1859,9 @@ class ReservaService
             }
 
             if ($reserva->pago && $reserva->pago->estado == 'OK') {
+                $pagoInfo = !empty($pagoInfo) ? $pagoInfo : $this->pago_service->consultarPagoInfo($reserva->pago);
                 $tiene_pago_consulta = PagoConsulta::where('codigo', $reserva->pago->codigo)->exists();
-                if (!$tiene_pago_consulta && !empty($pagoInfo)) {
+                if (!$tiene_pago_consulta) {
                     $this->pago_service->crearRegistroPagoConsulta($reserva->pago, $pagoInfo);
                 }
             }
