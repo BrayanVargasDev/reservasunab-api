@@ -561,6 +561,10 @@ class PagoService
 
     public function consultarPagoInfo(Pago $pago): array
     {
+        if (!$pago->ticket_id) {
+            throw new Exception('El pago no tiene ticket_id para consultar.');
+        }
+
         return $this->consultarPasarelaPago($pago->ticket_id);
     }
 
