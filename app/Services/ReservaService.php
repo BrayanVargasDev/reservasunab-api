@@ -56,29 +56,6 @@ class ReservaService
         $this->cron_service = $cron_service;
     }
 
-    public function getSessionToken()
-    {
-        $url = "$this->url_pagos/getSessionToken";
-
-        $data = [
-            'EntityCode' => $this->entity_code,
-            'ApiKey' => $this->api_key,
-        ];
-
-        try {
-            $response = Http::post($url, $data);
-
-            if (!$response->successful()) {
-                throw new Exception('Error retrieving session token: ' . $response->body());
-            }
-
-            $this->session_token = $response->json()['SessionToken'];
-            return $this->session_token;
-        } catch (Throwable $th) {
-            throw new Exception('Error retrieving session token: ' . $th->getMessage());
-        }
-    }
-
     /**
      * Crear un objeto Carbon de manera segura desde un formato específico
      */
