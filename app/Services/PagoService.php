@@ -379,6 +379,7 @@ class PagoService
                 ->first();
 
             if ($pagoConsulta) {
+                $this->cron_service->procesarReporteReservasMensualidades();
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
 
@@ -427,7 +428,7 @@ class PagoService
 
                     DB::commit();
 
-                    if ($pago->reserva && ($pagoInfo['TranState'] ?? null) === 'OK' && !$from_cron) {
+                    if ($pago->reserva && ($pagoInfo['TranState'] ?? null) === 'OK') {
                         try {
                             $this->cron_service->procesarReporteReservasMensualidades();
                             $pago->reserva->loadMissing(['espacio.sede', 'usuarioReserva:id_usuario,email']);
