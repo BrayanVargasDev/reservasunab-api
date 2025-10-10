@@ -249,8 +249,8 @@ class PagoService
             }
 
             $pago = $this->crearPago($id_reserva);
-            $url_base = $desde_ios ?  $this->url_redirect_ios : $this->url_redirect_base;
-            $url_redirect = $url_base . '?codigo=' . $pago->codigo;
+            $url_base = $this->url_redirect_base;
+            $url_redirect = $url_base . '?codigo=' . $pago->codigo . 'desde_ios=' . $desde_ios;
             Log::info("Redirigiendo a: $url_redirect");
             $this->getSessionToken();
             $data['SessionToken'] = $this->session_token;
