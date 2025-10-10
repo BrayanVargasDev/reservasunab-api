@@ -27,6 +27,7 @@ class PagoService
     private $entity_code;
     private $service_code;
     private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
+    private $url_redirect_ios = 'com.unab.reservas://pagos/reservas';
     private $session_token;
     private CronJobsService $cron_service;
 
@@ -207,7 +208,7 @@ class PagoService
         }
     }
 
-    public function iniciarTransaccionDePago(int $id_reserva)
+    public function iniciarTransaccionDePago(int $id_reserva, bool $desde_ios = false)
     {
         if (!$this->session_token) {
             $this->getSessionToken();
@@ -248,8 +249,9 @@ class PagoService
             }
 
             $pago = $this->crearPago($id_reserva);
-            $url_redirect = $this->url_redirect_base . '?codigo=' . $pago->codigo;
-
+            $url_base = $desde_ios ?  $this->url_redirect_ios : $this->url_redirect_base;
+            $url_redirect = $url_base . '?codigo=' . $pago->codigo;
+            Log::info("Redirigiendo a: $url_redirect");
             $this->getSessionToken();
             $data['SessionToken'] = $this->session_token;
             $data['URLRedirect'] = $url_redirect;
