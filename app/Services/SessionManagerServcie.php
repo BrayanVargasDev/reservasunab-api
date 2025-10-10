@@ -86,7 +86,7 @@ class SessionManagerServcie
                     'status' => $response->status(),
                     'body' => $response->body()
                 ]);
-                return;
+                // return;
             }
 
             $usuarioEnUnab = $response->json();
@@ -100,17 +100,17 @@ class SessionManagerServcie
                     'file' => $th->getFile(),
                     'line' => $th->getLine()
                 ]);
-                return;
+                // return;
             }
 
             if (empty($datosUnab)) {
                 Log::error('Datos de UNAB están vacíos');
-                return;
+                // return;
             }
 
             if (!is_array($datosUnab)) {
                 Log::error('Datos de UNAB no son un array');
-                return;
+                // return;
             }
 
             $tipoMap = [
