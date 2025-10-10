@@ -71,47 +71,47 @@ class SessionManagerServcie
 
             $url = "https://{$this->unab_host}{$this->unab_endpoint}";
 
-            $response = Http::timeout(30)
-                ->connectTimeout(5)
-                ->withBasicAuth($this->usuario_unab, $this->password_unab)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                    'Connection' => 'keep-alive'
-                ])
-                ->post($url, $datos);
+            // $response = Http::timeout(30)
+            //     ->connectTimeout(5)
+            //     ->withBasicAuth($this->usuario_unab, $this->password_unab)
+            //     ->withHeaders([
+            //         'Content-Type' => 'application/json',
+            //         'Accept' => 'application/json',
+            //         'Connection' => 'keep-alive'
+            //     ])
+            //     ->post($url, $datos);
 
-            if (!$response->successful()) {
-                Log::error('Error en la comunicación con UNAB', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
+            // if (!$response->successful()) {
+            //     Log::error('Error en la comunicación con UNAB', [
+            //         'status' => $response->status(),
+            //         'body' => $response->body()
+            //     ]);
                 // return;
-            }
+            // }
 
-            $usuarioEnUnab = $response->json();
+            // $usuarioEnUnab = $response->json();
 
-            $datosUnab = null;
-            try {
-                $datosUnab = $usuarioEnUnab['datos'];
-            } catch (\Throwable $th) {
-                Log::error('Error al obtener datos de UNAB', [
-                    'error' => $th->getMessage(),
-                    'file' => $th->getFile(),
-                    'line' => $th->getLine()
-                ]);
+            $datosUnab = [];
+            // try {
+                // $datosUnab = $usuarioEnUnab['datos'];
+            // } catch (\Throwable $th) {
+            //     Log::error('Error al obtener datos de UNAB', [
+            //         'error' => $th->getMessage(),
+            //         'file' => $th->getFile(),
+            //         'line' => $th->getLine()
+            //     ]);
                 // return;
-            }
+            // }
 
-            if (empty($datosUnab)) {
-                Log::error('Datos de UNAB están vacíos');
+            // if (empty($datosUnab)) {
+                // Log::error('Datos de UNAB están vacíos');
                 // return;
-            }
+            // }
 
-            if (!is_array($datosUnab)) {
-                Log::error('Datos de UNAB no son un array');
+            // if (!is_array($datosUnab)) {
+                // Log::error('Datos de UNAB no son un array');
                 // return;
-            }
+            // }
 
             $tipoMap = [
                 'ESTUDIANTE' => 'estudiante',
