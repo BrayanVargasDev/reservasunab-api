@@ -173,17 +173,17 @@ class CronJobsService
             ->whereIn('id_espacio', $espaciosIds)
             ->whereIn(DB::raw('DATE(fecha)'), $fechas)
             ->get(['id_espacio', 'fecha', 'hora_inicio', 'hora_fin'])
-            ->map(function ($item) {
+            ->mapWithKeys(function ($item) {
                 $fecha = Carbon::parse($item->fecha)->toDateString();
                 $horaInicio = Carbon::parse($item->hora_inicio)->format('H:i:s');
                 $horaFin = Carbon::parse($item->hora_fin)->format('H:i:s');
-                return "{$item->id_espacio}_{$fecha}_{$horaInicio}_{$horaFin}";
-            })
-            ->flip();
+                $key = "{$item->id_espacio}_{$fecha}_{$horaInicio}_{$horaFin}";
+                return [$key => true];
+            });
 
         $novedadesNuevas = [];
         foreach ($novedadesParaInsertar as $key => $novedad) {
-            if ($existentes->has($key)) {
+            if (isset($existentes[$key])) {
                 $totalDuplicadas++;
             } else {
                 $novedadesNuevas[] = $novedad;
@@ -207,6 +207,58 @@ class CronJobsService
         }
     }
 
+    private function cargarReservasOptimizadas(
+        array $espaciosIds,
+        Carbon $fechaInicio,
+        Carbon $fechaFin
+    ): array {
+        $reservas = Reservas::query()
+            ->select(['id_espacio', 'fecha', 'hora_inicio', 'hora_fin'])
+            ->whereIn('id_espacio', $espaciosIds)
+            ->where('estado', '!=', 'cancelada')
+            ->whereNull('eliminado_en')
+            ->whereDate('fecha', '>=', $fechaInicio)
+            ->whereDate('fecha', '<=', $fechaFin)
+            ->get();
+
+        $optimizadas = [];
+
+        foreach ($reservas as $reserva) {
+            $fechaStr = Carbon::parse($reserva->fecha)->toDateString();
+            $key = "{$reserva->id_espacio}_{$fechaStr}";
+
+            $inicioTimestamp = strtotime($reserva->hora_inicio);
+            $finTimestamp = strtotime($reserva->hora_fin);
+
+            if (!isset($optimizadas[$key])) {
+                $optimizadas[$key] = [];
+            }
+
+            $optimizadas[$key][] = [
+                'inicio' => $inicioTimestamp,
+                'fin' => $finTimestamp,
+            ];
+        }
+
+        return $optimizadas;
+    }
+
+    private function verificarSolapamiento(
+        string $horaInicio,
+        string $horaFin,
+        array $reservas
+    ): bool {
+        $novedadInicio = strtotime($horaInicio);
+        $novedadFin = strtotime($horaFin);
+
+        foreach ($reservas as $reserva) {
+            if ($novedadInicio < $reserva['fin'] && $novedadFin > $reserva['inicio']) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * Procesa novedades de espacios consultando el sistema UNAB.
      * Criterios:
@@ -227,11 +279,13 @@ class CronJobsService
         $totalConsultados = 0;
         $totalNovedadesInsertadas = 0;
         $totalNovedadesSaltadasPorApertura = 0;
+        $totalNovedadesSaltadasPorReserva = 0;
         $totalNovedadesDuplicadas = 0;
         $errores = 0;
 
         $fechaInicioConsulta = $hoy->format('d/m/Y');
         $fechaFinConsulta = $hoy->copy()->addDays(30)->format('d/m/Y');
+        $fechaFinRango = $hoy->copy()->addDays(30);
 
         $urlBase = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
 
@@ -251,14 +305,17 @@ class CronJobsService
                 &$totalConsultados,
                 &$totalNovedadesInsertadas,
                 &$totalNovedadesSaltadasPorApertura,
+                &$totalNovedadesSaltadasPorReserva,
                 &$totalNovedadesDuplicadas,
                 &$errores,
                 $fechaInicioConsulta,
                 $fechaFinConsulta,
                 $urlBase,
-                $hoy
+                $hoy,
+                $fechaFinRango
             ) {
                 $espaciosParaProcesar = [];
+                $espaciosIds = [];
 
                 foreach ($espacios as $espacio) {
                     $totalEspacios++;
@@ -274,8 +331,8 @@ class CronJobsService
                         continue;
                     }
 
-                    $maxDiasPrevios = 0;
-                    // $maxDiasPrevios = $espacio->configuraciones->max('dias_previos_apertura') ?? 0;
+                    $espaciosIds[] = $espacio->id;
+                    $maxDiasPrevios = $espacio->configuraciones->max('dias_previos_apertura') ?? 0;
 
                     $espaciosParaProcesar[] = [
                         'espacio' => $espacio,
@@ -288,6 +345,15 @@ class CronJobsService
                         ],
                         'limite_no_bloqueo' => $hoy->copy()->addDays($maxDiasPrevios),
                     ];
+                }
+
+                $reservasOptimizadas = [];
+                if (!empty($espaciosIds)) {
+                    $reservasOptimizadas = $this->cargarReservasOptimizadas(
+                        $espaciosIds,
+                        $hoy,
+                        $fechaFinRango
+                    );
                 }
 
                 if (empty($espaciosParaProcesar)) {
@@ -396,18 +462,33 @@ class CronJobsService
                                     $dia = $cursor->dayOfWeekIso;
 
                                     if (($diasFlags[$dia] ?? 0) == 1) {
-
                                         $fechaStr = $cursor->toDateString();
-                                        $key = "{$espacio->id}_{$fechaStr}_{$horaInicio}_{$horaFin}";
 
-                                        $novedadesParaInsertar[$key] = [
-                                            'id_espacio' => $espacio->id,
-                                            'fecha' => $fechaStr,
-                                            'fecha_fin' => $fechaStr,
-                                            'hora_inicio' => $fechaStr . ' ' . $horaInicio,
-                                            'hora_fin' => $fechaStr . ' ' . $horaFin,
-                                            'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
-                                        ];
+                                        $keyReservas = "{$espacio->id}_{$fechaStr}";
+                                        $haySolapamiento = false;
+
+                                        if (isset($reservasOptimizadas[$keyReservas])) {
+                                            $haySolapamiento = $this->verificarSolapamiento(
+                                                $horaInicio,
+                                                $horaFin,
+                                                $reservasOptimizadas[$keyReservas]
+                                            );
+                                        }
+
+                                        if ($haySolapamiento) {
+                                            $totalNovedadesSaltadasPorReserva++;
+                                        } else {
+                                            $key = "{$espacio->id}_{$fechaStr}_{$horaInicio}_{$horaFin}";
+
+                                            $novedadesParaInsertar[$key] = [
+                                                'id_espacio' => $espacio->id,
+                                                'fecha' => $fechaStr,
+                                                'fecha_fin' => $fechaStr,
+                                                'hora_inicio' => $fechaStr . ' ' . $horaInicio,
+                                                'hora_fin' => $fechaStr . ' ' . $horaFin,
+                                                'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
+                                            ];
+                                        }
                                     }
                                     $cursor->addDay();
                                 }
@@ -436,7 +517,7 @@ class CronJobsService
                     );
                 }
 
-                unset($espaciosParaProcesar, $responses, $novedadesParaInsertar);
+                unset($espaciosParaProcesar, $responses, $novedadesParaInsertar, $reservasOptimizadas);
             });
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
@@ -446,6 +527,7 @@ class CronJobsService
             'consultados' => $totalConsultados,
             'novedades_insertadas' => $totalNovedadesInsertadas,
             'novedades_saltadas_apertura' => $totalNovedadesSaltadasPorApertura,
+            'novedades_saltadas_reserva' => $totalNovedadesSaltadasPorReserva,
             'novedades_duplicadas' => $totalNovedadesDuplicadas,
             'errores' => $errores,
             'ms' => $duracion,
