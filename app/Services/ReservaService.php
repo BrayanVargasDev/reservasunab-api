@@ -530,7 +530,7 @@ class ReservaService
                     ];
 
                     if ($novedadCoincidente) {
-                        $slot['novedad'] = true;
+                        $slot['novedad'] = true && !$slot['reservada'];
                         $slot['disponible'] = false;
                         $slot['novedad_desc'] = $novedadCoincidente->descripcion ?? 'Novedad en el espacio';
                     }
