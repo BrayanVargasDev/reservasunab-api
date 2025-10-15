@@ -260,7 +260,7 @@ class PagoService
                 'so' => $so,
             ]);
 
-            $url_redirect = urlencode($url_base . '?' . $paramsRetorno);
+            $url_redirect = $url_base . '?' . $paramsRetorno;
             Log::info("Redirigiendo a: $url_redirect");
             $this->getSessionToken();
             $data['SessionToken'] = $this->session_token;
