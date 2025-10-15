@@ -529,12 +529,10 @@ class ReservaService
                         'cubierta_por_mensualidad' => $requiereMensualidad && $usuarioTieneMensualidad,
                     ];
 
-                    if ($novedadCoincidente) {
-                        $slot['novedad'] = true && !$slot['reservada'];
+                    if ($novedadCoincidente && !$slot['reservada']) {
+                        $slot['novedad'] = true;
                         $slot['disponible'] = false;
-                        $slot['novedad_desc'] = $novedadCoincidente->descripcion && !$slot['reservada']
-                            ? $novedadCoincidente->descripcion
-                            : '';
+                        $slot['novedad_desc'] = $novedadCoincidente->descripcion ?? 'Novedad en el espacio';
                     }
 
                     if ($aplicaSinMensualidad && !$reservaPasada) {
