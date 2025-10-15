@@ -396,21 +396,18 @@ class CronJobsService
                                     $dia = $cursor->dayOfWeekIso;
 
                                     if (($diasFlags[$dia] ?? 0) == 1) {
-                                        if ($cursor->lessThanOrEqualTo($limiteNoBloqueo)) {
-                                            $totalNovedadesSaltadasPorApertura++;
-                                        } else {
-                                            $fechaStr = $cursor->toDateString();
-                                            $key = "{$espacio->id}_{$fechaStr}_{$horaInicio}_{$horaFin}";
 
-                                            $novedadesParaInsertar[$key] = [
-                                                'id_espacio' => $espacio->id,
-                                                'fecha' => $fechaStr,
-                                                'fecha_fin' => $fechaStr,
-                                                'hora_inicio' => $fechaStr . ' ' . $horaInicio,
-                                                'hora_fin' => $fechaStr . ' ' . $horaFin,
-                                                'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
-                                            ];
-                                        }
+                                        $fechaStr = $cursor->toDateString();
+                                        $key = "{$espacio->id}_{$fechaStr}_{$horaInicio}_{$horaFin}";
+
+                                        $novedadesParaInsertar[$key] = [
+                                            'id_espacio' => $espacio->id,
+                                            'fecha' => $fechaStr,
+                                            'fecha_fin' => $fechaStr,
+                                            'hora_inicio' => $fechaStr . ' ' . $horaInicio,
+                                            'hora_fin' => $fechaStr . ' ' . $horaFin,
+                                            'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
+                                        ];
                                     }
                                     $cursor->addDay();
                                 }
