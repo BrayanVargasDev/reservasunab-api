@@ -532,7 +532,9 @@ class ReservaService
                     if ($novedadCoincidente) {
                         $slot['novedad'] = true && !$slot['reservada'];
                         $slot['disponible'] = false;
-                        $slot['novedad_desc'] = $novedadCoincidente->descripcion ?? 'Novedad en el espacio';
+                        $slot['novedad_desc'] = $novedadCoincidente->descripcion && !$slot['reservada']
+                            ? $novedadCoincidente->descripcion
+                            : 'Novedad en el espacio';
                     }
 
                     if ($aplicaSinMensualidad && !$reservaPasada) {
