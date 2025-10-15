@@ -274,7 +274,8 @@ class CronJobsService
                         continue;
                     }
 
-                    $maxDiasPrevios = $espacio->configuraciones->max('dias_previos_apertura') ?? 0;
+                    $maxDiasPrevios = 0;
+                    // $maxDiasPrevios = $espacio->configuraciones->max('dias_previos_apertura') ?? 0;
 
                     $espaciosParaProcesar[] = [
                         'espacio' => $espacio,
