@@ -52,7 +52,7 @@ class PagoController extends Controller
         try {
             // $this->authorize('crearDesdeDashboard', Espacio::class);
             $data = $request->all();
-            $pago = $this->pago_service->iniciarTransaccionDePago($data['id_reserva'], $data['desde_ios'] ?? false);
+            $pago = $this->pago_service->iniciarTransaccionDePago($data['id_reserva']);
 
             return response()->json(
                 [

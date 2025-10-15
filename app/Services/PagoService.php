@@ -208,7 +208,7 @@ class PagoService
         }
     }
 
-    public function iniciarTransaccionDePago(int $id_reserva, bool $desde_ios = false)
+    public function iniciarTransaccionDePago(int $id_reserva)
     {
         if (!$this->session_token) {
             $this->getSessionToken();
@@ -250,7 +250,7 @@ class PagoService
 
             $pago = $this->crearPago($id_reserva);
             $url_base = $this->url_redirect_base;
-            $url_redirect = $url_base . '?codigo=' . $pago->codigo . '&desde_ios=' . $desde_ios;
+            $url_redirect = $url_base . '?codigo=' . $pago->codigo;
             Log::info("Redirigiendo a: $url_redirect");
             $this->getSessionToken();
             $data['SessionToken'] = $this->session_token;
