@@ -519,7 +519,7 @@ class CronJobsService
                         'ticketId' => (string)$pago->ticket_id,
                         'paymentId' => $codigoTrazaPago ?? null,
                         'medioPagoEcollect' => (string)($medioPago ?? '0'),
-                        'svrcode' => 21000,
+                        'svrcode' => config('app.service_code'),
                     ] : [
                         'ticketId' => null,
                         'paymentId' => '',
@@ -599,7 +599,7 @@ class CronJobsService
                         'ticketId' => $pago->ticket_id,
                         'paymentId' => PagoConsulta::where('codigo', $pago->codigo)->first()->codigo_traza ?? null,
                         'medioPagoEcollect' => (string)(optional(PagoConsulta::where('codigo', $pago->codigo)->first())->medio_pago === 'PSE' ? 0 : 1),
-                        'svrcode' => 21000,
+                        'svrcode' => config('app.service_code'),
                     ],
                     'DatosReserva' => $this->construirDatosReserva($usuario, $rol),
                     'Reserva' => [[
