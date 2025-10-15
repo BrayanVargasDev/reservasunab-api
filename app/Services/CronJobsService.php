@@ -237,10 +237,9 @@ class CronJobsService
 
         Espacio::query()
             ->with([
-                'edificio:id,codigo',
+                'edificio',
                 'configuraciones' => function ($q) {
-                    $q->select('id', 'espacio_id', 'dias_previos_apertura')
-                        ->whereNull('eliminado_en');
+                    $q->whereNull('eliminado_en');
                 }
             ])
             ->whereNull('eliminado_en')
