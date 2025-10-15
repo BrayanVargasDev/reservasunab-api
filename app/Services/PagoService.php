@@ -381,12 +381,16 @@ class PagoService
                 ->where('estado', 'OK')
                 ->first();
 
+            $pago = Pago::where('codigo', $codigo)->firstOrFail();
+
             if ($pagoConsulta) {
+                if ($pago->estado != $pagoConsulta->estado) {
+                    $pago->estado = $pagoConsulta->estado;
+                    $pago->save();
+                }
                 $this->cron_service->procesarReporteReservasMensualidades($pagoConsulta->id_concepto);
                 return $this->formatearRespuestaDesdePagoConsulta($pagoConsulta);
             }
-
-            $pago = Pago::where('codigo', $codigo)->firstOrFail();
 
             // Incluir posibles registros soft-deleted en reserva/mensualidad
             $pago->load([
