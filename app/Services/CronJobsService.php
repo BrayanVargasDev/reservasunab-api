@@ -236,7 +236,6 @@ class CronJobsService
         $urlBase = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
 
         Espacio::query()
-            ->select(['id', 'codigo', 'edificio_id'])
             ->with([
                 'edificio:id,codigo',
                 'configuraciones' => function ($q) {
