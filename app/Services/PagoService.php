@@ -208,8 +208,11 @@ class PagoService
         }
     }
 
-    public function iniciarTransaccionDePago(int $id_reserva)
-    {
+    public function iniciarTransaccionDePago(
+        int $id_reserva,
+        string $origen = 'web',
+        string $so = 'other',
+    ) {
         if (!$this->session_token) {
             $this->getSessionToken();
         }
@@ -250,7 +253,14 @@ class PagoService
 
             $pago = $this->crearPago($id_reserva);
             $url_base = $this->url_redirect_base;
-            $url_redirect = $url_base . '?codigo=' . $pago->codigo;
+
+            $paramsRetorno = http_build_query([
+                'codigo' => $pago->codigo,
+                'origen' => $origen,
+                'so' => $so,
+            ]);
+
+            $url_redirect = urlencode($url_base . '?' . $paramsRetorno);
             Log::info("Redirigiendo a: $url_redirect");
             $this->getSessionToken();
             $data['SessionToken'] = $this->session_token;
@@ -374,7 +384,7 @@ class PagoService
         return $pago;
     }
 
-    public function get_info_pago(string $codigo, bool $from_cron = false)
+    public function get_info_pago(string $codigo)
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)

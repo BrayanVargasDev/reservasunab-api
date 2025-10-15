@@ -157,6 +157,56 @@ class CronJobsService
         ]);
     }
 
+    private function insertarNovedadesOptimizado(
+        array $novedadesParaInsertar,
+        int &$totalInsertadas,
+        int &$totalDuplicadas
+    ): void {
+        if (empty($novedadesParaInsertar)) {
+            return;
+        }
+
+        $espaciosIds = array_unique(array_column($novedadesParaInsertar, 'id_espacio'));
+        $fechas = array_unique(array_column($novedadesParaInsertar, 'fecha'));
+
+        $existentes = EspacioNovedad::query()
+            ->whereIn('id_espacio', $espaciosIds)
+            ->whereIn(DB::raw('DATE(fecha)'), $fechas)
+            ->get(['id_espacio', 'fecha', 'hora_inicio', 'hora_fin'])
+            ->map(function ($item) {
+                $fecha = Carbon::parse($item->fecha)->toDateString();
+                $horaInicio = Carbon::parse($item->hora_inicio)->format('H:i:s');
+                $horaFin = Carbon::parse($item->hora_fin)->format('H:i:s');
+                return "{$item->id_espacio}_{$fecha}_{$horaInicio}_{$horaFin}";
+            })
+            ->flip();
+
+        $novedadesNuevas = [];
+        foreach ($novedadesParaInsertar as $key => $novedad) {
+            if ($existentes->has($key)) {
+                $totalDuplicadas++;
+            } else {
+                $novedadesNuevas[] = $novedad;
+            }
+        }
+
+        if (!empty($novedadesNuevas)) {
+            $chunks = array_chunk($novedadesNuevas, 500);
+
+            foreach ($chunks as $chunk) {
+                try {
+                    EspacioNovedad::insert($chunk);
+                    $totalInsertadas += count($chunk);
+                } catch (\Throwable $e) {
+                    Log::channel('cronjobs')->error('[CRON] Error en bulk insert', [
+                        'chunk_size' => count($chunk),
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+    }
+
     /**
      * Procesa novedades de espacios consultando el sistema UNAB.
      * Criterios:
@@ -180,69 +230,109 @@ class CronJobsService
         $totalNovedadesDuplicadas = 0;
         $errores = 0;
 
-        $fechaInicioConsulta = $hoy->copy();
-        $fechaFinConsulta = $hoy->copy()->addDays(30);
+        $fechaInicioConsulta = $hoy->format('d/m/Y');
+        $fechaFinConsulta = $hoy->copy()->addDays(30)->format('d/m/Y');
 
         $urlBase = 'https://' . rtrim($this->unab_host, '/') . '/' . ltrim($this->unab_endpoint, '/');
 
         Espacio::query()
-            ->with(['edificio:id,codigo', 'configuraciones' => function ($q) {
-                $q->whereNull('eliminado_en');
-            }])
+            ->select(['id', 'codigo', 'edificio_id'])
+            ->with([
+                'edificio:id,codigo',
+                'configuraciones' => function ($q) {
+                    $q->select('id', 'espacio_id', 'dias_previos_apertura')
+                        ->whereNull('eliminado_en');
+                }
+            ])
             ->whereNull('eliminado_en')
             ->when($espacioId, fn($q) => $q->where('id', $espacioId))
             ->orderBy('id')
-            ->chunkById(30, function ($espacios) use (&$totalEspacios, &$totalSinCodigos, &$totalConsultados, &$totalNovedadesInsertadas, &$totalNovedadesSaltadasPorApertura, &$totalNovedadesDuplicadas, &$errores, $fechaInicioConsulta, $fechaFinConsulta, $urlBase, $hoy) {
+            ->chunkById(30, function ($espacios) use (
+                &$totalEspacios,
+                &$totalSinCodigos,
+                &$totalConsultados,
+                &$totalNovedadesInsertadas,
+                &$totalNovedadesSaltadasPorApertura,
+                &$totalNovedadesDuplicadas,
+                &$errores,
+                $fechaInicioConsulta,
+                $fechaFinConsulta,
+                $urlBase,
+                $hoy
+            ) {
+                $espaciosParaProcesar = [];
+
                 foreach ($espacios as $espacio) {
                     $totalEspacios++;
-                    try {
-                        $codigoEdificio = $espacio->edificio?->codigo;
-                        $codigoEspacio = $espacio->codigo;
-                        if (!$codigoEdificio || !$codigoEspacio) {
-                            $totalSinCodigos++;
-                            Log::channel('cronjobs')->warning('[CRON] Espacio sin códigos requeridos para consulta novedades', [
-                                'espacio_id' => $espacio->id,
-                                'codigo_edificio' => $codigoEdificio,
-                                'codigo_espacio' => $codigoEspacio,
-                            ]);
-                            continue;
-                        }
 
-                        $datosPayload = [
+                    $codigoEdificio = $espacio->edificio?->codigo;
+                    $codigoEspacio = $espacio->codigo;
+
+                    if (!$codigoEdificio || !$codigoEspacio) {
+                        $totalSinCodigos++;
+                        Log::channel('cronjobs')->warning('[CRON] Espacio sin códigos', [
+                            'espacio_id' => $espacio->id,
+                        ]);
+                        continue;
+                    }
+
+                    $maxDiasPrevios = $espacio->configuraciones->max('dias_previos_apertura') ?? 0;
+
+                    $espaciosParaProcesar[] = [
+                        'espacio' => $espacio,
+                        'payload' => [
                             'tarea' => '2',
                             'edificio' => $codigoEdificio,
                             'espacio' => $codigoEspacio,
-                            'fecha_inicio' => $fechaInicioConsulta->format('d/m/Y'),
-                            'fecha_fin' => $fechaFinConsulta->format('d/m/Y'),
-                        ];
+                            'fecha_inicio' => $fechaInicioConsulta,
+                            'fecha_fin' => $fechaFinConsulta,
+                        ],
+                        'limite_no_bloqueo' => $hoy->copy()->addDays($maxDiasPrevios),
+                    ];
+                }
 
-                        $totalConsultados++;
-                        $response = null;
-                        try {
-                            $response = Http::timeout(30)
+                if (empty($espaciosParaProcesar)) {
+                    return;
+                }
+
+                $totalConsultados += count($espaciosParaProcesar);
+
+                try {
+                    $responses = Http::pool(function ($pool) use ($espaciosParaProcesar, $urlBase) {
+                        $requests = [];
+                        foreach ($espaciosParaProcesar as $item) {
+                            $requests[] = $pool->timeout(15)
                                 ->connectTimeout(5)
                                 ->withBasicAuth($this->usuario_unab, $this->password_unab)
                                 ->withHeaders([
                                     'Content-Type' => 'application/json',
                                     'Accept' => 'application/json',
-                                    'Connection' => 'keep-alive'
                                 ])
-                                ->post($urlBase, $datosPayload);
-                        } catch (\Throwable $httpEx) {
-                            $errores++;
-                            Log::channel('cronjobs')->error('[CRON] Error HTTP consultando novedades', [
-                                'espacio_id' => $espacio->id,
-                                'error' => $httpEx->getMessage(),
-                            ]);
-                            continue;
+                                ->post($urlBase, $item['payload']);
                         }
+                        return $requests;
+                    });
+                } catch (\Throwable $httpEx) {
+                    $errores += count($espaciosParaProcesar);
+                    Log::channel('cronjobs')->error('[CRON] Error en HTTP pool', [
+                        'error' => $httpEx->getMessage(),
+                    ]);
+                    return;
+                }
 
+                $novedadesParaInsertar = [];
+
+                foreach ($responses as $index => $response) {
+                    $espacioData = $espaciosParaProcesar[$index];
+                    $espacio = $espacioData['espacio'];
+                    $limiteNoBloqueo = $espacioData['limite_no_bloqueo'];
+
+                    try {
                         if (!$response->ok()) {
                             $errores++;
-                            Log::channel('cronjobs')->error('[CRON] Respuesta HTTP no OK novedades', [
+                            Log::channel('cronjobs')->error('[CRON] Respuesta HTTP no OK', [
                                 'espacio_id' => $espacio->id,
                                 'status' => $response->status(),
-                                'body' => $response->body(),
                             ]);
                             continue;
                         }
@@ -251,50 +341,21 @@ class CronJobsService
 
                         if (!is_array($json)) {
                             $errores++;
-                            Log::channel('cronjobs')->error('[CRON] Respuesta inesperada (no JSON array)', [
-                                'espacio_id' => $espacio->id,
-                                'body' => $response->body(),
-                            ]);
                             continue;
                         }
 
                         $resp = $this->normalizarRespuestaServicio($json);
-                        if (!$resp) {
-                            $errores++;
-                            Log::channel('cronjobs')->error('[CRON] Respuesta del servicio inválida', [
-                                'espacio_id' => $espacio->id,
-                                'body' => $response->body(),
-                            ]);
-                            continue;
-                        }
 
-                        if (strtolower((string)$resp['estado']) !== 'success') {
+                        if (!$resp || strtolower((string)($resp['estado'] ?? '')) !== 'success') {
                             $errores++;
-                            Log::channel('cronjobs')->error('[CRON] El estado no es exitoso: ', [
-                                'espacio_id' => $espacio->id,
-                                'mensaje' => $resp['mensaje'] ?? null,
-                            ]);
                             continue;
                         }
 
                         $datos = is_array($resp['datos'] ?? null) ? $resp['datos'] : [];
+
                         if (empty($datos)) {
-                            Log::channel('cronjobs')->info('[CRON] Sin datos de novedades para espacio', [
-                                'espacio_id' => $espacio->id,
-                            ]);
                             continue;
                         }
-
-                        $maxDiasPrevios = 0;
-                        try {
-                            $maxDiasPrevios = (int) ($espacio->configuraciones->max('dias_previos_apertura') ?? 0);
-                        } catch (\Throwable $e) {
-                            Log::channel('cronjobs')->warning('[CRON] Error obteniendo dias_previos_apertura', [
-                                'espacio_id' => $espacio->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
-                        $limiteNoBloqueo = $hoy->copy()->addDays($maxDiasPrevios);
 
                         foreach ($datos as $item) {
                             try {
@@ -302,18 +363,21 @@ class CronJobsService
                                 $fechaFinRaw = $item['fecha_fin'] ?? null;
                                 $horaInicioRaw = $item['hora_inicio'] ?? null;
                                 $horaFinRaw = $item['hora_fin'] ?? null;
+
                                 if (!$fechaInicioRaw || !$fechaFinRaw || !$horaInicioRaw || !$horaFinRaw) {
                                     continue;
                                 }
 
                                 $fechaInicio = Carbon::createFromFormat('d/m/Y', $fechaInicioRaw);
                                 $fechaFin = Carbon::createFromFormat('d/m/Y', $fechaFinRaw);
+
                                 if ($fechaInicio->greaterThan($fechaFin)) {
                                     continue;
                                 }
 
                                 $horaInicio = $this->normalizarHora4($horaInicioRaw);
                                 $horaFin = $this->normalizarHora4($horaFinRaw);
+
                                 if (!$horaInicio || !$horaFin) {
                                     continue;
                                 }
@@ -330,51 +394,53 @@ class CronJobsService
 
                                 $cursor = $fechaInicio->copy();
                                 while ($cursor->lessThanOrEqualTo($fechaFin)) {
-                                    $dia = $cursor->dayOfWeekIso; // 1..7
+                                    $dia = $cursor->dayOfWeekIso;
+
                                     if (($diasFlags[$dia] ?? 0) == 1) {
                                         if ($cursor->lessThanOrEqualTo($limiteNoBloqueo)) {
                                             $totalNovedadesSaltadasPorApertura++;
                                         } else {
-                                            $existe = EspacioNovedad::query()
-                                                ->where('id_espacio', $espacio->id)
-                                                ->whereDate('fecha', $cursor->toDateString())
-                                                ->whereTime('hora_inicio', $horaInicio)
-                                                ->whereTime('hora_fin', '<=', $horaFin)
-                                                ->exists();
-                                            if ($existe) {
-                                                $totalNovedadesDuplicadas++;
-                                            } else {
-                                                EspacioNovedad::create([
-                                                    'id_espacio' => $espacio->id,
-                                                    'fecha' => $cursor->toDateString(),
-                                                    'fecha_fin' => $cursor->toDateString(),
-                                                    'hora_inicio' => $cursor->toDateString() . ' ' . $horaInicio,
-                                                    'hora_fin' => $cursor->toDateString() . ' ' . $horaFin,
-                                                    'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
-                                                ]);
-                                                $totalNovedadesInsertadas++;
-                                            }
+                                            $fechaStr = $cursor->toDateString();
+                                            $key = "{$espacio->id}_{$fechaStr}_{$horaInicio}_{$horaFin}";
+
+                                            $novedadesParaInsertar[$key] = [
+                                                'id_espacio' => $espacio->id,
+                                                'fecha' => $fechaStr,
+                                                'fecha_fin' => $fechaStr,
+                                                'hora_inicio' => $fechaStr . ' ' . $horaInicio,
+                                                'hora_fin' => $fechaStr . ' ' . $horaFin,
+                                                'descripcion' => 'PROGRAMACIÓN ACADÉMICA',
+                                            ];
                                         }
                                     }
                                     $cursor->addDay();
                                 }
                             } catch (\Throwable $inner) {
                                 $errores++;
-                                Log::channel('cronjobs')->error('[CRON] Error procesando item novedad', [
+                                Log::channel('cronjobs')->error('[CRON] Error procesando item', [
                                     'espacio_id' => $espacio->id,
-                                    'item' => $item,
                                     'error' => $inner->getMessage(),
                                 ]);
                             }
                         }
                     } catch (\Throwable $e) {
                         $errores++;
-                        Log::channel('cronjobs')->error('[CRON] Error general procesando espacio en job dos', [
-                            'espacio_id' => $espacio->id ?? null,
+                        Log::channel('cronjobs')->error('[CRON] Error procesando respuesta', [
+                            'espacio_id' => $espacio->id,
                             'error' => $e->getMessage(),
                         ]);
                     }
                 }
+
+                if (!empty($novedadesParaInsertar)) {
+                    $this->insertarNovedadesOptimizado(
+                        $novedadesParaInsertar,
+                        $totalNovedadesInsertadas,
+                        $totalNovedadesDuplicadas
+                    );
+                }
+
+                unset($espaciosParaProcesar, $responses, $novedadesParaInsertar);
             });
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
@@ -387,6 +453,7 @@ class CronJobsService
             'novedades_duplicadas' => $totalNovedadesDuplicadas,
             'errores' => $errores,
             'ms' => $duracion,
+            'memoria_pico' => round(memory_get_peak_usage(true) / 1024 / 1024, 2) . ' MB',
         ]);
     }
 

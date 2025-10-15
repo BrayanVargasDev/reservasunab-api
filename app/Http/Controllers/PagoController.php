@@ -52,7 +52,14 @@ class PagoController extends Controller
         try {
             // $this->authorize('crearDesdeDashboard', Espacio::class);
             $data = $request->all();
-            $pago = $this->pago_service->iniciarTransaccionDePago($data['id_reserva']);
+            $origen = $data['origen'] ?? 'web';
+            $so = $data['so'] ?? 'other';
+
+            $pago = $this->pago_service->iniciarTransaccionDePago(
+                id_reserva: $data['id_reserva'],
+                origen: $origen,
+                so: $so
+            );
 
             return response()->json(
                 [
@@ -150,7 +157,10 @@ class PagoController extends Controller
     {
         try {
             $data = $request->all();
-            $pago = $this->pago_service->get_info_pago($data['codigo']);
+
+            $pago = $this->pago_service->get_info_pago(
+                codigo: $data['codigo'],
+            );
 
             return response()->json(
                 [
