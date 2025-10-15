@@ -411,20 +411,18 @@ class PagoService
 
             $pagoInfo = $this->consultarPasarelaPago($pago->ticket_id);
 
-            if ($pago->estado !== $pagoInfo['TranState']) {
-                $pago->estado = $pagoInfo['TranState'];
-                $pago->save();
-            }
+            $pago->estado = $pagoInfo['TranState'];
+            $pago->save();
 
             if (!empty($pagoInfo['TranState'])) {
                 DB::beginTransaction();
                 try {
                     $pagoConsulta = $this->crearRegistroPagoConsulta($pago, $pagoInfo);
 
-                    if ($pago->reserva) {
+                    if ($pago->reserva && ($pagoInfo['TranState'] ?? null) === 'OK') {
                         $pago->reserva->estado = 'completada';
                         $pago->reserva->save();
-                    } elseif ($pago->mensualidad) {
+                    } elseif ($pago->mensualidad && ($pagoInfo['TranState'] ?? null) === 'OK') {
                         $pago->mensualidad->estado = 'activa';
                         $pago->mensualidad->save();
                     }
