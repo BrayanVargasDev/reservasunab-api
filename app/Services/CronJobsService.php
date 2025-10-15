@@ -31,6 +31,7 @@ class CronJobsService
     private $usuario_unab = null;
     private $password_unab = null;
     private $tarea = null;
+    private $estados_pendientes;
 
     public function __construct()
     {
@@ -38,6 +39,17 @@ class CronJobsService
         $this->unab_endpoint = config('app.unab_endpoint');
         $this->usuario_unab = config('app.unab_usuario');
         $this->password_unab = config('app.unab_password');
+        $this->estados_pendientes = [
+            'PENDING',
+            'PENDIENTE',
+            'EXPIRADO',
+            'EXPIRED',
+            'CREATED',
+            'NOT_AUTHORIZED',
+            'FAILED',
+            'ERROR',
+            'INICIAL'
+        ];
     }
 
     /**
@@ -58,75 +70,90 @@ class CronJobsService
             'limite_creado_en' => $limite->toDateTimeString(),
         ]);
 
-        $estadosPendientes = [
-            'PENDING',
-            'PENDIENTE',
-            'EXPIRADO',
-            'EXPIRED',
-            'CREATED',
-            'NOT_AUTHORIZED',
-            'FAILED',
-            'ERROR',
-            'inicial'
-        ];
-
         $totalEvaluadas = 0;
         $totalCanceladas = 0;
+        $estadosPendientes = $this->estados_pendientes;
 
         Reservas::query()
-            ->with(['pago', 'usuarioReserva'])
+            ->select([
+                'id',
+                'estado',
+                'creado_en',
+                'fecha',
+                'codigo_evento',
+                'eliminado_en'
+            ])
+            ->withTrashed()
             ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
             ->whereDate('fecha', '>=', Carbon::today())
             ->where(function ($q) use ($estadosPendientes) {
-                $q->whereHas('pago', function ($q2) use ($estadosPendientes) {
-                    $q2->whereNull('pagos.eliminado_en')
-                        ->whereRaw('UPPER(pagos.estado) <> ?', ['OK'])
-                        ->where(function ($q3) use ($estadosPendientes) {
-                            $upperList = array_map(fn($v) => strtoupper($v), $estadosPendientes);
-                            $placeholders = implode(',', array_fill(0, count($upperList), '?'));
-                            $q3->whereRaw('UPPER(pagos.estado) IN (' . $placeholders . ')', $upperList);
-                        });
-                })->orWhereDoesntHave('pago');
+                $q->whereDoesntHave('pago')
+                    ->orWhereHas('pago', function ($q2) use ($estadosPendientes) {
+                        $q2->whereNull('eliminado_en')
+                            ->where('estado', '!=', 'OK')
+                            ->whereIn('estado', $estadosPendientes);
+                    });
             })
             ->orderBy('id')
             ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalCanceladas) {
+                $reservas->load([
+                    'pago',
+                    'usuarioReserva:id,ldap_uid'
+                ]);
+                $reservasParaCancelar = collect();
+
                 foreach ($reservas as $reserva) {
                     $totalEvaluadas++;
+                    if ($reserva->pago && strtoupper($reserva->pago->estado) === 'OK') {
+                        continue;
+                    }
+                    $reservasParaCancelar->push($reserva);
+                }
+
+                if ($reservasParaCancelar->isEmpty()) {
+                    return;
+                }
+
+                foreach ($reservasParaCancelar as $reserva) {
                     try {
-                        if ($reserva->pago && strtoupper($reserva->pago->estado) === 'OK') {
-                            continue;
-                        }
                         DB::transaction(function () use ($reserva, &$totalCanceladas) {
-                            $reserva->estado = 'cancelada';
-                            $reserva->save();
+                            $reserva->update(['estado' => 'cancelada']);
                             $reserva->delete();
                             $totalCanceladas++;
-                            Log::channel('cronjobs')->info('[CRON] Reserva cancelada por falta de pago', [
+
+                            Log::channel('cronjobs')->info('[CRON] Reserva cancelada', [
                                 'reserva_id' => $reserva->id,
                                 'pago_estado' => $reserva->pago->estado ?? null,
                                 'creado_en' => $reserva->creado_en?->toDateTimeString(),
                             ]);
                         });
 
-                        // Enviar cancelación al servicio UNAB si la reserva fue reportada
-                        if ($reserva->codigo_evento) {
-                            $this->enviarCancelacionReserva($reserva->id, $reserva->usuarioReserva->ldap_uid, $reserva->codigo_evento);
+                        if ($reserva->codigo_evento && $reserva->usuarioReserva) {
+                            $this->enviarCancelacionReserva(
+                                $reserva->id,
+                                $reserva->usuarioReserva->ldap_uid,
+                                $reserva->codigo_evento
+                            );
                         }
                     } catch (\Throwable $e) {
-                        Log::channel('cronjobs')->error('[CRON] Error cancelando reserva sin pago', [
+                        Log::channel('cronjobs')->error('[CRON] Error cancelando reserva', [
                             'reserva_id' => $reserva->id ?? null,
                             'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
                         ]);
                     }
                 }
-            });
+                unset($reservasParaCancelar);
+            }, 'id');
 
         $duracion = round((microtime(true) - $inicio) * 1000, 1);
+
         Log::channel('cronjobs')->info('[CRON] Fin procesarReservasSinPago', [
             'evaluadas' => $totalEvaluadas,
             'canceladas' => $totalCanceladas,
             'ms' => $duracion,
+            'memoria_pico' => round(memory_get_peak_usage(true) / 1024 / 1024, 2) . ' MB',
         ]);
     }
 
