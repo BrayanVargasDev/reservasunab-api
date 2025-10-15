@@ -243,7 +243,7 @@ class CronJobsService
 
                         if (strtolower((string)$resp['estado']) !== 'success') {
                             $errores++;
-                            Log::channel('cronjobs')->error('[CRON] Error del servicio en novedades', [
+                            Log::channel('cronjobs')->error('[CRON] El estado no es exitoso: ', [
                                 'espacio_id' => $espacio->id,
                                 'mensaje' => $resp['mensaje'] ?? null,
                             ]);

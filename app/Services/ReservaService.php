@@ -1082,6 +1082,17 @@ class ReservaService
                 DB::table('reservas_detalles')->insert($detallesData);
             }
 
+            DB::commit();
+
+            $ingresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
+                ->where('tipo', Movimientos::TIPO_INGRESO)
+                ->sum('valor');
+            $egresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
+                ->where('tipo', Movimientos::TIPO_EGRESO)
+                ->sum('valor');
+            $saldoFavor = $ingresos - $egresos;
+            $puedePagarConSaldo = $valorTotal > 0 && $saldoFavor > 0 && $valorTotal <= $saldoFavor;
+
             try {
                 if ((float)($valorTotal ?? 0) <= 0) {
                     $this->cron_service->procesarReporteReservasMensualidades($reserva->id);
@@ -1097,23 +1108,13 @@ class ReservaService
                 Log::warning('Error enviando correo de confirmación', ['reserva_id' => $reserva->id, 'error' => $mailTh->getMessage()]);
             }
 
-            DB::commit();
-
-            $ingresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
-                ->where('tipo', Movimientos::TIPO_INGRESO)
-                ->sum('valor');
-            $egresos = (float) Movimientos::where('id_usuario', $usuario->id_usuario)
-                ->where('tipo', Movimientos::TIPO_EGRESO)
-                ->sum('valor');
-            $saldoFavor = $ingresos - $egresos;
-            $puedePagarConSaldo = $valorTotal > 0 && $saldoFavor > 0 && $valorTotal <= $saldoFavor;
-
             $resumen = $this->getMiReserva($reserva->id);
             if (is_array($resumen)) {
                 $resumen['pagar_con_saldo'] = $puedePagarConSaldo;
                 $resumen['valor_elementos'] = $valorElementos;
                 $resumen['valor_total_reserva'] = $valorTotal;
             }
+
             return $resumen;
         } catch (Throwable $th) {
             DB::rollBack();
