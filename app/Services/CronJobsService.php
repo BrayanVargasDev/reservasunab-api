@@ -75,14 +75,6 @@ class CronJobsService
         $estadosPendientes = $this->estados_pendientes;
 
         Reservas::query()
-            ->select([
-                'id',
-                'estado',
-                'creado_en',
-                'fecha',
-                'codigo_evento',
-                'eliminado_en'
-            ])
             ->withTrashed()
             ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
@@ -90,7 +82,7 @@ class CronJobsService
             ->where(function ($q) use ($estadosPendientes) {
                 $q->whereDoesntHave('pago')
                     ->orWhereHas('pago', function ($q2) use ($estadosPendientes) {
-                        $q2->whereNull('eliminado_en')
+                        $q2->whereNull('pagos.eliminado_en')
                             ->where('estado', '!=', 'OK')
                             ->whereIn('estado', $estadosPendientes);
                     });
