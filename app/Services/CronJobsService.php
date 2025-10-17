@@ -91,7 +91,7 @@ class CronJobsService
             ->chunkById(200, function ($reservas) use (&$totalEvaluadas, &$totalCanceladas) {
                 $reservas->load([
                     'pago',
-                    'usuarioReserva:id,ldap_uid'
+                    'usuarioReserva:id_usuario,ldap_uid'
                 ]);
                 $reservasParaCancelar = collect();
 
