@@ -52,7 +52,7 @@ class UpdateUsuarioDashboardRequest extends FormRequest
             'usaFacturacionDiferente' => 'sometimes|boolean',
             'facturacion' => 'sometimes|nullable|array',
             'facturacion.nombre' => 'sometimes|string|max:255',
-            'facturacion.apellido' => 'sometimes|string|max:255',
+            'facturacion.apellido' => 'nullable|string|max:255',
             'facturacion.tipoDocumento' => 'sometimes|exists:tipos_documento,id_tipo',
             'facturacion.documento' => 'sometimes|string|max:20',
             'facturacion.fechaNacimiento' => 'sometimes|date',
