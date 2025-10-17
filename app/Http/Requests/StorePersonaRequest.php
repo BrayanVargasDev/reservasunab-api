@@ -28,7 +28,7 @@ class StorePersonaRequest extends FormRequest
             'numero_documento' => 'required|string|max:20|unique:personas,numero_documento',
             'primer_nombre' => 'required|string|max:50',
             'segundo_nombre' => 'nullable|string|max:50',
-            'primer_apellido' => 'required|string|max:50',
+            'primer_apellido' => 'nullable|string|max:50',
             'segundo_apellido' => 'nullable|string|max:50',
             'fecha_nacimiento' => 'nullable|date|before:today',
             'direccion' => 'nullable|string|max:255',

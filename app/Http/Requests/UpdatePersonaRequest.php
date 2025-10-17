@@ -30,7 +30,7 @@ class UpdatePersonaRequest extends FormRequest
             'numero_documento' => 'sometimes|required|string|max:20|unique:personas,numero_documento,' . $personaId . ',id_persona',
             'primer_nombre' => 'sometimes|required|string|max:50',
             'segundo_nombre' => 'nullable|string|max:50',
-            'primer_apellido' => 'sometimes|required|string|max:50',
+            'primer_apellido' => 'sometimes|nullable|string|max:50',
             'segundo_apellido' => 'nullable|string|max:50',
             'fecha_nacimiento' => 'nullable|date|before:today',
             'direccion' => 'nullable|string|max:255',
