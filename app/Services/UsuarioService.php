@@ -585,6 +585,10 @@ class UsuarioService
             $tiposUsuario = [$tiposUsuario];
         }
 
+        if ($desdeDashboard) {
+            $password = $this->generarPasswordGenerico($persona);
+        }
+
         $dataUsuario = [
             'email' => $data['email'],
             'password_hash' => $password ? Hash::make($password) : null,
