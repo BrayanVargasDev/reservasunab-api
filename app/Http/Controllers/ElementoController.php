@@ -99,7 +99,7 @@ class ElementoController extends Controller
      */
     public function update(UpdateElementoRequest $request, Elemento $elemento)
     {
-        $elemento->withTrashed()->update($request->validated());
+        $elemento->update($request->validated());
         return new ElementoResource($elemento);
     }
 

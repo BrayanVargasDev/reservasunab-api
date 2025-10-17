@@ -40,4 +40,12 @@ class Elemento extends Model
     {
         return $this->belongsToMany(Espacio::class, 'elementos_espacios', 'id_elemento', 'id_espacio');
     }
+
+    /**
+     * Resolve route binding with trashed models
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->withTrashed()->where($field ?? $this->getRouteKeyName(), $value)->first();
+    }
 }
