@@ -46,13 +46,13 @@ class SessionManagerServcie
             return false;
         }
 
-        Log::info('Variables cargadas: ', [
-            'unab_host' => $this->unab_host,
-            'unab_endpoint' => $this->unab_endpoint,
-            'usuario_unab' => $this->usuario_unab,
-            'password_unab' => $this->password_unab,
-            'tarea' => $this->tarea,
-        ]);
+        // Log::info('Variables cargadas: ', [
+        //     'unab_host' => $this->unab_host,
+        //     'unab_endpoint' => $this->unab_endpoint,
+        //     'usuario_unab' => $this->usuario_unab,
+        //     'password_unab' => $this->password_unab,
+        //     'tarea' => $this->tarea,
+        // ]);
 
         return true;
     }
