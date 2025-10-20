@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\ManageTimezone;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class Reservas extends Model
@@ -130,6 +131,12 @@ class Reservas extends Model
 
     public function puedeSerCancelada()
     {
+        // Verificar si el usuario es administrador y la reserva es para hoy
+        $usuario = Auth::user();
+        if ($usuario && $usuario->esAdministrador() && $this->fecha->isToday()) {
+            return true;
+        }
+
         if (!$this->configuracion) {
             return false;
         }
@@ -141,22 +148,12 @@ class Reservas extends Model
         $fechaHoraReserva = $this->fecha->format('Y-m-d') . ' ' . $this->hora_inicio->format('H:i:s');
         $momentoReserva = Carbon::parse($fechaHoraReserva);
 
-        Log::info('Horas de la reserva', [
-            'fecha-hora-reserva' => $fechaHoraReserva,
-            'momento reserva' => $momentoReserva
-        ]);
-
         if ($momentoReserva->isPast()) {
             return false;
         }
 
         $tiempoCancelacion = $this->configuracion->tiempo_cancelacion ?? 0;
         $minutosHastaReserva = now()->diffInMinutes($momentoReserva, false);
-
-        Log::info('Otras', [
-            'tiempo de cancelación' => $tiempoCancelacion,
-            'minutos hasta la reserva' => $minutosHastaReserva,
-        ]);
 
         if ($minutosHastaReserva < 0) {
             return false;
