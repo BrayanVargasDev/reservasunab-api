@@ -39,7 +39,6 @@ class GoogleAuthController extends Controller
             ->first();
 
         $usuario->google_id = $usuarioGoogle->id;
-        Log::info('Usuario encontrado: ', ['usuario' => $usuario]);
 
         return $this->session_manager_service->procesarEmailDeGoogle($usuario);
     }

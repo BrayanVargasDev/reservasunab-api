@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AuthCode;
 use App\Models\Usuario;
+use Error;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -44,6 +45,14 @@ class SessionManagerServcie
             ]);
             return false;
         }
+
+        Log::info('Variables cargadas: ', [
+            'unab_host' => $this->unab_host,
+            'unab_endpoint' => $this->unab_endpoint,
+            'usuario_unab' => $this->usuario_unab,
+            'password_unab' => $this->password_unab,
+            'tarea' => $this->tarea,
+        ]);
 
         return true;
     }
@@ -90,9 +99,10 @@ class SessionManagerServcie
             }
 
             $usuarioEnUnab = $response->json();
-            Log::info('Respuesta obtenida de la unab: ', [
-                'data' => $usuarioEnUnab,
-            ]);
+
+            if ($usuarioEnUnab['estado'] === 'error') {
+                throw new Error($usuarioEnUnab['mensaje']);
+            }
 
             $datosUnab = null;
             try {
