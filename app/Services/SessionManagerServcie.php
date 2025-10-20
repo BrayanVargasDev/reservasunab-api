@@ -90,6 +90,9 @@ class SessionManagerServcie
             }
 
             $usuarioEnUnab = $response->json();
+            Log::info('Respuesta obtenida de la unab: ', [
+                'data' => $usuarioEnUnab,
+            ]);
 
             $datosUnab = null;
             try {
