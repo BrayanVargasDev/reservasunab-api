@@ -141,13 +141,22 @@ class Reservas extends Model
         $fechaHoraReserva = $this->fecha->format('Y-m-d') . ' ' . $this->hora_inicio->format('H:i:s');
         $momentoReserva = Carbon::parse($fechaHoraReserva);
 
+        Log::info('Horas de la reserva', [
+            'fecha-hora-reserva' => $fechaHoraReserva,
+            'momento reserva' => $momentoReserva
+        ]);
+
         if ($momentoReserva->isPast()) {
             return false;
         }
 
         $tiempoCancelacion = $this->configuracion->tiempo_cancelacion ?? 0;
-
         $minutosHastaReserva = now()->diffInMinutes($momentoReserva, false);
+
+        Log::info('Otras', [
+            'tiempo de cancelación' => $tiempoCancelacion,
+            'minutos hasta la reserva' => $minutosHastaReserva,
+        ]);
 
         if ($minutosHastaReserva < 0) {
             return false;
