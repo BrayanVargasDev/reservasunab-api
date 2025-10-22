@@ -43,6 +43,6 @@ class GoogleAuthController extends Controller
             $usuario->save();
         }
 
-        return $this->session_manager_service->procesarEmailDeGoogle($usuario, $usuarioGoogle->id);
+        return $this->session_manager_service->procesarEmailDeGoogle($usuario, $usuarioGoogle->id, $usuarioGoogle->email);
     }
 }
