@@ -38,8 +38,11 @@ class GoogleAuthController extends Controller
             ->orWhere('email', $usuarioGoogle->email)
             ->first();
 
-        $usuario->google_id = $usuarioGoogle->id;
+        if ($usuario) {
+            $usuario->google_id = $usuarioGoogle->id;
+            $usuario->save();
+        }
 
-        return $this->session_manager_service->procesarEmailDeGoogle($usuario);
+        return $this->session_manager_service->procesarEmailDeGoogle($usuario, $usuarioGoogle->id);
     }
 }

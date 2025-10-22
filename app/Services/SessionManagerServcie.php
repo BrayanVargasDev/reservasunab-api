@@ -57,7 +57,7 @@ class SessionManagerServcie
         return true;
     }
 
-    public function procesarEmailDeGoogle(Usuario $user)
+    public function procesarEmailDeGoogle(?Usuario $user, string $googleId)
     {
         Log::info('Evento de inicio de sesión con google recibido');
 
@@ -66,7 +66,7 @@ class SessionManagerServcie
         }
 
         try {
-            $email = $user->email;
+            $email = $user ? $user->email : null;
 
             if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 Log::error('Email inválido de usuario de Google', ['email' => $email]);
@@ -155,7 +155,7 @@ class SessionManagerServcie
             $payload = [
                 'email' => $email,
                 'ldap_uid' => $primerElemento['id_banner'] ?? null,
-                'google_id' => $user->google_id,
+                'google_id' => $googleId,
                 'tipos_usuario' => $tiposUsuario,
                 'nombre' => $primerElemento['nombres'] ?? null,
                 'apellido' => $primerElemento['apellidos'] ?? null,
