@@ -191,6 +191,9 @@ class EspacioController extends Controller
                         'ubicacion' => Storage::url($path),
                     ]);
                 }
+            } elseif (array_key_exists('imagen', $data) && $data['imagen'] === null) {
+                // Si se envía 'imagen': null en el payload, desvincular la imagen
+                $this->espacios_service->eliminarImagen($espacio);
             }
 
             return response()->json(

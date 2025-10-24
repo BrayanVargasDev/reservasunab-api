@@ -374,6 +374,25 @@ class EspacioService
         }
     }
 
+    public function eliminarImagen(Espacio $espacio)
+    {
+        try {
+            DB::beginTransaction();
+
+            if ($espacio->imagen) {
+                $espacio->imagen->delete();
+                // No borramos el archivo físico, solo desvinculamos
+            }
+
+            DB::commit();
+            return true;
+        } catch (Exception $e) {
+            DB::rollBack();
+            $this->logError('Error al eliminar imagen del espacio', $e, ['id_espacio' => $espacio->id]);
+            return false;
+        }
+    }
+
     private function logError(string $message, Exception $exception, array $context = []): void
     {
         Log::error($message, array_merge($context, [

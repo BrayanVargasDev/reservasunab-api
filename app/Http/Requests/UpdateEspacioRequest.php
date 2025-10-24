@@ -43,7 +43,7 @@ class UpdateEspacioRequest extends FormRequest
             'categoria' => 'sometimes|exists:categorias,id',
             'elementosEnlazados' => 'sometimes|array',
             'elementosEnlazados.*' => 'integer|exists:elementos,id',
-            'imagen' => 'sometimes|nullable|file|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5 MB or data URL
+            'imagen' => 'sometimes|nullable|file|mimes:jpeg,png,jpg,gif,svg|max:5120', // 5 MB or data URL, null para desvincular
         ];
     }
 
