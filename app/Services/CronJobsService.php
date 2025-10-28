@@ -78,7 +78,6 @@ class CronJobsService
             ->withTrashed()
             ->whereNotIn('estado', ['cancelada'])
             ->where('creado_en', '<=', $limite)
-            ->whereDate('fecha', '>=', Carbon::today())
             // ->where('precio_total', '>', 0)
             ->where(function ($q) use ($estadosPendientes) {
                 $q->whereDoesntHave('pago')
