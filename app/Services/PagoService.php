@@ -26,7 +26,7 @@ class PagoService
     private $url_pagos;
     private $entity_code;
     private $service_code;
-    private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos-redirect/reservas';
+    private $url_redirect_base;
     private $url_redirect_ios = 'com.unab.reservas://pagos/reservas';
     private $session_token;
     private CronJobsService $cron_service;
@@ -38,6 +38,7 @@ class PagoService
         $this->url_pagos = config('app.url_pagos');
         $this->entity_code = config('app.entity_code');
         $this->service_code = config('app.service_code');
+        $this->url_redirect_base = config('app.url_redirect_base');
         $this->session_token = null;
         $this->cron_service = $cron_service;
     }
