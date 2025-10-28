@@ -1997,7 +1997,7 @@ class ReservaService
             return 'completada';
         }
 
-        return 'inicial';
+        return $estado;
     }
 
     public function agregarJugadores(int $idReserva, array $jugadoresIds, bool $strict = true)
