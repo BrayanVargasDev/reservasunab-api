@@ -248,7 +248,7 @@ class PagoService
             }
 
             if ($pagoExistente && in_array($pagoExistente->estado, ['ERROR', 'FAILED', 'EXPIRED', 'NOT_AUTHORIZED'], true)) {
-                $pagoExistente->forceDelete();
+                $pagoExistente->delete();
                 $pagoExistente = null;
             }
 

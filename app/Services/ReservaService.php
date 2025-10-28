@@ -1824,8 +1824,6 @@ class ReservaService
                         if ($reserva->pago) {
                             $reserva->pago->estado = $pagoInfo['TranState'] ?? 'desconocido';
                             $reserva->pago->save();
-                            // Invalidar cache cuando el estado cambia
-                            \Illuminate\Support\Facades\Cache::forget("pago_info_{$reserva->pago->codigo}");
                         }
                         $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoInfo['TranState']);
                         $reserva->save();
