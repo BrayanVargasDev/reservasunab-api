@@ -143,6 +143,10 @@ class ReservaService
         string $sede  = '',
         string $categoria = ''
     ) {
+        $usuario = Auth::user();
+        $rolNombre = optional($usuario->rol)->nombre;
+        $esAdministrador = is_string($rolNombre) && strtolower($rolNombre) === 'administrador';
+
         $carbon = $fecha ? Carbon::createFromFormat('Y-m-d', $fecha) : now();
 
         $fechaConsulta = $carbon->toDateString();
@@ -167,19 +171,33 @@ class ReservaService
             });
         };
 
-        return Espacio::query()
-            ->filtros($sede, $categoria, $grupo)
-            ->whereHas('configuraciones', function ($q) use ($filtroConfiguraciones) {
-                $filtroConfiguraciones($q);
-                $q->whereHas('franjas_horarias', function ($franjaQuery) {
-                    $franjaQuery->where('activa', true);
+        $query = Espacio::query()
+            ->filtros($sede, $categoria, $grupo);
+
+        if (!$esAdministrador) {
+            $tiposUsuario = $usuario->tipos_usuario ?? [];
+            if (!empty($tiposUsuario)) {
+                $query->whereHas('tipo_usuario_config', function ($configQuery) use ($tiposUsuario) {
+                    $configQuery->whereIn('tipo_usuario', $tiposUsuario)
+                        ->whereNull('eliminado_en');
                 });
-            })
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        }
+
+        return $query->whereHas('configuraciones', function ($q) use ($filtroConfiguraciones) {
+            $filtroConfiguraciones($q);
+            $q->whereHas('franjas_horarias', function ($franjaQuery) {
+                $franjaQuery->where('activa', true);
+            });
+        })
             ->with([
                 'imagen',
                 'sede:id,nombre',
                 'novedades' => function ($q) use ($fecha) {
-                    $q->whereDate('fecha', $fecha);
+                    $q->whereDate('fecha', '<=', $fecha)
+                        ->whereDate('fecha_fin', '>=', $fecha);
                 },
                 'categoria:id,nombre,id_grupo',
                 'categoria.grupo:id,nombre',
@@ -221,7 +239,8 @@ class ReservaService
                 'categoria.grupo:id,nombre',
                 'tipo_usuario_config',
                 'novedades' => function ($q) use ($fechaConsulta) {
-                    $q->whereDate('fecha', $fechaConsulta);
+                    $q->whereDate('fecha', '<=', $fechaConsulta)
+                        ->whereDate('fecha_fin', '>=', $fechaConsulta);
                 }
             ])
             ->find($id);
