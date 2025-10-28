@@ -389,12 +389,12 @@ class PagoService
     {
         try {
             $pagoConsulta = PagoConsulta::where('codigo', $codigo)
-                ->where('estado', 'OK')
+                // ->where('estado', 'OK')
                 ->first();
 
-            $pago = Pago::where('codigo', $codigo)->firstOrFail();
+            $pago = Pago::withTrashed()->where('codigo', $codigo)->firstOrFail();
 
-            if ($pagoConsulta) {
+            if ($pagoConsulta && $pagoConsulta->estado == 'OK') {
                 if ($pago->estado != $pagoConsulta->estado) {
                     $pago->estado = $pagoConsulta->estado;
                     $pago->save();
