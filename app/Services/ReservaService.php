@@ -1825,8 +1825,11 @@ class ReservaService
                             $reserva->pago->estado = $pagoInfo['TranState'] ?? 'desconocido';
                             $reserva->pago->save();
                         }
-                        $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoInfo['TranState']);
-                        $reserva->save();
+
+                        if ($reserva->estado != 'cancelada') {
+                            $reserva->estado = $this->getReservaEstadoByPagoEstado($pagoInfo['TranState']);
+                            $reserva->save();
+                        }
                     }
                     DB::commit();
                 } catch (Throwable $th) {
@@ -1997,7 +2000,7 @@ class ReservaService
             return 'completada';
         }
 
-        return $estado;
+        return 'inicial';
     }
 
     public function agregarJugadores(int $idReserva, array $jugadoresIds, bool $strict = true)
