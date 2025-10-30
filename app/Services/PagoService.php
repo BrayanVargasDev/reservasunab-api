@@ -38,7 +38,7 @@ class PagoService
         $this->url_pagos = config('app.url_pagos');
         $this->entity_code = config('app.entity_code');
         $this->service_code = config('app.service_code');
-        $this->url_redirect_base = config('app.url_redirect_base');
+        $this->url_redirect_base = config('app.url_redirect_base') . '/pagos-redirect/reservas';
         $this->session_token = null;
         $this->cron_service = $cron_service;
     }

@@ -134,5 +134,5 @@ return [
     'unab_password' => env('UNAB_PASSWORD'),
     'unab_tarea' => env('UNAB_TAREA', 1),
     'activar_agregar_elementos' => env('ACTIVAR_AGREGAR_ELEMENTOS', false),
-    'url_redirect_base' => env('URL_REDIRECT_BASE', 'https://reservasunab.wgsoluciones.com/pagos-redirect/reservas'),
+    'url_redirect_base' => env('URL_REDIRECT_BASE', 'https://reservas.unab.edu.co'),
 ];

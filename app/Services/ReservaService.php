@@ -20,7 +20,6 @@ use Carbon\Carbon;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Symfony\Component\Uid\Ulid;
@@ -40,7 +39,6 @@ class ReservaService
     private $url_pagos;
     private $entity_code;
     private $service_code;
-    private $url_redirect_base = 'https://reservasunab.wgsoluciones.com/pagos/reservas';
     private $session_token;
     private $activarAgregarElementos;
     private CronJobsService $cron_service;
